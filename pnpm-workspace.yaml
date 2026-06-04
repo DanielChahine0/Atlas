@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+minimumReleaseAgeExclude:
+  - '@cloudflare/vitest-pool-workers@0.16.13'
+  - '@cloudflare/workers-oauth-provider@0.7.2'
+  - miniflare@4.20260603.0
+  - wrangler@4.98.0
+allowBuilds:
+  core-js-pure: false
+  esbuild: true
+  sharp: false
+  workerd: true

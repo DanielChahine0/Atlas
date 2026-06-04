@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "atlas",
+  "main": "src/index.ts",
+  // D-09: ≥ 2026-04-07 enables web_socket_auto_reply_to_close (Echo, later).
+  "compatibility_date": "2026-04-25",
+  // REQUIRED by the `agents` SDK — omitting it is a runtime failure.
+  "compatibility_flags": ["nodejs_compat"]
+}
