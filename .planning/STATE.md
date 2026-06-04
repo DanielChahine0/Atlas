@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 0 context gathered
-last_updated: "2026-06-04T23:21:33.697Z"
+stopped_at: Completed 00-04-PLAN.md (steward crux)
+last_updated: "2026-06-04T23:39:04.360Z"
 last_activity: 2026-06-04
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 8
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 ## Current Position
 
 Phase: 00 (spine) — EXECUTING
-Plan: 4 of 8
-Status: Executing Phase 00 — Plans 00-01, 00-02, 00-03 complete
-Last activity: 2026-06-04 -- Plan 00-03 complete (Atlas orchestrator runtime: scheduled() dispatcher proving SPINE-01, AtlasCoordinator DO heartbeat (D-10), no-op service-binding RPC target (D-11); 8/8 workerd tests, producer-only)
+Plan: 5 of 8
+Status: Ready to execute
+Last activity: 2026-06-04
 Next action: execute Plan 00-04 (`/gsd:execute-phase 0`)
 
-Progress: [████░░░░░░] 38%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [████░░░░░░] 38%
 | Phase 00 P01 | 14 | 3 tasks | 21 files |
 | Phase 00 P02 | 7 | 3 tasks | 21 files |
 | Phase 0 P3 | 20 | 4 tasks | 6 files |
+| Phase 00 P04 | 30 | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,10 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase ?]: 00-03: Confirmed agents@0.14.1 DurableObject<Env> + WorkerEntrypoint<Env> export from cloudflare:workers (protected field is ctx, not state) — Open Question 1 closed.
 - [Phase ?]: 00-03: D-11 no-op invoke = a SELF service-binding RPC (NOOP -> service atlas, entrypoint NoopAgent); env.NOOP.tick() over private Worker-to-Worker RPC, no public HTTP.
 - [Phase ?]: 00-03: SPINE-01 proven — scheduled() routes only the known cron, invokes the no-op agent, then sends a canonical §6.4 atlas:noop:<date> event; 8/8 workerd tests; Atlas producer-only.
+- [Phase ?]: 00-04: THE CRUX live — StewardWriter DO runs atomic dedup+counter-bump+ledger-insert as ONE db.batch() inside blockConcurrencyWhile; the SINGLE atlas-wire consumer (getByName vault, serial for-of, malformed->ack+P3, transient->retry+P2->DLQ); apps/steward is the SOLE consumer (Pillar 1).
+- [Phase ?]: 00-04: [Rule 1 bug] fixed a double-count in the build-plan T5 snippet — within one db.batch() the ledger-insert-then-counter-bump order self-defeats WHERE NOT EXISTS (the just-inserted key is visible); reordered to [counter-bump, ledger-insert]. serialize.test.ts proves 50 concurrent distinct applies sum to 50 (was 1).
+- [Phase ?]: 00-04: vault_outbox intent enqueued INSIDE the lock; the slow Obsidian PATCH is deferred to the outbound daemon (00-08, which imports toOutboxIntent — the SINGLE op->Local-REST map, GLOBAL DECISION 5). consumer->atlas-wire-dlq wiring in place (SPINE-05); the DLQ sink itself is 00-05.
+- [Phase ?]: 00-04: three SPINE-02 tests green in workerd — replay (meta.changes===0, counter 1 not 2), serialize (single DO + 50 concurrent exact sum), malformed (ack+P3, no write). vitest-pool-workers v4 cloudflareTest + per-test applyD1Migrations via provide/inject (pool does not auto-apply).
 
 ### Pending Todos
 
@@ -94,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-04T23:21:04.182Z
-Stopped at: Phase 0 context gathered
+Last session: 2026-06-04T23:39:04.353Z
+Stopped at: Completed 00-04-PLAN.md (steward crux)
 Resume file: None

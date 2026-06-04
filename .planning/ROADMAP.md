@@ -105,7 +105,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Spine | 3/8 | In Progress|  |
+| 0. Spine | 4/8 | In Progress|  |
 | 1. Core Loop / Morning Pipeline | 0/TBD | Not started | - |
 | 2. Weekly Value | 0/TBD | Not started | - |
 | 3. Capture (Local) | 0/TBD | Not started | - |
