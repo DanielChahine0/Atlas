@@ -25,7 +25,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 ### Phase 0: Spine
 **Maps to**: Atlas Build Phase 0 (Spine) · Milestone M0 · task-level breakdown in `docs/13-build-plan.md §2` (T0–T8) · per-agent specs `docs/agents/atlas.md`, `docs/agents/steward.md`
 **Goal**: Stand up the infrastructure spine on which every agent runs — orchestration, the event bus, the single Vault writer, the source of truth, and OAuth — with Steward's serialization + idempotency correct from day 0. Ships zero user-visible features.
-**Depends on**: Nothing (greenfield). Hard prerequisite: Cloudflare Workers **Paid** plan (Queues, Workflows, KV-backed DOs).
+**Depends on**: Nothing (greenfield). The spine builds & deploys on the Workers **Free** plan (Queues GA-on-Free 2026-02-04, Workflows on Free, SQLite-backed DOs on Free) per D-01/D-02; Workers Paid is optional headroom only (e.g. a confirm-gate that must wait >3 days — a Phase-4 concern), not a hard prerequisite.
 **Requirements**: SPINE-01, SPINE-02, SPINE-03, SPINE-04, SPINE-05
 **Success Criteria** (what must be TRUE — "done =" from 12-roadmap Phase 0 / 13-build-plan §2):
   1. Atlas can schedule a no-op agent and route a message onto the Wire.

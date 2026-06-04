@@ -182,7 +182,36 @@ Some agents are mixed: **Filer** is both `event` (continuous Gmail push) *and* `
 
 ---
 
-## 5. Failure modes & Flagger hooks
+## 5. Cron timezone policy — UTC translation (D-06 / D-07)
+
+**Cloudflare Cron Triggers are UTC-only and do NOT observe DST.** The §1/§2 schedule is written in owner-local time (`America/Toronto`); each cron line must be hand-translated to UTC. Because Toronto switches between EST (UTC−5) and EDT (UTC−4) twice a year, **every owner-local target maps to two different UTC cron expressions** — one for EST, one for EDT.
+
+**Policy (D-06):** keep the UTC crons explicit and **hand-edit them at the two DST boundaries** (the second Sunday in March → EDT; the first Sunday in November → EST). There is no DST-aware cron on Cloudflare, so this twice-yearly edit is the correct, intentional operational burden. Writing this table is a Phase-0 "setup-done" criterion (D-07); the crons themselves first *fire* in Phase 1.
+
+> **In-Workflow waits are DST-safe and need NO hand-edit.** Only the trigger cron is UTC-pinned. Durable budgets inside a Workflow use `step.sleepUntil(...)` computed from a timezone-correct `Date` derived via `Intl` with `America/Toronto` — e.g. `new Intl.DateTimeFormat('en-CA',{ timeZone:'America/Toronto' }).format(new Date())`. `step.sleepUntil` resolves against absolute time, so it stays correct across a DST change mid-wait.
+
+### EST/EDT → UTC cron translation table
+
+| Owner-local (ET) | Agent / run | UTC cron — **EST** (UTC−5, Nov→Mar) | UTC cron — **EDT** (UTC−4, Mar→Nov) |
+|---|---|---|---|
+| 07:45 | Filer sweep | `45 12 * * *` | `45 11 * * *` |
+| 08:00 | Herald (daily) | `0 13 * * *` | `0 12 * * *` |
+| 08:15 | Forge (morning) | `15 13 * * *` | `15 12 * * *` |
+| 08:20 | Sundial (sync) | `20 13 * * *` | `20 12 * * *` |
+| 08:30 | Compass (plan) | `30 13 * * *` | `30 12 * * *` |
+| 09:00 | Headhunter (daily-light) | `0 14 * * *` | `0 13 * * *` |
+| 21:00 | Compass (preview) | `0 2 * * *` | `0 1 * * *` |
+| Mon 09:00 | Headhunter (full) | `0 14 * * 1` | `0 13 * * 1` |
+| Fri 16:00 | Scout (weekly) ∥ Herald (weekly) | `0 21 * * 5` | `0 20 * * 5` |
+| Fri 16:30 | weekly-review build | `30 21 * * 5` | `30 20 * * 5` |
+
+> The 21:00 ET preview crosses midnight UTC, so its UTC hour is the *next* calendar day (`0 2`/`0 1`). Day-of-week crons (Mon-full, Fri digests) are unaffected by the date rollover at these hours, but re-check the day field if a future run is scheduled near a UTC midnight boundary.
+>
+> **Morning chain caveat:** the five morning-chain times (07:45→08:30) are *targets*; in Phase 1 they are NOT five independent crons. ONE cron (the 07:45 Filer sweep) kicks the `MorningChain` Workflow, which sequences the rest with start-after-success `step` budgets. Only that single kickoff cron needs a UTC line here.
+
+---
+
+## 6. Failure modes & Flagger hooks
 
 - **Upstream step fails in the morning chain** → Atlas halts the chain at that point; downstream agents do **not** run on stale data. Flagged `P2 High` (the owner's morning glance is degraded). See [08-flagger.md](08-flagger.md).
 - **Filer sweep overruns past 08:00** → Herald waits (start-after-success), absorbing the delay rather than digesting unlabeled mail. Persistent overrun → flag.
@@ -192,9 +221,9 @@ Some agents are mixed: **Filer** is both `event` (continuous Gmail push) *and* `
 
 ---
 
-## 6. Open questions
+## 7. Open questions
 
-- **DST / travel:** crons are owner-local — should the schedule follow the owner's current timezone when traveling, or stay pinned to home time?
+- **DST:** resolved by **D-06** (§5) — UTC crons with a twice-yearly hand-edit at the EST↔EDT boundary; in-Workflow waits use `step.sleepUntil` and are DST-safe. _Travel_ remains open: should the schedule follow the owner's current timezone when traveling, or stay pinned to home (`America/Toronto`) time?
 - **Holiday/weekend morning chain:** does the 07:45→08:30 chain run on weekends, or only Mon–Fri?
 - **Backpressure policy:** if Steward's queue depth crosses a threshold during a write storm, do we shed low-priority `increment`s or just let latency grow?
 - **Echo trigger source of truth:** calendar-aware start vs. audio-device-active — which wins when they disagree (a meeting that starts late, or audio with no calendar event)?
