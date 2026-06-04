@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "steward",
+  "main": "src/index.ts",
+  // D-09: match Atlas — >= 2026-04-07 floor; pair with nodejs_compat (Agents SDK).
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The single Vault write lock: env.STEWARD_LOCK.getByName("vault").
+  // One name = one instance = the sole serialized writer (Pillar 1). The
+  // StewardWriter critical section (atomic dedup + counter bump) lands in
+  // Wave 2 (Plan 04) together with the bus reader.
+  "durable_objects": {
+    "bindings": [{ "name": "STEWARD_LOCK", "class_name": "StewardWriter" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StewardWriter"] }],
+
+  // Steward also PRODUCES on the Wire (it emits Flagger incidents). Its read
+  // side on atlas-wire (the lone reader of the bus) is intentionally NOT
+  // declared here — it lands with the StewardWriter handler in Wave 2 (Plan 04),
+  // so the "single reader" invariant is established at the same time as the code.
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+
+  // D1 system-of-record — Steward owns the atomic counter/idempotency writes.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // Read-mostly config/flags (label->color map, model tiers). Never secrets/counters.
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }
+  ],
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons.
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}

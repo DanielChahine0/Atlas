@@ -11,10 +11,28 @@
  * form (never the older type-annotation form).
  */
 
+import { DurableObject } from "cloudflare:workers";
+
 export interface Env {
-  // Canonical bindings are declared in wrangler.jsonc and surfaced here in
-  // later waves (WIRE, DB, CONFIG, OAUTH_KV, BLOBS, AI, ATLAS, MORNING_CHAIN_DO).
-  // Intentionally empty in Wave 1 — the hello-world handler needs none of them.
+  // Atlas's coordinator DO, addressed as env.ATLAS.getByName("root").
+  // MORNING_CHAIN_DO binds the SAME class. Remaining canonical bindings
+  // (WIRE, DB, CONFIG, OAUTH_KV, BLOBS, AI) surface here as later waves use them.
+  ATLAS: DurableObjectNamespace<AtlasCoordinator>;
+  MORNING_CHAIN_DO: DurableObjectNamespace<AtlasCoordinator>;
+}
+
+/**
+ * AtlasCoordinator — the orchestrator DO (one instance: getByName("root")).
+ *
+ * Phase 0, Plan 01 (Wave 1): placeholder so the `new_sqlite_classes` migration
+ * + ATLAS/MORNING_CHAIN_DO bindings resolve and the monorepo builds. The 5-min
+ * alarm() heartbeat (D-10: self-flag P1 if stale) and the cron-dispatch wiring
+ * land in Wave 2 (Plan 02). Atlas does NO domain work.
+ */
+export class AtlasCoordinator extends DurableObject<Env> {
+  async ping(): Promise<string> {
+    return "atlas: coordinator online (phase 0 skeleton)";
+  }
 }
 
 export default {

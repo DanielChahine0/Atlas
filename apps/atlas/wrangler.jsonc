@@ -2,8 +2,73 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "atlas",
   "main": "src/index.ts",
-  // D-09: ≥ 2026-04-07 enables web_socket_auto_reply_to_close (Echo, later).
+  // D-09: >= 2026-04-07 enables web_socket_auto_reply_to_close (Echo, later).
   "compatibility_date": "2026-04-25",
   // REQUIRED by the `agents` SDK — omitting it is a runtime failure.
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Atlas's AtlasCoordinator DO, addressed as env.ATLAS.getByName("root").
+  // MORNING_CHAIN_DO is a second binding to the SAME class (Atlas coordinates
+  // the Phase-1 morning chain). The DO + heartbeat land in Wave 2 (Plan 02).
+  "durable_objects": {
+    "bindings": [
+      { "name": "ATLAS", "class_name": "AtlasCoordinator" },
+      { "name": "MORNING_CHAIN_DO", "class_name": "AtlasCoordinator" }
+    ]
+  },
+  // SQLite-backed DOs (Free-tier eligible) — NEVER legacy `new_classes`.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AtlasCoordinator"] }],
+
+  // Atlas is a Wire PRODUCER only (Pillar 1). It declares no read side on the
+  // bus; the lone reader is Steward, in apps/steward.
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+
+  // D1 system-of-record (atlas-db). All counters + idempotency keys live here.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      // Shared repo-root migrations/ dir (one D1 across all Workers), resolved
+      // relative to this wrangler.jsonc.
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // CONFIG = model-tier overrides / flags / label->color map (never secrets,
+  // never counters). OAUTH_KV = grants/tokens for the inbound OAuthProvider
+  // (must be a REAL KV namespace or the provider fails at startup).
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" },
+    { "binding": "OAUTH_KV", "id": "970e569e796a4868ad82449885d0319f" }
+  ],
+
+  // R2 blob store (atlas-blobs). audio/raw/ expires 7d; transcripts/exports persist.
+  // NOTE: the bucket is provisioned once R2 is enabled on the account (see the
+  // Plan 00-01 SUMMARY checkpoint). The binding is declared here and ready.
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "atlas-blobs" }],
+
+  // Workers AI binding — all Claude routes through claudeFor(agent,env) -> AI Gateway.
+  "ai": { "binding": "AI" },
+
+  // PLAINTEXT non-secrets ONLY. NEVER secrets, NEVER counters. Real credentials
+  // are bound separately via Secrets Store / `wrangler secret put` in Plan 06/07.
+  "vars": {
+    "AIG_ACCOUNT_ID": "<set-before-phase-1>",
+    "AIG_GATEWAY_ID": "atlas-reasoning",
+    "MODEL_ATLAS": "claude-opus-4-8",
+    "MODEL_DEFAULT": "claude-sonnet-4-6"
+  },
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (CLAUDE.md). Cron lines themselves first appear in
+    // Phase 1 (one cron kicks the MorningChain Workflow — never 5 stage crons).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
 }
