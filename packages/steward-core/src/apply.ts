@@ -13,13 +13,25 @@ import { toOutboxIntent } from "./op-mapping.js";
  *     double-count, so they cannot be separate `.run()`s.
  *   - D1 takes anonymous positional params ONLY (no named-index / colon forms).
  *   - Counter math is ABSOLUTE (`value = value + ?`), guarded by
- *     `WHERE NOT EXISTS (SELECT 1 FROM idempotency_keys WHERE key = ?)` so the
- *     bump fires ONLY when the key was newly inserted this call.
- *   - `batch[0].meta.changes === 0` ⇒ the key already existed ⇒ this is a REPLAY ⇒
- *     return `{ applied: false }` and write nothing else (no double-count, at any
- *     age — the ledger has no TTL, D-08).
+ *     `WHERE NOT EXISTS (SELECT 1 FROM idempotency_keys WHERE key = ?)`.
+ *   - STATEMENT ORDER MATTERS (see below) — the counter bump runs BEFORE the
+ *     ledger insert so its `WHERE NOT EXISTS` sees the pre-insert state.
+ *   - The ledger INSERT OR IGNORE's `meta.changes === 0` ⇒ the key already
+ *     existed ⇒ this is a REPLAY ⇒ return `{ applied: false }` and write nothing
+ *     else (no double-count, at any age — the ledger has no TTL, D-08).
  *   - The slow Obsidian write is NOT here. For upsert/append we enqueue a PENDING
  *     `vault_outbox` intent (the daemon PATCHes Obsidian OUTSIDE the lock, 00-08).
+ *
+ * STATEMENT ORDERING (the fix the serialize test enforces): the build-plan T5
+ * snippet put the ledger insert FIRST and the counter bump SECOND. That is a
+ * double-count BUG — within a single batch SQLite makes statement (1)'s insert
+ * visible to statement (2), so the bump's `WHERE NOT EXISTS (... key = ?)` always
+ * finds the just-inserted key and the UPDATE is silently skipped (counter never
+ * advances past the first row's initial INSERT). We therefore run the counter
+ * bump FIRST — it evaluates `WHERE NOT EXISTS` against the state BEFORE the key is
+ * inserted — then insert the ledger key, whose `meta.changes` is the replay
+ * detector. Order: [counter bump, ledger insert]. (Proven by serialize.test.ts:
+ * 50 distinct-key applies sum to 50, not 1.)
  */
 export async function applyEvent(
   db: D1Database,
@@ -29,16 +41,12 @@ export async function applyEvent(
   const counterEntity = e.payload.counter ?? e.entity;
   const delta = e.payload.delta ?? 1;
 
-  // ── The atomic critical section: ONE batch, two statements ─────────────────
+  // ── The atomic critical section: ONE batch, two statements (in THIS order) ──
+  // (0) Conditional ABSOLUTE counter bump — gated on the key NOT yet existing,
+  //     evaluated BEFORE the ledger insert below makes the key visible.
   // (1) INSERT OR IGNORE the idempotency key — its meta.changes is the replay
   //     detector (0 ⇒ key already present ⇒ replay).
-  // (2) Conditional ABSOLUTE counter bump, gated on the key being newly inserted.
   const result = await db.batch([
-    db
-      .prepare(
-        "INSERT OR IGNORE INTO idempotency_keys(key,agent,type,op,entity,applied_at) VALUES (?,?,?,?,?,?)",
-      )
-      .bind(e.idempotencyKey, e.agent, e.type, e.op, e.entity, now),
     db
       .prepare(
         `INSERT INTO counters(entity,value) VALUES(?, ?)
@@ -46,11 +54,16 @@ export async function applyEvent(
          WHERE NOT EXISTS (SELECT 1 FROM idempotency_keys WHERE key = ?)`,
       )
       .bind(counterEntity, delta, delta, e.idempotencyKey),
+    db
+      .prepare(
+        "INSERT OR IGNORE INTO idempotency_keys(key,agent,type,op,entity,applied_at) VALUES (?,?,?,?,?,?)",
+      )
+      .bind(e.idempotencyKey, e.agent, e.type, e.op, e.entity, now),
   ]);
 
   // Replay: the key was already in the ledger ⇒ nothing changed ⇒ skip.
-  // (batch() returns one result per statement, in order; [0] is the ledger insert.)
-  const ledgerResult = result[0];
+  // (batch() returns one result per statement, in order; [1] is the ledger insert.)
+  const ledgerResult = result[1];
   if (!ledgerResult || ledgerResult.meta.changes === 0) {
     return { applied: false };
   }
