@@ -1,4 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Register the cloudflare:test ambient module declarations (createScheduledController,
+    // runInDurableObject, runDurableObjectAlarm, env, …) used by the workerd test suites.
+    // The `cloudflare:test` module is declared in the package's `./types` subpath export
+    // (types/cloudflare-test.d.ts), NOT its main types entry. `types` does NOT merge across
+    // `extends`, so re-list @cloudflare/workers-types here too.
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"]
+  },
   "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
 }
