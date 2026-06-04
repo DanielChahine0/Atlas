@@ -61,9 +61,14 @@
   **Cron Triggers**; **D1** (system-of-record) + **KV** (config/flags + OAuth store) + **R2**
   (audio/exports); remote **MCP servers** via the Agents SDK; **Workers OAuth Provider** (inbound);
   **Claude via AI Gateway**. Two agents (Echo, Quill) run in a **local macOS launchd daemon**.
-- **Hard prerequisite:** **Cloudflare Workers PAID plan** — Queues, Workflows, and KV-backed DOs
-  require it. SQLite-backed DOs (`new_sqlite_classes`) run on Free for dev. Verify with
-  `wrangler whoami` + `wrangler queues list` (run `/prereqs`).
+- **Plan:** the **Workers Free plan is sufficient to build & deploy the spine.** **Queues went
+  GA-on-Free 2026-02-04** (10k queues, 10k ops/day, 24h retention), **Workflows run on Free** (100
+  concurrent, 1,024 steps/instance, 3-day state retention), and Atlas uses only **SQLite-backed DOs**
+  (`new_sqlite_classes`, Free). **Workers Paid ($5/mo) is an optional headroom upgrade, NOT a hard
+  gate** — take it for higher Workflow step/retention limits (a confirm-gate that waits **>3 days**
+  exceeds Free's 3-day state retention), Queues throughput/retention, the KV-backed-DO option (unused
+  by Atlas), and a higher per-Worker cron cap. The dominant recurring cost is the **Claude API bill**,
+  not hosting. Verify the account with `wrangler whoami` + `wrangler queues list` (run `/prereqs`).
 - **Package manager:** **pnpm** (via corepack) workspaces. **Tests:** Vitest +
   `@cloudflare/vitest-pool-workers` (runs in real `workerd`).
 - **Wrangler config:** `wrangler.jsonc`, **one per app/Worker**, with
@@ -204,8 +209,8 @@ Vault writes** and fetches nothing.
 # Prereqs (run /prereqs)
 node -v                                   # expect LTS v22.x
 corepack enable && corepack prepare pnpm@latest --activate
-npx wrangler login && npx wrangler whoami # must be a Workers PAID account
-npx wrangler queues list                  # proves Queues entitlement
+npx wrangler login && npx wrangler whoami # any Workers account — Paid NOT required (Free builds the spine)
+npx wrangler queues list                  # Queues runs on Free (GA-on-Free 2026-02-04); confirms CLI auth
 
 # Build / test / typecheck (workerd forces TZ=UTC)
 pnpm -r build && pnpm -r typecheck && pnpm test

@@ -38,7 +38,7 @@ turn it on.
 | `/wire-event <agent> <op> <entity>` | Generates/validates a canonical SPEC §6.4 Wire event with a correct structured `idempotencyKey`. |
 | `/migration <name>` | Scaffolds a numbered D1 migration against the canonical schema with the D1 rules baked in (positional `?`, absolute increment, `new_sqlite_classes`). Phase 0 is D1-centric. |
 | `/spec <topic>` | Answers a design question from the canonical docs (SPEC-CANON wins), quoting `path#section`. |
-| `/prereqs` | Checks the Phase-0 hard gate (Workers PAID, wrangler login, Node LTS, pnpm, Queues entitlement). |
+| `/prereqs` | Checks the Phase-0 prerequisites (Cloudflare account + wrangler login, Node LTS, pnpm, Queues reachable). Workers Free suffices; Paid is optional headroom. |
 | `/cron-utc <time>` | Translates an owner-local time to a UTC cron (with the EST↔EDT/DST caveat). |
 
 ## Subagents (delegate proactively)

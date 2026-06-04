@@ -12,7 +12,7 @@
 | **MVP** | **M0 + M1** — Phase 0 Spine **plus** Phase 1 morning chain (**Filer → Herald → Forge → Sundial → Compass**) + the **Steward** dashboard |
 | **Stack** | TypeScript · Cloudflare Workers/Durable Objects/Queues/Workflows/Cron · D1/KV/R2 · Agents SDK remote MCP · Workers OAuth Provider · Claude via AI Gateway · local macOS daemon (Echo/Quill + Obsidian bridge) |
 | **Build order** | Phase 0 Spine → Phase 1 Core loop (MVP) → Phase 2 Weekly value → Phase 3 Capture (local) → Phase 4 Outward (gated) → Phase 5 Meta/polish |
-| **Hard prerequisite** | **Cloudflare Workers _Paid_ plan** — Queues (the Wire), Workflows, and KV-backed DOs require it |
+| **Hosting plan** | **Workers _Free_ plan builds & runs the spine** — Queues (GA-on-Free 2026-02-04), Workflows, and SQLite DOs are all on Free. Workers _Paid_ ($5/mo) is an **optional headroom upgrade**, not a hard gate (only the unused KV-backed DOs need Paid). |
 | **Non-negotiables carried from day 0** | one writer per resource · suggest-don't-destroy (draft + ask) · idempotent + observable · secrets in Secrets Store (never Vault/Codex) · never surface 2FA codes / reset links |
 | **Sections** | §1 Prerequisites · §2 Phase 0 (task-level) · §3 Phase 1 / MVP (task-level) · §4 Phases 2–5 (sequencing) · §5 Cross-cutting practices · §6 Execution sequence, metrics & decision log · §7 Owner inputs still needed |
 
@@ -26,11 +26,11 @@
 
 ### 1. Accounts & prerequisites — verify BEFORE Phase 0
 
-This is a hard gate. Each item below is **required** for the spine; Atlas's spine uses Queues + Durable Objects + Workflows, all of which decide whether you can even deploy. Tick every box, then start Phase 0.
+Each item below is **required** for the spine. Atlas's spine uses Queues + Durable Objects + Workflows — all of which now run on the **Workers Free plan** (Queues GA-on-Free 2026-02-04; Workflows on Free; SQLite DOs on Free), so a paid subscription is **not** a deploy gate. Tick every box, then start Phase 0.
 
 | # | Prerequisite | Why Atlas needs it | Verify with |
 |---|---|---|---|
-| 1 | **Cloudflare account on the PAID Workers plan** | **Queues (the Wire) require Paid — full stop.** Workflows (the durable morning chain) and KV-backed Durable Objects are Paid features; SQLite-backed DOs now run on Free but the moment the Wire exists you are Paid anyway. Per-Worker cron cap is also higher on Paid (Atlas has ~10 schedule lines). Treat Workers Paid as a Phase-0 line item. | Dashboard → Workers & Pages → Plans shows **Workers Paid**. |
+| 1 | **Cloudflare account (Workers Free is sufficient)** | **Queues run on Free** (GA-on-Free [2026-02-04](https://developers.cloudflare.com/changelog/post/2026-02-04-queues-free-plan/): 10k queues, 10k ops/day, 24h retention), **Workflows run on Free** (100 concurrent, 1,024 steps/instance, 3-day state retention), and Atlas uses only **SQLite-backed DOs** (Free). **Workers Paid ($5/mo) is an optional upgrade**, not a gate — take it for higher Workflow step/retention limits (a confirm-gate waiting **>3 days** exceeds Free's 3-day retention), Queues throughput/retention, KV-backed DOs (unused), and a higher per-Worker cron cap. | `npx wrangler queues list` succeeds (works on Free); Dashboard → Workers & Pages → Plans shows your tier. |
 | 2 | **Google Cloud project + OAuth consent screen + OAuth client** | Outbound OAuth2 to Gmail/Calendar/Drive/Sheets. **Also enable Gmail API, Calendar API, and Pub/Sub API**, create the `gmail-filer` Pub/Sub topic, and grant `gmail-api-push@system.gserviceaccount.com` the Pub/Sub **Publisher** role (Filer's continuous push needs this — easy to miss). OAuth client type = **Web application** (confidential client; PKCE does NOT remove the need for a `client_secret`). | `gcloud projects describe`; consent screen published; client ID + secret downloaded. |
 | 3 | **GitHub account that can create a GitHub App** | GitHub MCP (Phase 2/4) uses a **GitHub App, not a PAT** — scoped, revocable, per-repo installation tokens. Need rights to register an App under the owner account or org. | github.com/settings/apps → **New GitHub App** is available. |
 | 4 | **Obsidian vault + Local REST API plugin (the bridge)** | The Vault is the only local dependency in Phase 0. Install **Local REST API** (coddingtonbear) — it serves self-signed HTTPS on `127.0.0.1:27124` with a bearer key. **Adopt plugin v3.0+** (the v3 PATCH API is what Steward's increment/upsert/append map onto; v2 PATCH is deprecated, removed at v4.0). Obsidian must be **running** for any write to land — it is an in-app HTTP server, not a headless service. | Settings → Community plugins → Local REST API shows an API key; `curl -k https://127.0.0.1:27124/` returns 200. |
@@ -43,7 +43,7 @@ This is a hard gate. Each item below is **required** for the spine; Atlas's spin
 node -v                       # expect an LTS (e.g. v22.x)
 corepack enable && corepack prepare pnpm@latest --activate
 npm i -g wrangler@latest      # or use npx wrangler everywhere
-npx wrangler login            # OAuth into the PAID account
+npx wrangler login            # OAuth into your Cloudflare account (Free or Paid — Free is enough)
 npx wrangler whoami           # prints the account id you'll paste into AIG_ACCOUNT_ID
 ```
 
@@ -302,7 +302,7 @@ Bound in config like:
 
 ### Acceptance criteria — "setup is done" when
 
-1. `npx wrangler whoami` shows a **Workers Paid** account, and `npx wrangler queues list` succeeds (proves Queues entitlement).
+1. `npx wrangler whoami` shows your Cloudflare account (**Free is sufficient**), and `npx wrangler queues list` succeeds (Queues runs on Free since 2026-02-04 — this confirms CLI auth, not a paid tier).
 2. The monorepo builds: `pnpm -r build` and `pnpm -r typecheck` pass; `pnpm test` runs Vitest inside `workerd` with `TZ=UTC`.
 3. `wrangler dev --test-scheduled` + `curl ".../__scheduled?cron=45+12+*+*+*"` reaches the Atlas dispatcher branch for the Filer sweep.
 4. The chosen **cron timezone policy** is written into `docs/03-scheduling.md` with the EST/EDT UTC translation table.
@@ -321,7 +321,7 @@ Phase 0 ships **zero user-visible features**. It stands up the substrate every l
 
 | Need | Why | Status to confirm before T1 |
 |---|---|---|
-| **Workers Paid plan** | Queues (the Wire) and Workflows require paid; KV-backed DOs require paid | Required for Phase 0 |
+| **Workers Free plan** | Queues (the Wire, GA-on-Free 2026-02-04), Workflows, and SQLite-backed DOs all run on Free | Sufficient for Phase 0 — Paid ($5/mo) is optional headroom only (only the unused KV-backed DOs need Paid) |
 | **SQLite-backed DOs on Free** | `new_sqlite_classes` DOs (Atlas/Steward) run on Free; gives SQL + KV + alarms in one backend | OK on Free for dev |
 | **GCP project** | Gmail + Calendar + Pub/Sub APIs enabled; OAuth consent screen | Phase 0 setup |
 | **GitHub App** | installation tokens (NOT a PAT), RS256 private key | Phase 0 setup |
@@ -434,7 +434,7 @@ Phase 0 ships **zero user-visible features**. It stands up the substrate every l
 
 - **Deliverable:** `atlas-wire` queue and `atlas-wire-dlq` dead-letter queue created; the producer binding `WIRE` available to every feeder Worker. **No consumer is attached yet** — Steward (T5) is the sole consumer.
 - **Files / primitives:** `wrangler.jsonc` (`queues.producers` binding `WIRE`, queue `atlas-wire`).
-- **Dependencies:** T0 (and Workers Paid).
+- **Dependencies:** T0. (Queues runs on the Free plan — no paid subscription needed.)
 - **Commands:**
   ```bash
   npx wrangler queues create atlas-wire
@@ -1549,7 +1549,7 @@ The decision log (§6.3) resolves every *architectural* open question (D1–D7) 
 
 - **Package manager** — drafted as **pnpm** (workspace support is the only hard requirement). Swap to npm/bun if you standardize on one elsewhere. *Confirm before `npm create cloudflare`.*
 - **Worker granularity** — drafted as **one Worker per agent** (max least-privilege isolation). Grouping the low-risk Phase-1 agents is acceptable to cut deploy overhead **only if** Steward stays its own Worker (sole Wire consumer) and Filer stays its own (`gmail.modify`-only boundary).
-- **Per-Worker cron count cap** — verify the *current* limit before committing to a single Atlas dispatcher Worker (~10 schedule lines by Phase 2). Workers Paid (already required) should lift it; otherwise split crons across Workers.
+- **Per-Worker cron count cap** — verify the *current* limit before committing to a single Atlas dispatcher Worker (~10 schedule lines by Phase 2). The Free plan caps Cron Triggers lower than Paid, so the cron-heavy fleet (NOT Queues/Workflows, which run on Free) may be the real reason to upgrade by Phase 2; otherwise split crons across Workers.
 - **AI Gateway dollar/rate ceilings** — there is **no per-agent hard-budget primitive**, only per-gateway. The plan provisions two gateways (`atlas-reasoning`, `atlas-highvolume`); you must set the actual numbers in the dashboard before Filer's continuous push goes live.
 - **`compatibility_date` pin** (`2026-04-25` drafted) and the **heartbeat staleness threshold** (`5 min` drafted for the Atlas self-P1) — confirm or adjust.
 - **DST operational burden** — D1 commits to UTC-cron + twice-yearly hand-edits at the EST/EDT boundary. Accept the chore, *or* pin a fixed offset (≤1h drift half the year), *or* build a tiny self-check that flags when the configured cron no longer maps to owner-local 07:45.
