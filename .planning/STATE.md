@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 00-04-PLAN.md (steward crux)
-last_updated: "2026-06-04T23:39:04.360Z"
+last_updated: "2026-06-04T23:50:58.751Z"
 last_activity: 2026-06-04
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 ## Current Position
 
 Phase: 00 (spine) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-06-04
 Next action: execute Plan 00-04 (`/gsd:execute-phase 0`)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 63%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [█████░░░░░] 50%
 | Phase 00 P02 | 7 | 3 tasks | 21 files |
 | Phase 0 P3 | 20 | 4 tasks | 6 files |
 | Phase 00 P04 | 30 | 3 tasks | 13 files |
+| Phase 00 P05 | 6 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase ?]: 00-04: [Rule 1 bug] fixed a double-count in the build-plan T5 snippet — within one db.batch() the ledger-insert-then-counter-bump order self-defeats WHERE NOT EXISTS (the just-inserted key is visible); reordered to [counter-bump, ledger-insert]. serialize.test.ts proves 50 concurrent distinct applies sum to 50 (was 1).
 - [Phase ?]: 00-04: vault_outbox intent enqueued INSIDE the lock; the slow Obsidian PATCH is deferred to the outbound daemon (00-08, which imports toOutboxIntent — the SINGLE op->Local-REST map, GLOBAL DECISION 5). consumer->atlas-wire-dlq wiring in place (SPINE-05); the DLQ sink itself is 00-05.
 - [Phase ?]: 00-04: three SPINE-02 tests green in workerd — replay (meta.changes===0, counter 1 not 2), serialize (single DO + 50 concurrent exact sum), malformed (ack+P3, no write). vitest-pool-workers v4 cloudflareTest + per-test applyD1Migrations via provide/inject (pool does not auto-apply).
+- [Phase ?]: 00-05: SPINE-05 back half live — apps/dlq-sink consumes atlas-wire-dlq (NOT atlas-wire; Pillar 1 holds, Steward stays sole bus reader) and turns every exhausted-retry dead message into a durable audit_log row (outcome='dlq', scope_used='' never a token) + a deterministic P2/P3 Flagger incident via shared flag(); always ack() (try/finally), never retry — no poison-loop, no silent loss.
+- [Phase ?]: 00-05: reused @atlas/shared flag() as the single flag-id authority (flg:<date>:dlq-sink:<hash>) with title/detail as pure functions of (severity, original key) so a redelivered DLQ message dedupes to ONE upserted flag — no crypto.randomUUID; audit_log flag_id computed identically to tie the forensic row to the incident.
+- [Phase ?]: 00-05: [Rule 3] tightened .claude/hooks/guard-wire-consumer.js — the Pillar-1 check now inspects the CONSUMER queue region only, so a legitimate atlas-wire PRODUCER reference no longer false-positive-denies; still denies a real second atlas-wire consumer.
 
 ### Pending Todos
 
@@ -99,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-04T23:39:04.353Z
+Last session: 2026-06-04T23:50:36.344Z
 Stopped at: Completed 00-04-PLAN.md (steward crux)
 Resume file: None
