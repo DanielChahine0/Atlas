@@ -15,12 +15,29 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StewardWriter"] }],
 
-  // Steward also PRODUCES on the Wire (it emits Flagger incidents). Its read
-  // side on atlas-wire (the lone reader of the bus) is intentionally NOT
-  // declared here — it lands with the StewardWriter handler in Wave 2 (Plan 04),
-  // so the "single reader" invariant is established at the same time as the code.
+  // Steward PRODUCES on the Wire (it emits Flagger incidents) AND is the SOLE
+  // CONSUMER of atlas-wire — the lone reader of the bus (Pillar 1). apps/steward
+  // is the ONLY Worker in the repo with a queues.consumers block on atlas-wire; a
+  // second consumer anywhere is a hard CI failure.
+  //
+  // Serialization is double-enforced: max_concurrency:1 (the belt) + the single
+  // named DO lock getByName("vault") (the suspenders). dead_letter_queue routes
+  // exhausted-retry messages to atlas-wire-dlq so they never drop silently
+  // (SPINE-05). NOTE: the stale per-consumer retry-delay key (RESEARCH Pitfall 6)
+  // is intentionally omitted — it is not a valid consumer-level config key; the
+  // per-message retry delay is set in code via msg.retry({delaySeconds:60}).
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }],
+    "consumers": [
+      {
+        "queue": "atlas-wire",
+        "max_concurrency": 1,
+        "max_batch_size": 10,
+        "max_batch_timeout": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "atlas-wire-dlq"
+      }
+    ]
   },
 
   // D1 system-of-record — Steward owns the atomic counter/idempotency writes.

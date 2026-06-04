@@ -1,36 +1,32 @@
 /**
- * Steward — the sole Vault writer DO and the lone reader of the Wire.
+ * Steward — the sole Vault writer DO and the SINGLE reader of the Wire (Pillar 1).
  *
- * Phase 0, Plan 01 (Wave 1): this is the wrangler.jsonc-backed SKELETON only.
- * The StewardWriter critical section (atomic dedup + conditional counter bump
- * in ONE DB.batch() inside blockConcurrencyWhile), the bus-reader handler, the
- * DLQ handler, and the outbound bridge endpoints all land in Wave 2 (Plan 04).
+ * Phase 0, Plan 04 (Wave 3): the StewardWriter critical section (atomic dedup +
+ * conditional absolute counter bump in ONE db.batch() inside
+ * blockConcurrencyWhile — steward.ts), the single `atlas-wire` consumer
+ * (steward-consumer.ts), and the consumers block in wrangler.jsonc all land here.
+ *
+ * The Worker default export wires the consumer's `queue()` handler and re-exports
+ * `StewardWriter` so wrangler can resolve the `new_sqlite_classes` migration + the
+ * STEWARD_LOCK binding.
  *
  * One name = one instance: env.STEWARD_LOCK.getByName("vault") is the single
- * serialized Vault write lock (Pillar 1).
+ * serialized Vault write lock.
  */
 
-import { DurableObject } from "cloudflare:workers";
+import type { WireEvent } from "@atlas/wire";
+import { stewardConsumer, type Env } from "./steward-consumer.js";
 
-export interface Env {
-  STEWARD_LOCK: DurableObjectNamespace<StewardWriter>;
-  // DB / CONFIG / WIRE surface in Wave 2 when the write path is implemented.
-}
-
-/**
- * Placeholder DO so the `new_sqlite_classes` migration + STEWARD_LOCK binding
- * resolve and the monorepo builds. The real atomic `apply()` lands in Plan 04.
- */
-export class StewardWriter extends DurableObject<Env> {
-  async ping(): Promise<string> {
-    return "steward: write lock online (phase 0 skeleton)";
-  }
-}
+export { StewardWriter } from "./steward.js";
+export type { Env } from "./steward-consumer.js";
 
 export default {
+  queue: stewardConsumer.queue,
   async fetch(_request: Request, _env: Env, _ctx: ExecutionContext): Promise<Response> {
-    return new Response("steward: skeleton (phase 0)\n", {
+    // Steward has no public HTTP surface in Phase 0 (the outbound bridge endpoints
+    // land in 00-08). This stub keeps the Worker buildable.
+    return new Response("steward: sole Vault writer + single Wire consumer (phase 0)\n", {
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env, WireEvent>;

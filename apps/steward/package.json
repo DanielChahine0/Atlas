@@ -11,6 +11,11 @@
     "lint": "eslint src",
     "deploy": "wrangler deploy"
   },
+  "dependencies": {
+    "@atlas/shared": "workspace:*",
+    "@atlas/steward-core": "workspace:*",
+    "@atlas/wire": "workspace:*"
+  },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.13",
     "@cloudflare/workers-types": "^4.20260425.0",

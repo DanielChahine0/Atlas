@@ -12,8 +12,22 @@
     "bindings": [{ "name": "STEWARD_LOCK", "class_name": "StewardWriter" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StewardWriter"] }],
+  // Mirrors the production consumers block so the vitest-pool-workers pool can
+  // deliver batches to the queue() handler. (The CI one-writer gate scans
+  // apps/*/wrangler.jsonc only, NOT wrangler.test.jsonc, so this test mirror does
+  // not affect the single-consumer count.)
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }],
+    "consumers": [
+      {
+        "queue": "atlas-wire",
+        "max_concurrency": 1,
+        "max_batch_size": 10,
+        "max_batch_timeout": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "atlas-wire-dlq"
+      }
+    ]
   },
   "d1_databases": [
     {

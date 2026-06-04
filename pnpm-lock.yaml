@@ -72,6 +72,16 @@ importers:
         version: 4.1.8(@opentelemetry/api@1.9.1)(vite@8.0.16(esbuild@0.27.3)(yaml@2.9.0))
 
   apps/steward:
+    dependencies:
+      '@atlas/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@atlas/steward-core':
+        specifier: workspace:*
+        version: link:../../packages/steward-core
+      '@atlas/wire':
+        specifier: workspace:*
+        version: link:../../packages/wire
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.16.13
