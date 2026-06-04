@@ -1,0 +1,39 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/SPEC-CANON.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Atlas — Canonical Design Spec (SPEC-CANON)",
+  "summary": "Authoritative technical specification for Atlas, a personal multi-agent orchestrator on Cloudflare, defining the agent roster, pipelines, contracts, and schedules.",
+  "scope": [
+    "Atlas orchestrator",
+    "sub-agent roster (Herald, Filer, Forge, Sundial, Compass, Scout, Usher, Headhunter, Echo, Archivist, Steward, Quill, Envoy, Switchboard, Flagger, Librarian)",
+    "the Wire (Cloudflare Queue event bus)",
+    "The Vault (Obsidian dashboard)",
+    "The Codex (source-of-truth profile)",
+    "Gmail email label taxonomy",
+    "scheduling / cron triggers",
+    "Cloudflare hosting (Workers, Durable Objects, D1, KV, R2, MCP)",
+    "Flagger incident model",
+    "Prompt library",
+    "security & privacy model",
+    "build roadmap"
+  ],
+  "cross_refs": [
+    "agents/steward.md",
+    "03-scheduling.md",
+    "agents/herald.md",
+    "01-agent-roster.md",
+    "02-architecture.md",
+    "04-email-taxonomy.md",
+    "06-hosting-cloudflare-mcp.md",
+    "08-flagger.md",
+    "09-prompt-library.md",
+    "07-source-of-truth-codex.md",
+    "11-security-privacy.md",
+    "12-roadmap.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Self-declared authoritative reference ('If two docs disagree, this file wins'). Dominant SPEC signals: agent roster table, event/flag/record shapes, scheduling table, Cloudflare data models, write contracts. Contains some PRD-like material (importance tiers, roadmap) but technical-contract content dominates; classified SPEC."
+}

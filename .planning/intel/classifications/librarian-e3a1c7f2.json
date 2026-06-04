@@ -1,0 +1,37 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/librarian.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Librarian (prompt library)",
+  "summary": "Agent-doc companion describing the Librarian agent that captures prompts on-demand, stores them as Vault notes via Steward, and surfaces them in a deduped prompt-library table.",
+  "scope": [
+    "Librarian agent",
+    "prompt library",
+    "Vault prompt note",
+    "Prompt library table",
+    "Steward",
+    "the Wire",
+    "dedupe / most-used surfacing",
+    "deep-linking",
+    "Cloudflare Worker"
+  ],
+  "cross_refs": [
+    "../01-agent-roster.md",
+    "../SPEC-CANON.md",
+    "../09-prompt-library.md",
+    "steward.md",
+    "../02-architecture.md",
+    "usher.md",
+    "envoy.md",
+    "../03-scheduling.md",
+    "../05-dashboard.md",
+    "../07-source-of-truth-codex.md",
+    "../08-flagger.md",
+    "../06-hosting-cloudflare-mcp.md",
+    "quill.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Competes between DOC and SPEC. Contains contract-like material (record-shape table, Wire event JSON schema, four-column table layout), but line 5 explicitly frames it as the agent-doc companion to the authoritative feature spec at ../09-prompt-library.md and ../SPEC-CANON.md (\"this is its agent-doc companion\"), and the body is prose-heavy rationale rather than a standalone contract. Classified DOC; synthesizer should defer its schema details to the canonical 09-prompt-library spec."
+}

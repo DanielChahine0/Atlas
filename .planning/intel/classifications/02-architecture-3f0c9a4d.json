@@ -1,0 +1,31 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/02-architecture.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Atlas — Architecture",
+  "summary": "Explains how the Atlas multi-agent orchestrator fits together: the Wire event bus, single-writer Steward, cloud-vs-local split, dependency graph, core pipelines, and data stores.",
+  "scope": [
+    "Atlas orchestrator",
+    "the Wire (Cloudflare Queue)",
+    "Steward single-writer contract",
+    "The Vault (Obsidian dashboard)",
+    "The Codex (source of truth)",
+    "dependency graph",
+    "morning/event-bus/meetings pipelines",
+    "cloud-vs-local split",
+    "data stores (D1, KV, R2, Durable Objects)",
+    "architectural invariants"
+  ],
+  "cross_refs": [
+    "01-agent-roster.md",
+    "03-scheduling.md",
+    "agents/steward.md",
+    "08-flagger.md",
+    "06-hosting-cloudflare-mcp.md",
+    "07-source-of-truth-codex.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

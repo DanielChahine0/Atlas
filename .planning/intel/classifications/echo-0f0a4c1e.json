@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/echo.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Echo (audio capture)",
+  "summary": "Technical spec for Echo, a local macOS daemon that captures input/output audio, produces a diarized transcript, and hands it to Archivist.",
+  "scope": ["Echo audio-capture daemon", "macOS audio loopback / STT / diarization pipeline", "diarized transcript schema", "transcript store", "Durable Object + WebSocket live session", "R2 audio blob (gated)", "consent / privacy gating", "Archivist handoff"],
+  "cross_refs": ["archivist.md", "../01-agent-roster.md", "../03-scheduling.md", "../07-source-of-truth-codex.md", "steward.md", "../06-obsidian-dashboard.md", "quill.md", "../06-hosting-cloudflare-mcp.md", "../11-security-privacy.md", "../04-email-taxonomy.md", "../02-architecture.md", "flagger.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

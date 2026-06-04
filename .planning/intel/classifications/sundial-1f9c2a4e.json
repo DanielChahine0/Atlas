@@ -1,0 +1,35 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/sundial.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Sundial (calendar sync)",
+  "summary": "Technical spec for the Sundial agent that idempotently syncs Forge deadline tasks to Google Calendar blocks and reports to Steward.",
+  "scope": [
+    "Sundial agent",
+    "Google Calendar MCP (create_event/update_event/list_events/suggest_time)",
+    "task-to-calendar-block mapping",
+    "dedupe via atlasTaskId extended properties",
+    "reminders",
+    "Steward write contract (calendar.sync)",
+    "Cloudflare Worker / Durable Object runtime",
+    "scheduling (08:20 morning chain)"
+  ],
+  "cross_refs": [
+    "forge.md",
+    "steward.md",
+    "compass.md",
+    "usher.md",
+    "flagger.md",
+    "filer.md",
+    "../01-agent-roster.md",
+    "../02-architecture.md",
+    "../03-scheduling.md",
+    "../06-obsidian-vault.md",
+    "../07-source-of-truth-codex.md",
+    "../11-security-privacy.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

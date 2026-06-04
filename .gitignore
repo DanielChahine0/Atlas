@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+wrangler-types.d.ts
+
+# Secrets — NEVER commit (Pillar: secrets only via Secrets Store / bindings)
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+google-*.json
+github-app-*.private-key.pem
+
+# Claude Code — personal, machine-local overrides
+CLAUDE.local.md
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+*.log
+.idea/
+.vscode/

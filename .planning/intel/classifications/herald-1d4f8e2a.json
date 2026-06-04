@@ -1,0 +1,35 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/herald.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Herald (email digest)",
+  "summary": "Technical spec for the Herald agent: a Cloudflare Worker that reads Filer's Gmail labels and produces daily/weekly email digests as owner drafts plus a digest event to Steward.",
+  "scope": [
+    "Herald agent",
+    "email digest (daily/weekly modes)",
+    "Cloudflare Worker",
+    "Durable Object run state",
+    "Gmail MCP (read + draft-create)",
+    "digest event / Wire contract",
+    "Steward Vault counters",
+    "security redaction of 2FA codes/links",
+    "cron triggers / morning chain scheduling"
+  ],
+  "cross_refs": [
+    "filer.md",
+    "steward.md",
+    "scout.md",
+    "forge.md",
+    "sundial.md",
+    "compass.md",
+    "../04-email-taxonomy.md",
+    "../07-source-of-truth-codex.md",
+    "../06-obsidian-dashboard.md",
+    "../03-scheduling.md",
+    "../08-flagger.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

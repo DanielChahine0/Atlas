@@ -1,0 +1,35 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/headhunter.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Headhunter (job-board & hiring-window tracker)",
+  "summary": "Technical spec for the Headhunter agent: scrapes job boards, models per-company hiring windows in D1, and emits idempotent 'apply by' tasks and pipeline counters.",
+  "scope": [
+    "Headhunter agent",
+    "hiring-window model (D1)",
+    "job-board scraping / dedupe seen-store",
+    "Codex-based role ranking",
+    "Forge task emission",
+    "Steward pipeline counters",
+    "Flagger failure routing",
+    "cron schedule (full / deadlines modes)"
+  ],
+  "cross_refs": [
+    "../07-source-of-truth-codex.md",
+    "forge.md",
+    "steward.md",
+    "../08-flagger.md",
+    "../06-obsidian-dashboard-vault.md",
+    "filer.md",
+    "sundial.md",
+    "compass.md",
+    "../03-scheduling.md",
+    "scout.md",
+    "herald.md",
+    "SPEC-CANON.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

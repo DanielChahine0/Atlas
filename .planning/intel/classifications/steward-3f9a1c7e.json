@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/steward.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Steward (dashboard manager)",
+  "summary": "Technical spec for Steward, the single serialized idempotent writer to the Obsidian Vault, fed by other agents over the Wire.",
+  "scope": ["Steward agent", "The Vault (Obsidian)", "The Wire (Cloudflare Queue)", "Wire event contract", "increment/upsert/append ops", "D1 idempotency ledger", "Durable Object write lock", "dashboard counters/views/indexes", "Obsidian local MCP bridge"],
+  "cross_refs": ["atlas.md", "../03-scheduling.md", "../02-architecture.md", "../06-vault-dashboard.md", "usher.md", "headhunter.md", "scout.md", "envoy.md", "forge.md", "compass.md", "flagger.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

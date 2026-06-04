@@ -1,0 +1,38 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/switchboard.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Switchboard (capability router)",
+  "summary": "Build-facing spec for the Switchboard agent that routes a prompt to the minimal MCP server, tools, resources, and OAuth scopes for an executing agent.",
+  "scope": [
+    "Switchboard agent",
+    "MCP registry",
+    "capability routing / selection algorithm",
+    "toolset recommendation JSON schema",
+    "OAuth scope checking",
+    "confirmation gates",
+    "Cloudflare Worker + Durable Object"
+  ],
+  "cross_refs": [
+    "../10-switchboard.md",
+    "../SPEC-CANON.md",
+    "../06-hosting-cloudflare-mcp.md",
+    "../07-source-of-truth-codex.md",
+    "steward.md",
+    "atlas.md",
+    "usher.md",
+    "envoy.md",
+    "../08-flagger.md",
+    "../03-scheduling.md",
+    "filer.md",
+    "herald.md",
+    "sundial.md",
+    "compass.md",
+    "headhunter.md",
+    "../01-agent-roster.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

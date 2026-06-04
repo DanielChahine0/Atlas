@@ -1,0 +1,43 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/atlas.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Atlas (orchestrator)",
+  "summary": "Technical spec for Atlas, the root orchestrator/supervisor that schedules cron runs, routes the Wire queue, sequences the morning pipeline, enforces gates, and escalates failures.",
+  "scope": [
+    "Atlas orchestrator",
+    "the Wire (Cloudflare Queue) event bus",
+    "Cloudflare Cron Triggers / Workflows / Queues / Durable Objects / D1 / KV",
+    "morning pipeline (Filer/Herald/Forge/Sundial/Compass)",
+    "retry and timeout policy",
+    "confirmation gates",
+    "Flagger incident escalation",
+    "Steward single-writer contract"
+  ],
+  "cross_refs": [
+    "flagger.md",
+    "steward.md",
+    "filer.md",
+    "herald.md",
+    "forge.md",
+    "sundial.md",
+    "compass.md",
+    "headhunter.md",
+    "scout.md",
+    "echo.md",
+    "archivist.md",
+    "usher.md",
+    "quill.md",
+    "envoy.md",
+    "librarian.md",
+    "switchboard.md",
+    "../07-source-of-truth-codex.md",
+    "../03-scheduling.md",
+    "../06-hosting-cloudflare-mcp.md",
+    "../11-security-privacy.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prose-heavy agent description but carries concrete implementation contracts (Wire event shape {agent,type,entity,op,payload,idempotencyKey}, flag schema, retry/timeout tables, schedule trigger table, config contracts), so classified SPEC over DOC. Not ADR (no Decision/Consequences) or PRD (no user stories/acceptance criteria). Repeatedly defers authority to SPEC-CANON sections (§) and ../03-scheduling.md, consistent with a derived spec doc."
+}

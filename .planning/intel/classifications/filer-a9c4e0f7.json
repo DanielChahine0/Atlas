@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/filer.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Filer (email labeler)",
+  "summary": "Technical spec for the Filer agent that applies the Atlas Gmail label taxonomy in near-real-time and on a pre-Herald sweep, labels only, never archiving or deleting.",
+  "scope": ["Filer agent", "Gmail labeling", "email taxonomy", "Cloudflare Worker", "Durable Object cursor/dedupe", "Gmail MCP tools", "idempotency (AI/Reviewed)", "phishing/security guard", "batching & rate limits", "morning pipeline scheduling"],
+  "cross_refs": ["herald.md", "forge.md", "../01-agent-roster.md", "../04-email-taxonomy.md", "../08-flagger.md", "../03-scheduling.md", "sundial.md", "compass.md", "../02-architecture.md", "../11-security-privacy.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,30 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/11-security-privacy.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "11 — Security & Privacy Model",
+  "summary": "Defines Atlas's security and privacy contracts: confirmation gates, per-agent least-privilege OAuth scopes, local-only sensitive capture, secrets handling, D1 audit log, and phishing/2FA rules.",
+  "scope": [
+    "confirmation gates",
+    "OAuth scopes (per-agent least privilege)",
+    "Echo audio local capture",
+    "Quill screen capture",
+    "secrets handling (Cloudflare Secrets Store)",
+    "D1 audit_log",
+    "Flagger severity/trust routing",
+    "phishing & 2FA handling",
+    "two-party consent law",
+    "auto-registration ToS/captcha/payment"
+  ],
+  "cross_refs": [
+    "08-flagger.md",
+    "04-email-taxonomy.md",
+    "06-hosting-cloudflare-mcp.md",
+    "07-source-of-truth-codex.md",
+    "12-roadmap.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Content signals dominate: per-agent OAuth scope table, audit_log JSON schema, config knob table, and explicit gate mechanics make this a technical contract (SPEC) rather than user-facing requirements (PRD). Derived from SPEC-CANON §12 (with §5.8, §7, §8). No decision/consequences structure, so not an ADR."
+}

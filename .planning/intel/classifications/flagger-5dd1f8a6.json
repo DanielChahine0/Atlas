@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/flagger.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Flagger (incident flagging)",
+  "summary": "Per-agent technical spec for Flagger: scores, dedupes, and routes fleet incident/heartbeat events into severity+trust flags written to the Vault via Steward.",
+  "scope": ["Flagger agent", "incident flag record schema", "severity (P1-P4)", "trust score (0-100)", "flag status lifecycle", "push vs batch routing", "fleet + self heartbeat monitoring", "Cron watchdog Worker", "Steward write contract", "KV config knobs", "Vault Flagger board", "Cloudflare Worker + Durable Object + D1 + KV + Queue"],
+  "cross_refs": ["../05-dashboard.md", "steward.md", "../01-agent-roster.md", "../08-flagger.md", "../SPEC-CANON.md", "../02-architecture.md", "../03-scheduling.md", "filer.md", "../04-email-taxonomy.md", "forge.md", "sundial.md", "compass.md", "../06-hosting-cloudflare-mcp.md", "05-dashboard.md", "04-email-taxonomy.md", "03-scheduling.md", "02-architecture.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

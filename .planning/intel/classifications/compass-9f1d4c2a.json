@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/compass.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Compass (daily planner)",
+  "summary": "Technical spec for the Compass agent, which merges Forge tasks with the calendar into a time-blocked day plan emitted to the Wire for Steward.",
+  "scope": ["Compass agent", "day plan", "task prioritization", "calendar free/busy merge", "overcommitment handling", "morning glance top-3", "Wire day_plan event", "scheduling/cron triggers", "Flagger incident hooks"],
+  "cross_refs": ["../01-agent-roster.md", "../SPEC-CANON.md", "forge.md", "sundial.md", "usher.md", "steward.md", "../08-flagger.md", "../07-source-of-truth-codex.md", "../03-scheduling.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": "Content is implementation-contract focused: merge/prioritization algorithm, free/busy grid, event JSON schema, config defaults, failure-mode table. Reads as SPEC rather than PRD (no user stories/acceptance criteria) or DOC (defines binding behavior the system must honor). 'Open questions' section poses unresolved design choices but does not lock any decision, so not an ADR."
+}

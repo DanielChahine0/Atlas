@@ -1,0 +1,32 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/07-source-of-truth-codex.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "The Codex — single source of truth",
+  "summary": "Defines the Codex profile data model: schema, field-to-form autofill mapping, guarded update flow, config keys, and failure modes read by Quill, Envoy, and Archivist.",
+  "scope": [
+    "The Codex (codex.md)",
+    "identity/profile schema",
+    "field-label autofill mapping",
+    "update my profile flow",
+    "Quill",
+    "Envoy",
+    "Archivist",
+    "Obsidian MCP bridge",
+    "Google Drive MCP mirror",
+    "EEO/demographics handling"
+  ],
+  "cross_refs": [
+    "agents/quill.md",
+    "agents/envoy.md",
+    "05-dashboard-vault.md",
+    "06-hosting-cloudflare-mcp.md",
+    "08-flagger.md",
+    "11-security-privacy.md",
+    "SPEC-CANON.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Classified SPEC over DOC: contains concrete YAML/JSON data schema, an authoritative field-mapping contract table, config table, and failure-mode/detection table — implementation contracts, not just prose. 'Source of truth' refers to the Codex data artifact, not doc precedence."
+}

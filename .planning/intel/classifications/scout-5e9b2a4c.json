@@ -1,0 +1,34 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/scout.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Scout (event discovery)",
+  "summary": "Technical spec for Scout, the weekly read-only agent that discovers, filters, and ranks upcoming events and emits them to Steward and Usher.",
+  "scope": [
+    "Scout agent",
+    "weekly events digest",
+    "interest filtering / relevance scoring",
+    "Event record schema",
+    "Steward write contract",
+    "Usher registration hand-off",
+    "KV config",
+    "Flagger failure hooks",
+    "Cloudflare Worker/Workflow + Playwright scrape"
+  ],
+  "cross_refs": [
+    "../07-source-of-truth-codex.md",
+    "usher.md",
+    "steward.md",
+    "../02-architecture.md",
+    "herald.md",
+    "flagger.md",
+    "../03-scheduling.md",
+    "filer.md",
+    "../04-email-taxonomy.md",
+    "../11-security-privacy.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Competing DOC signal (prose-heavy design rationale and ASCII diagrams), but dominant SPEC signals win: concrete Event record JSON schema, Steward write contract JSON, KV config table, schedule/trigger table, and failure-mode contracts the system must honor. Not ADR (no Decision/Consequences) and not PRD (no user stories/acceptance criteria)."
+}

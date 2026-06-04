@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/01-agent-roster.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "01 — Agent Roster & Importance",
+  "summary": "Canonical list of all 17 Atlas agents with two importance orderings: value ranking by daily impact and build order by dependencies and difficulty.",
+  "scope": ["Atlas agent roster", "Atlas orchestrator", "Steward", "Herald", "Filer", "Forge", "Sundial", "Compass", "Scout", "Usher", "Headhunter", "Echo", "Archivist", "Quill", "Envoy", "Switchboard", "Flagger", "Librarian", "The Codex", "value ranking", "build order"],
+  "cross_refs": ["02-architecture.md", "03-scheduling.md", "04-email-taxonomy.md", "06-vault-dashboard.md", "07-source-of-truth-codex.md", "06-hosting-cloudflare-mcp.md", "12-roadmap.md", "agents/atlas.md", "agents/herald.md", "agents/filer.md", "agents/forge.md", "agents/sundial.md", "agents/compass.md", "agents/scout.md", "agents/usher.md", "agents/headhunter.md", "agents/echo.md", "agents/archivist.md", "agents/steward.md", "agents/quill.md", "agents/envoy.md", "agents/switchboard.md", "agents/flagger.md", "agents/librarian.md", "agents/"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

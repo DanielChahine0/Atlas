@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/quill.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Quill (screen autofill)",
+  "summary": "Design documentation for Quill, a local macOS agent that reads on-screen forms and autofills them from the Codex, confirming with the owner before submit.",
+  "scope": ["Quill agent", "screen autofill", "macOS Accessibility API", "on-device OCR vision fallback", "Codex field mapping", "review/confirmation panel", "local daemon", "privacy / on-device capture"],
+  "cross_refs": ["../07-source-of-truth-codex.md", "echo.md", "usher.md", "envoy.md", "steward.md", "flagger.md", "../03-scheduling.md", "librarian.md", "switchboard.md", "filer.md", "herald.md", "forge.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

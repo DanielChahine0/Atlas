@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/forge.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Forge (task & subtask extractor)",
+  "summary": "Technical spec for the Forge agent that extracts structured tasks with deadlines/subtasks from email and job findings, storing them in D1 and emitting Wire events.",
+  "scope": ["Forge agent", "task store (D1 tasks/subtasks)", "task schema", "dedupe_key algorithm", "deadline inference", "Wire events", "Cloudflare Worker", "Durable Object lock"],
+  "cross_refs": ["herald.md", "headhunter.md", "sundial.md", "steward.md", "filer.md", "compass.md", "../02-architecture.md", "../03-scheduling.md", "../08-flagger.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

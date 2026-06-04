@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/00-overview.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Atlas — System Overview",
+  "summary": "High-level overview of Atlas, a personal orchestrator running a fleet of 16 specialized sub-agents on Cloudflare, its design pillars, and core morning loop.",
+  "scope": ["Atlas orchestrator", "16-agent fleet", "the Wire (Cloudflare Queue)", "The Codex (source of truth)", "The Vault (Obsidian dashboard)", "Steward", "Echo/Quill local daemon", "morning pipeline / core loop", "five design pillars"],
+  "cross_refs": ["01-agent-roster.md", "02-architecture.md", "03-scheduling.md", "12-roadmap.md", "06-hosting-cloudflare-mcp.md", "../docs/12-roadmap.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prose-heavy explanatory overview; references SPEC §0 and the authoritative spec docs but contains no decision record, user stories, or API/schema contracts itself. It points readers to other docs for actual contracts, so it produces context only."
+}

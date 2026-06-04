@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/09-prompt-library.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Prompt Library — Librarian",
+  "summary": "Technical spec for the Librarian agent: capture, store, dedupe, and rank saved prompts as Vault notes plus a four-column table.",
+  "scope": ["Librarian agent", "prompt library", "Vault prompt note", "Prompt library table", "dedupe pipeline", "deep-linking", "Steward upsert events", "Wire queue"],
+  "cross_refs": ["03-scheduling.md", "01-agent-roster.md", "agents/steward.md", "06-dashboard-vault.md", "08-flagger.md", "agents/librarian.md", "prompts/make-a-graphic-with-claude.md", "prompts/summarize-a-pdf-tersely.md", "prompts/canva-carousel-from-outline.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": "Content is implementation-contract heavy: canonical JSON record shape, front-matter schema, fixed four-column table layout, dedupe algorithm with idempotencyKey, and deep-link formats — all derived from authoritative SPEC §9. Classified SPEC over DOC despite prose framing because it defines binding data/structure contracts."
+}

@@ -1,0 +1,37 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/08-flagger.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Flagger — incident & issue flagging (SPEC §8)",
+  "summary": "Technical spec for Flagger, the Atlas fleet's observability/alerting agent that turns incidents into scored flags with severity (P1-P4) and a 0-100 trust score.",
+  "scope": [
+    "Flagger agent",
+    "flag schema",
+    "severity levels P1-P4",
+    "trust/confidence score",
+    "status lifecycle",
+    "routing (push vs batched)",
+    "Vault Flagger board",
+    "self-monitoring heartbeat watchdog",
+    "Cloudflare Worker + Durable Object",
+    "KV config"
+  ],
+  "cross_refs": [
+    "02-architecture.md",
+    "05-dashboard.md",
+    "agents/steward.md",
+    "agents/filer.md",
+    "01-agent-roster.md",
+    "agents/flagger.md",
+    "03-scheduling.md",
+    "agents/forge.md",
+    "agents/sundial.md",
+    "agents/compass.md",
+    "06-hosting-cloudflare-mcp.md",
+    "04-email-taxonomy.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

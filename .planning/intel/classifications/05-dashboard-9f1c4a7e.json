@@ -1,0 +1,33 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/05-dashboard.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "05 — The Vault (Obsidian dashboard)",
+  "summary": "Technical specification for Atlas's owner-facing Obsidian Vault dashboard: folder structure, counters, views, the morning glance, and Steward's single-writer event contract.",
+  "scope": [
+    "The Vault (Obsidian dashboard)",
+    "Steward (sole writer)",
+    "the Wire (event queue)",
+    "Counters/metrics.md",
+    "Dataview and Bases views",
+    "Home.md morning glance",
+    "Flagger feed",
+    "Prompt library table",
+    "Steward write contract / event shape",
+    "D1 counter mirror",
+    "Obsidian MCP bridge"
+  ],
+  "cross_refs": [
+    "agents/steward.md",
+    "08-flagger.md",
+    "09-prompt-library.md",
+    "03-scheduling.md",
+    "07-source-of-truth-codex.md",
+    "codex.md",
+    "SPEC-CANON.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,36 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/usher.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Usher (event registration)",
+  "summary": "Reference doc for the Usher agent: on-demand event search, gated registration via browser automation, Google Calendar add, and Steward counter increment.",
+  "scope": [
+    "Usher agent",
+    "event registration",
+    "Playwright browser automation",
+    "Google Calendar integration",
+    "The Codex (form fill)",
+    "Steward events-registered counter",
+    "confirmation gate",
+    "captcha/payment hard stops",
+    "Flagger hooks"
+  ],
+  "cross_refs": [
+    "steward.md",
+    "../01-agent-roster.md",
+    "../SPEC-CANON.md",
+    "../07-source-of-truth-codex.md",
+    "../02-architecture.md",
+    "scout.md",
+    "../11-security-privacy.md",
+    "quill.md",
+    "compass.md",
+    "../08-flagger.md",
+    "../03-scheduling.md",
+    "../06-hosting-cloudflare-mcp.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

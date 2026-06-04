@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/12-roadmap.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Atlas — Roadmap & Feasibility",
+  "summary": "Build order across six phases for the Atlas agent fleet, with per-phase effort/risk reads, a feasibility verdict, recommended MVP, and success metrics.",
+  "scope": ["build phases", "MVP definition", "agent dependency map", "feasibility verdict", "success metrics", "Atlas", "Steward", "Filer", "Herald", "Forge", "Sundial", "Compass", "Echo", "Quill", "Usher", "Envoy"],
+  "cross_refs": ["SPEC-CANON.md", "01-agent-roster.md", "02-architecture.md", "03-scheduling.md", "04-email-taxonomy.md", "06-hosting-cloudflare-mcp.md", "07-source-of-truth-codex.md", "08-flagger.md", "09-prompt-library.md", "11-security-privacy.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

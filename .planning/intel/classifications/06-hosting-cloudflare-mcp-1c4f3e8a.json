@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/06-hosting-cloudflare-mcp.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "06 — Hosting: Cloudflare + MCP",
+  "summary": "Maps every Atlas hosting and connectivity need to a specific Cloudflare primitive and defines remote-MCP access plus the Echo/Quill cloud-vs-local daemon split.",
+  "scope": ["Cloudflare Workers", "Durable Objects", "Cron Triggers", "Workflows", "Queues (the Wire)", "D1", "KV", "R2", "Workers AI", "AI Gateway", "Remote MCP servers (Agents SDK)", "Google MCP", "GitHub MCP", "Obsidian MCP", "Workers OAuth Provider", "Secrets Store", "Echo local daemon", "Quill local daemon", "Steward"],
+  "cross_refs": ["agents/steward.md", "02-architecture.md", "03-scheduling.md", "07-source-of-truth-codex.md", "08-flagger.md", "11-security-privacy.md", "12-roadmap.md", "agents/echo.md", "SPEC-CANON.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": "Classified SPEC over DOC: contains implementation contracts (need→primitive map, least-privilege OAuth scope table per agent, the Wire event JSON shape, state-store access matrix) the system must honor, derived from SPEC-CANON sections. Heavy prose/rationale and an 'Open questions' section add DOC-like signal, hence medium confidence. SPEC-CANON.md is the authoritative parent spec; this is a derived hosting spec, not the canon itself."
+}

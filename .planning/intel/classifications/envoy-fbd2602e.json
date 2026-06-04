@@ -1,0 +1,24 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/envoy.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Envoy (personal-brand sync)",
+  "summary": "Design doc for the Envoy agent, which fans a single owner intent out to LinkedIn, GitHub README, X, and portfolio, drafting each and shipping only on confirmation.",
+  "scope": ["Envoy agent", "personal-brand sync", "LinkedIn", "GitHub profile README", "X (Twitter)", "portfolio site PR", "The Codex", "Steward", "Wire", "confirmation gate", "GitHub MCP"],
+  "cross_refs": [
+    "../03-scheduling.md",
+    "steward.md",
+    "quill.md",
+    "archivist.md",
+    "flagger.md",
+    "usher.md",
+    "../01-agent-roster.md",
+    "../02-architecture.md",
+    "../07-source-of-truth-codex.md",
+    "../11-security-privacy.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

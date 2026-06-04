@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/10-switchboard.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Switchboard — Capability Router",
+  "summary": "Technical spec for Switchboard, a design-time capability router that selects MCP servers, tools, resources, and OAuth scopes for a given goal and hands a toolset to an executing agent.",
+  "scope": ["Switchboard", "capability router", "MCP registry", "tool/resource selection", "OAuth scope checking", "toolset recommendation", "executing-agent handoff", "Flagger gap reporting"],
+  "cross_refs": ["06-hosting-cloudflare-mcp.md", "agents/steward.md", "agents/usher.md", "agents/envoy.md", "agents/sundial.md", "agents/filer.md", "agents/herald.md", "agents/compass.md", "agents/quill.md", "08-flagger.md", "09-prompt-library.md", "07-source-of-truth-codex.md", "agents/switchboard.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

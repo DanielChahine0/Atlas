@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/agents/archivist.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Archivist (meeting-notes organizer)",
+  "summary": "Explains the Archivist agent, which structures Echo's meeting transcripts into context-aware notes and hands them to Steward and Forge.",
+  "scope": ["Archivist agent", "meetings pipeline", "Echo transcripts", "meeting-notes template", "action-item extraction", "cross-meeting threading", "Steward hand-off", "Forge hand-off", "the Codex", "Cloudflare Workflows"],
+  "cross_refs": ["../03-scheduling.md", "../07-source-of-truth-codex.md", "../02-architecture.md", "../08-flagger.md", "forge.md", "sundial.md", "steward.md", "echo.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

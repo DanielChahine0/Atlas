@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/04-email-taxonomy.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "04 — Email Label Taxonomy",
+  "summary": "The literal Gmail label taxonomy (groups, labels, exclusion rules, idempotency and rate-limit constraints) that the Filer agent must apply to email threads.",
+  "scope": ["Filer agent", "Gmail labels", "label taxonomy", "triage/type/needs/deadline/relationship/suggestion/agent-state label groups", "gmail.modify OAuth scope", "idempotency (AI/Reviewed)", "Gmail API batching/rate limits"],
+  "cross_refs": ["agents/filer.md", "03-scheduling.md", "11-security-privacy.md", "agents/herald.md", "agents/forge.md", "agents/steward.md", "agents/sundial.md", "agents/flagger.md", "SPEC-CANON.md"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

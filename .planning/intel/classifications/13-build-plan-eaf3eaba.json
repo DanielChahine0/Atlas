@@ -1,0 +1,40 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/13-build-plan.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "13 — Build Plan",
+  "summary": "An implementation guide for building Atlas: prerequisites, task-level breakdowns of Phase 0/1 with acceptance criteria, phase sequencing, and cross-cutting engineering practices.",
+  "scope": [
+    "Atlas multi-agent orchestrator",
+    "Cloudflare Workers/Durable Objects/Queues/Workflows/Cron",
+    "D1/KV/R2",
+    "Agents SDK remote MCP",
+    "Workers OAuth Provider",
+    "AI Gateway",
+    "the Wire (Cloudflare Queue)",
+    "Steward write contract / idempotency ledger",
+    "the Codex",
+    "Obsidian Vault bridge",
+    "build phases 0-5",
+    "monorepo project setup and conventions"
+  ],
+  "cross_refs": [
+    "SPEC-CANON.md",
+    "12-roadmap.md",
+    "02-architecture.md",
+    "03-scheduling.md",
+    "06-hosting-cloudflare-mcp.md",
+    "11-security-privacy.md",
+    "docs/agents/steward.md",
+    "docs/07-source-of-truth-codex.md",
+    "06-vault-dashboard.md",
+    "05-dashboard-vault.md",
+    "05-dashboard.md",
+    "docs/03-scheduling.md",
+    "docs/06"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prose- and code-heavy implementation/build guide ('this is the how'); explicitly reads from SPEC-CANON as authoritative rather than defining its own contracts. Contains config/code snippets and acceptance criteria as build instructions, not as canonical API/schema contracts (not SPEC) and no single locked decision (not ADR). General documentation."
+}

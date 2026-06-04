@@ -1,0 +1,36 @@
+{
+  "source_path": "/Users/danielchahine/Desktop/Programs/Atlas/docs/03-scheduling.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "03 — Scheduling",
+  "summary": "Defines Atlas's complete agent schedule, sequencing/concurrency model, trigger types, and failure handling on Cloudflare Cron Triggers and Workflows.",
+  "scope": [
+    "Cloudflare Cron Triggers",
+    "Cloudflare Workflows",
+    "morning chain (Filer, Herald, Forge, Sundial, Compass)",
+    "Steward serialized writes",
+    "the Wire (Cloudflare Queue)",
+    "trigger types (cron / event / on-demand)",
+    "Headhunter",
+    "Scout",
+    "Echo",
+    "Archivist",
+    "Flagger",
+    "The Vault"
+  ],
+  "cross_refs": [
+    "agents/steward.md",
+    "02-architecture.md",
+    "agents/echo.md",
+    "agents/filer.md",
+    "agents/atlas.md",
+    "04-email-taxonomy.md",
+    "08-flagger.md",
+    "agents/herald.md",
+    "06-hosting-cloudflare-mcp.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}
