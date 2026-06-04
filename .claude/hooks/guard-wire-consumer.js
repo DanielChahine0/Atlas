@@ -32,9 +32,29 @@ process.stdin.on("end", () => {
   const text = parts.join("\n");
 
   const declaresConsumer = /"consumers"|\[\[\s*queues\.consumers\s*\]\]|queues\.consumers/.test(text);
-  const onAtlasWire = /atlas-wire(?!-dlq)\b/.test(text); // the real Wire, not the DLQ
 
-  if (declaresConsumer && onAtlasWire) {
+  // Pillar 1 only cares whether a CONSUMER binds the live `atlas-wire` bus. A
+  // `producers` reference to `atlas-wire` (every agent except Steward is a WIRE
+  // producer — e.g. dlq-sink emitting Flagger incidents back onto the bus) is allowed
+  // and must NOT trip this guard. So we look at the CONSUMER queue declarations only,
+  // not a bare `atlas-wire` anywhere in the file, for a queue that is not the `-dlq`
+  // dead-letter queue.
+  //
+  // JSONC: isolate the `"consumers": [ ... ]` array region (producers live in a
+  // sibling array, so the bare producer queue is outside this slice). TOML: isolate
+  // the `[[queues.consumers]]` table(s). Then look for an `atlas-wire` queue (sans
+  // `-dlq`) inside that region only.
+  let consumerRegion = "";
+  const jsoncCons = text.match(/"consumers"\s*:\s*\[([\s\S]*?)\]/);
+  if (jsoncCons) consumerRegion += jsoncCons[1];
+  const tomlCons = text.match(/\[\[\s*queues\.consumers\s*\]\][\s\S]*?(?=\n\s*\[\[|\n\s*\[(?!\[)|$)/g);
+  if (tomlCons) consumerRegion += "\n" + tomlCons.join("\n");
+
+  const consumesAtlasWire =
+    /"queue"\s*:\s*"atlas-wire(?!-dlq)\b/.test(consumerRegion) ||
+    /\bqueue\s*=\s*"atlas-wire(?!-dlq)\b/.test(consumerRegion);
+
+  if (declaresConsumer && consumesAtlasWire) {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",

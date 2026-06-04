@@ -1,0 +1,68 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "dlq-sink",
+  "main": "src/index.ts",
+  // D-09: match Atlas/Steward — >= 2026-04-07 floor; pair with nodejs_compat (shared toolchain).
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // dlq-sink is a SEPARATE single-concern Worker (D-05 one-Worker-per-concern),
+  // isolated from Steward so it can be authored/deployed in parallel. It owns no
+  // Durable Object class, so there is intentionally NO durable_objects/migrations
+  // block here.
+  //
+  // QUEUES — read this carefully against Pillar 1:
+  //   * CONSUMER: this Worker consumes the DEAD-LETTER queue (atlas-wire-dlq), NOT
+  //     the live atlas-wire bus. Steward remains the SOLE atlas-wire consumer; a
+  //     consumer on the dead-letter queue does NOT violate the single-atlas-wire-
+  //     consumer rule. The dead-letter queue MUST have a consumer or exhausted-retry
+  //     messages drop silently (RESEARCH Pitfall 5 / SPINE-05) — this Worker is that
+  //     sink: it turns every dead message into an audit_log row + a Flagger incident.
+  //   * PRODUCER: this Worker EMITS Flagger incident events back onto the live
+  //     atlas-wire (binding WIRE), exactly like every agent except Steward. The only
+  //     atlas-wire reference here is in producers — there is NO atlas-wire consumer.
+  //
+  // The per-consumer retry-delay key (RESEARCH Pitfall 6) is intentionally omitted —
+  // it is not a valid consumer-level config key. This sink never retries anyway: a
+  // dead-letter message already exhausted atlas-wire's retries, so the handler always
+  // acks (re-queuing would poison-loop a message that can never succeed).
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }],
+    "consumers": [
+      {
+        "queue": "atlas-wire-dlq",
+        "max_concurrency": 1,
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3
+      }
+    ]
+  },
+
+  // D1 system-of-record — the audit_log forensic-record write target (records
+  // scope_used + outcome='dlq'; NEVER a token). Positional `?` binds only at the
+  // call site.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // Read-mostly config/flags — the shared flag() helper may consult thresholds here.
+  // NEVER secrets, NEVER counters.
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }
+  ],
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (convention — this Worker has no crons of its own).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}
