@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. It mirrors the
+  // production apps/atlas/wrangler.jsonc bindings that miniflare can emulate
+  // LOCALLY (DO, Queue producer, D1, KV) but intentionally OMITS the `AI`
+  // binding: Workers AI has no local emulation and would force the pool into a
+  // remote-proxy session (which needs a workers.dev subdomain). Model calls
+  // route through claudeFor(agent,env) and are exercised against the live
+  // gateway in Phase 1, not in Wave-1 unit tests.
+  "name": "atlas-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ATLAS", "class_name": "AtlasCoordinator" },
+      { "name": "MORNING_CHAIN_DO", "class_name": "AtlasCoordinator" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AtlasCoordinator"] }],
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+  // Local miniflare D1/KV — no remote IDs, so the pool stays fully local.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "test-config" },
+    { "binding": "OAUTH_KV", "id": "test-oauth-kv" }
+  ]
+}

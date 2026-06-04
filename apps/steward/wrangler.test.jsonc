@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. Mirrors the
+  // production apps/steward/wrangler.jsonc but uses local-only D1/KV (no remote
+  // IDs) so the pool stays fully local. The StewardWriter replay/serialize/
+  // malformed/DLQ suites land in Plan 04.
+  "name": "steward-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "STEWARD_LOCK", "class_name": "StewardWriter" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StewardWriter"] }],
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }]
+}
