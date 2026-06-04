@@ -53,6 +53,20 @@
   // Workers AI binding — all Claude routes through claudeFor(agent,env) -> AI Gateway.
   "ai": { "binding": "AI" },
 
+  // The no-op agent service-binding (D-11), added in Wave 3 (Plan 00-03, Task 4) —
+  // the W3 leg of the GLOBAL-4 cross-wave handoff: 00-01 wrote the base config in W1,
+  // THIS plan adds the services NOOP binding in W3, and 00-06 adds secrets_store_secrets
+  // in W4. Strictly increasing waves keep this shared file race-free, and the NOOP binding
+  // lands in the SAME wave as the env.NOOP.tick() dispatcher code that uses it.
+  //
+  // SELF-binding: `service: "atlas"` points the Worker at itself, so the scheduled()
+  // dispatcher's `env.NOOP.tick(...)` resolves to the same-Worker NoopAgent WorkerEntrypoint
+  // over a PRIVATE Worker-to-Worker RPC (no public HTTP surface — T-00-31). NoopAgent is
+  // exported from src/index.ts. Atlas remains a Wire producer only (no consumer side).
+  "services": [
+    { "binding": "NOOP", "service": "atlas", "entrypoint": "NoopAgent" }
+  ],
+
   // PLAINTEXT non-secrets ONLY. NEVER secrets, NEVER counters. Real credentials
   // are bound separately via Secrets Store / `wrangler secret put` in Plan 06/07.
   "vars": {

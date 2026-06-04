@@ -32,5 +32,11 @@
   "kv_namespaces": [
     { "binding": "CONFIG", "id": "test-config" },
     { "binding": "OAUTH_KV", "id": "test-oauth-kv" }
+  ],
+  // Mirror the production NOOP self-binding (D-11) so the worker is wired identically
+  // in workerd; the scheduled() integration path can resolve env.NOOP -> NoopAgent.
+  // SELF-binding (service "atlas-test" = this test worker's own name), no public HTTP.
+  "services": [
+    { "binding": "NOOP", "service": "atlas-test", "entrypoint": "NoopAgent" }
   ]
 }
