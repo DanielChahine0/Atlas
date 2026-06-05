@@ -39,14 +39,16 @@ key-files:
   created:
     - "apps/atlas/src/oauth/google.ts — googleAuthorizeUrl / exchangeCode / googleAccessToken + GOOGLE_SCOPE_FLOOR"
     - "apps/atlas/src/oauth/github.ts — appJwt (jose RS256) / installationToken"
-    - "apps/atlas/src/auth/consent.ts — the OAuthProvider defaultHandler (consent UI + completeAuthorization)"
+    - "apps/atlas/src/auth/consent.ts — the OAuthProvider defaultHandler (owner-session-gated /login + /authorize consent surface, server-side consent record, CSRF + same-origin)"
+    - "apps/atlas/src/auth/session.ts — owner-session primitives (constant-time compare, HMAC cookie sign/verify, randomId, cookie helpers) [post-review hardening]"
+    - "apps/atlas/src/auth/headers.ts — shared hardened auth-surface security headers (CSP/XFO/Referrer/no-store) [post-review hardening]"
     - "apps/atlas/src/auth/api-handler.ts — the OAuthProvider apiHandler (WorkerEntrypoint reading ctx.props for door-level least privilege)"
-    - "apps/atlas/src/env.ts — local AtlasEnv (shared surface + NOOP + OAUTH_PROVIDER + the three OAuth secret bindings)"
-    - "apps/atlas/test/oauth.test.ts — the OAuth round-trip suite (9 active + 2 gated-skip)"
+    - "apps/atlas/src/env.ts — local AtlasEnv (shared surface + NOOP + OAUTH_PROVIDER + required OAUTH_KV + the OAuth secret bindings incl. OWNER_AUTH_TOKEN / SESSION_SIGNING_KEY)"
+    - "apps/atlas/test/oauth.test.ts — the OAuth round-trip + consent-hardening suite (20 active + 2 gated-skip)"
     - "apps/atlas/test/apply-migrations.ts — D1 migration setup for the workerd harness (audit_log query)"
   modified:
-    - "apps/atlas/src/index.ts — REWRITTEN: default export = OAuthProvider composed with the Wave-3 scheduled() dispatcher; re-exports AtlasCoordinator + NoopAgent + AtlasApiHandler"
-    - "apps/atlas/wrangler.jsonc — ADDED secrets_store_secrets (W4 leg) + OAuth non-secret [vars]; 00-01 base + 00-03 NOOP services binding preserved"
+    - "apps/atlas/src/index.ts — REWRITTEN: default export = OAuthProvider composed with the Wave-3 scheduled() dispatcher; re-exports AtlasCoordinator + NoopAgent + AtlasApiHandler; disallowPublicClientRegistration: true [post-review hardening]"
+    - "apps/atlas/wrangler.jsonc — ADDED secrets_store_secrets (W4 leg: the 3 OAuth + the 2 hardening secrets) + OAuth non-secret [vars]; 00-01 base + 00-03 NOOP services binding preserved"
     - "apps/atlas/package.json — linked @cloudflare/workers-oauth-provider + jose (workspace link, downloaded 0)"
     - "apps/atlas/vitest.config.ts — setupFiles + provide(migrations) so the harness applies the D1 schema"
     - "pnpm-lock.yaml — apps/atlas importer links the two packages"
@@ -65,9 +67,9 @@ patterns-established:
 requirements-completed: []
 
 # Metrics
-duration: ~11min (autonomous tasks 1-3; tasks 4-6 are blocking owner gates)
+duration: ~11min (autonomous tasks 1-3) + post-review security hardening
 completed: 2026-06-05
-status: checkpoint-paused (3 blocking human-action gates remain)
+status: checkpoint-paused (3 blocking human-action gates remain; 2 new secrets folded into Gate C)
 ---
 
 # Phase 0 Plan 06: OAuth Substrate (SPINE-04) Summary
@@ -77,6 +79,23 @@ status: checkpoint-paused (3 blocking human-action gates remain)
 ## Status: CHECKPOINT-PAUSED
 
 This plan is `autonomous: false`. Tasks 1-3 (all autonomously-implementable code + mocked-exchange tests + declared secret bindings) are **complete and committed**. Tasks 4-6 are **blocking `checkpoint:human-action` gates** requiring real owner actions in the Google Cloud Console, the GitHub UI, and Cloudflare Secrets Store — these cannot be automated or fabricated. The structured checkpoint with exact owner commands is returned to the orchestrator (and reproduced under "User Setup Required" below).
+
+A subsequent **security review found 4 real vulnerabilities** in the consent front door (`auth/consent.ts`, commit `e3d6c49`); all four were confirmed valid and **remediated as autonomous code hardening** (commit `4ce8aff`) — the two new secrets they require are declared-and-deferred to Gate C exactly like the existing ones, so the plan remains checkpoint-paused with no fabricated credentials.
+
+## Security hardening (post-review)
+
+A security review of commit `e3d6c49` flagged 4 valid vulnerabilities in the inbound `/authorize` consent surface — the front door to the owner's entire digital life. All four are closed in commit `4ce8aff`, each proven by a workerd test.
+
+| # | Severity | Finding | Remediation | Proving test(s) |
+|---|----------|---------|-------------|-----------------|
+| 1 | CRITICAL | **Auth bypass** — `/authorize` authenticated nobody yet POST completed authorization as `OWNER_ID`. | Owner-session gate: `/login` constant-time-compares the submitted token against `OWNER_AUTH_TOKEN` (Secrets Store) and issues a signed HttpOnly+Secure+SameSite=Strict short-TTL session cookie (HMAC-SHA-256 via Web Crypto; key = `SESSION_SIGNING_KEY` or HKDF-derived from `OWNER_AUTH_TOKEN`; signed payload carries an absolute `exp`). `/authorize` GET with no session → redirect to `/login`; POST with no session → 401. `disallowPublicClientRegistration: true` on the provider blocks anonymous DCR. The daemon/MCP **runtime** token path (`apiRoute` `/mcp/` `/api/` + `/oauth/token`, owned by the provider) is untouched. | GET-no-session→/login; POST-no-session→401; /login wrong-token→401+no Set-Cookie; /login correct-token→Set-Cookie HttpOnly+Secure+SameSite=Strict |
+| 2 | HIGH | **Scope inflation** — the canonical `AuthRequest` round-tripped through a hidden form field, so a tampered form could inflate the granted scope. | GET stores the canonical `authReq` under an opaque random `consent:<id>` in `OAUTH_KV` (TTL 600s) and renders ONLY the opaque id; POST loads + DELETES it (single-use) and completes with the SERVER-SIDE `authReq`. Scope is never read from the form. Unknown/expired/replayed `consent_id` → 400. | tampered/extra form scope is IGNORED (granted == KV authReq scope); unknown consent_id→400; consent_id single-use (2nd POST→400) |
+| 3 | HIGH | **CSRF** — no anti-CSRF protection on the state-changing consent POST. | Single-use CSRF token bound into the same `consent:<id>` record, constant-time-compared on POST; plus a same-origin check (`Sec-Fetch-Site`/`Origin`, fail-closed). `Cache-Control: no-store` on the auth HTML. | invalid CSRF→403; cross-site Origin→403 |
+| 4 | MEDIUM | **Clickjacking** — no framing/cache protections on the auth HTML. | Shared `authHtmlResponse`/`authResponse` helper sets `Content-Security-Policy: frame-ancestors 'none'; default-src 'none'; style-src 'unsafe-inline'` + `X-Frame-Options: DENY` + `Referrer-Policy: no-referrer` + `Cache-Control: no-store` on every consent + login response. | consent page + login page both carry frame-ancestors 'none' / X-Frame-Options DENY / no-store |
+
+**New secrets (declared-and-deferred, seeded at Gate C — NOT fabricated):** `OWNER_AUTH_TOKEN` (gates the consent surface) and `SESSION_SIGNING_KEY` (signs the session cookie; optional — HKDF-derived from `OWNER_AUTH_TOKEN` if omitted). Both are added to `secrets_store_secrets` in `apps/atlas/wrangler.jsonc` with the `<atlas-store-id>` placeholder and folded into the Gate-C provisioning commands below. `OAUTH_KV` was made **required** (not optional) on `AtlasEnv` — it is the consent-record store as well as the provider's backing KV.
+
+**Verification after hardening:** `pnpm -r typecheck` exits 0; the atlas suite is **28 passed / 2 gated-skip** (the 8 prior + 9 OAuth round-trip + 11 new hardening tests); full repo `pnpm test` is **74 passed / 2 skipped** (no regression). Pillar 1 holds — Steward remains the sole `atlas-wire` consumer (`grep -c consumers apps/atlas/wrangler.jsonc` == 0; the only consumer blocks are Steward→atlas-wire and dlq-sink→atlas-wire-dlq).
 
 ## API confirmation (OAuthProvider 0.7.2 + jose 6.2.3)
 
@@ -100,8 +119,10 @@ Each autonomous task was committed atomically:
 1. **Task 1: Google + GitHub outbound OAuth helpers** — `5be890d` (feat)
 2. **Task 2: compose the inbound OAuthProvider front door + secrets_store_secrets binding** — `e3d6c49` (feat)
 3. **Task 3: OAuth round-trip test suite** — `0731359` (test)
+4. **Post-review: harden the OAuth consent front door (4 security-review findings)** — `4ce8aff` (fix)
 
-**Plan metadata:** (this commit) `docs(00-06): land OAuth substrate code + tests; pause at owner-provisioning gates`
+**Plan metadata (first pass):** `e2765e4` `docs(00-06): land OAuth substrate code + tests; pause at owner-provisioning gates`
+**Plan metadata (this commit):** `docs(00-06): security hardening (4 consent findings) + folded Gate-C secrets`
 
 Tasks 4-6 (owner gates) are NOT committed — they are real-world actions, not code.
 
@@ -161,15 +182,17 @@ None. No new security-relevant surface beyond the plan's `<threat_model>` was in
    Resume signal: **`github-app-ready`**.
 
 **Gate C (Task 6) — seed Secrets Store + run the live round-trips.**
-1. `npx wrangler secrets-store store create atlas --remote` → note the printed `<atlas-store-id>` and fill it into ALL THREE `secrets_store_secrets` entries in `apps/atlas/wrangler.jsonc` (replacing the `<atlas-store-id>` placeholder).
-2. Seed the three secrets:
+1. `npx wrangler secrets-store store create atlas --remote` → note the printed `<atlas-store-id>` and fill it into ALL FIVE `secrets_store_secrets` entries in `apps/atlas/wrangler.jsonc` (replacing the `<atlas-store-id>` placeholder).
+2. Seed the FIVE Secrets Store secrets (3 OAuth + 2 hardening):
    - `npx wrangler secrets-store secret create <atlas-store-id> --name google-oauth-client-secret --scopes workers --remote`
-   - `npx wrangler secrets-store secret create <atlas-store-id> --name google-refresh-token --scopes workers --remote` (value = the `refresh_token` from the FIRST live browser authorize against the deployed `/authorize`)
+   - `npx wrangler secrets-store secret create <atlas-store-id> --name google-refresh-token --scopes workers --remote` (value = the `refresh_token` from the FIRST live browser authorize against the deployed `/authorize` — note: the live authorize first requires the owner to be signed in at `/login` with the owner token, step below)
    - `npx wrangler secrets-store secret create <atlas-store-id> --name github-app-private-key --scopes workers --remote` (paste the PKCS8 PEM)
+   - `npx wrangler secrets-store secret create <atlas-store-id> --name owner-auth-token --scopes workers --remote` **(post-review hardening: the token the owner enters at `/login` to gate the consent surface — choose a strong random value)**
+   - `npx wrangler secrets-store secret create <atlas-store-id> --name session-signing-key --scopes workers --remote` **(post-review hardening: the HMAC key that signs the owner session cookie — a strong random value; OPTIONAL — if you skip it, the session key is HKDF-derived from `owner-auth-token`)**
 3. Also `wrangler secret put ANTHROPIC_API_KEY` and `wrangler secret put CF_AIG_TOKEN` (spine secrets for later phases). Make non-remote dev copies for `wrangler dev` (`--remote` secrets aren't readable locally).
 4. Fill the OAuth `[vars]` placeholders: `GOOGLE_CLIENT_ID`, `GOOGLE_REDIRECT_URI`, `GH_APP_CLIENT_ID`.
-5. Verify NO secret value appears in any `[vars]`/KV/Vault/Codex/`audit_log`: `npx wrangler secrets-store secret list <atlas-store-id>` shows the three; `grep -rn` across tracked files shows no token-shaped value.
-6. Run the LIVE round-trips (build-plan M0): Google authorize → exchange returns a `refresh_token`; `grant_type=refresh_token` returns a fresh access token WITHOUT re-consent; the GitHub App JWT mints an opaque `ghs_` installation token. Un-skip the `describe.skip("LIVE …")` in `oauth.test.ts` or run the documented manual curl.
+5. Verify NO secret value appears in any `[vars]`/KV/Vault/Codex/`audit_log`: `npx wrangler secrets-store secret list <atlas-store-id>` shows the five; `grep -rn` across tracked files shows no token-shaped value.
+6. Run the LIVE round-trips (build-plan M0): sign in at the deployed `/login` with the owner token (the consent surface now requires an owner session), then Google authorize → exchange returns a `refresh_token`; `grant_type=refresh_token` returns a fresh access token WITHOUT re-consent; the GitHub App JWT mints an opaque `ghs_` installation token. Un-skip the `describe.skip("LIVE …")` in `oauth.test.ts` or run the documented manual curl.
    Resume signal: **`secrets-store-ready`**.
 
 ## Next Phase Readiness
@@ -180,10 +203,11 @@ None. No new security-relevant surface beyond the plan's `<threat_model>` was in
 
 ## Self-Check: PASSED
 
-- All created files exist on disk: `oauth/google.ts`, `oauth/github.ts`, `auth/consent.ts`, `auth/api-handler.ts`, `env.ts`, `test/oauth.test.ts`, `test/apply-migrations.ts`.
-- All three task commits present in git history (`5be890d`, `e3d6c49`, `0731359`).
-- Verification gates green: `pnpm -r typecheck` exits 0; `pnpm --filter @atlas/atlas test` → 17 passed / 2 skipped in workerd (TZ=UTC); the full repo `pnpm test` is green (no cross-package regression).
-- `grep -q OAuthProvider index.ts` ✓; `grep -q scheduled && grep -q AtlasCoordinator index.ts` ✓ (Wave-3 preserved); `grep -q secrets_store_secrets && grep -q NOOP wrangler.jsonc` ✓ (3-way handoff); `grep -q access_type && grep -q S256 google.ts` ✓; `grep -c consumers wrangler.jsonc` == 0 (Pillar 1).
+- All created files exist on disk: `oauth/google.ts`, `oauth/github.ts`, `auth/consent.ts`, `auth/session.ts`, `auth/headers.ts`, `auth/api-handler.ts`, `env.ts`, `test/oauth.test.ts`, `test/apply-migrations.ts`.
+- All four task/remediation commits present in git history (`5be890d`, `e3d6c49`, `0731359`, `4ce8aff`) + the first-pass metadata (`e2765e4`).
+- Verification gates green AFTER hardening: `pnpm -r typecheck` exits 0; `pnpm --filter @atlas/atlas test` → 28 passed / 2 skipped in workerd (TZ=UTC); the full repo `pnpm test` → 74 passed / 2 skipped (no cross-package regression).
+- `grep -q OAuthProvider index.ts` ✓; `grep -q scheduled && grep -q AtlasCoordinator index.ts` ✓ (Wave-3 preserved); `grep -q secrets_store_secrets && grep -q NOOP wrangler.jsonc` ✓ (3-way handoff); `grep -q access_type && grep -q S256 google.ts` ✓; `grep -q disallowPublicClientRegistration index.ts` ✓; `grep -c consumers wrangler.jsonc` == 0 (Pillar 1; Steward sole atlas-wire consumer).
+- All 4 security findings closed, each with a proving test (see "Security hardening (post-review)").
 
 ---
 *Phase: 00-spine*
