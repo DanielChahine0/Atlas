@@ -9,6 +9,10 @@ import {
   type GoogleOAuthEnv,
 } from "../src/oauth/google.js";
 import { appJwt, installationToken, type GitHubAppEnv } from "../src/oauth/github.js";
+import { consentHandler } from "../src/auth/consent.js";
+import { SESSION_COOKIE, issueSession } from "../src/auth/session.js";
+import type { AtlasEnv } from "../src/env.js";
+import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 
 // OAuth round-trip tests (SPINE-04, Plan 00-06). The CLAUDE.md "Definition of Done" security
 // invariant is the FAILURE PATH this suite proves can't happen: a leaked credential is the
@@ -299,6 +303,282 @@ describe("No-secret-leak invariant (SPINE-04 failure path)", () => {
       .bind(`%${GHS}%`, "%access-X%")
       .all();
     expect(rows.results.length).toBe(0);
+  });
+});
+
+// ── Consent-surface hardening (post security review) ──────────────────────────────────────────
+// Four findings closed: (1) auth-bypass — the consent surface now requires an owner session;
+// (2) scope-inflation — scope comes from a server-side KV record, never the form; (3) CSRF —
+// single-use token + same-origin; (4) clickjacking — hardened security headers.
+
+const kv = env as unknown as { OAUTH_KV: KVNamespace };
+const OWNER_TOKEN = "owner-secret-token-value";
+
+/** A consent env: real OAUTH_KV + a mocked OAUTH_PROVIDER + the owner/session secret stubs. */
+function consentEnv(overrides: Partial<AtlasEnv> = {}): AtlasEnv {
+  const authReq: AuthRequest = {
+    responseType: "code",
+    clientId: "daemon-client",
+    redirectUri: "https://atlas.example/cb",
+    scope: ["gmail.modify"],
+    state: "xyz",
+    codeChallenge: "chal",
+    codeChallengeMethod: "S256",
+  };
+  const completeAuthorization = vi.fn(async (opts: { scope: string[]; props: unknown }) => {
+    // Echo the granted scope back via the redirect so tests can assert what was actually granted.
+    return { redirectTo: `https://atlas.example/cb?granted=${encodeURIComponent(opts.scope.join(","))}` };
+  });
+  return {
+    ...(env as unknown as AtlasEnv),
+    OAUTH_KV: kv.OAUTH_KV,
+    OWNER_AUTH_TOKEN: secretStub(OWNER_TOKEN),
+    SESSION_SIGNING_KEY: secretStub("session-signing-key-value"),
+    OAUTH_PROVIDER: {
+      parseAuthRequest: vi.fn(async () => authReq),
+      lookupClient: vi.fn(async () => ({ clientId: "daemon-client", clientName: "Atlas Daemon" })),
+      completeAuthorization,
+    } as unknown as AtlasEnv["OAUTH_PROVIDER"],
+    ...overrides,
+  } as AtlasEnv;
+}
+
+function makeCtx(): ExecutionContext {
+  return { waitUntil() {}, passThroughOnException() {}, props: {} } as ExecutionContext;
+}
+
+/** A valid owner session cookie header for the given env. */
+async function ownerCookieHeader(e: AtlasEnv): Promise<string> {
+  const value = await issueSession(e);
+  return `${SESSION_COOKIE}=${value}`;
+}
+
+const SAME_ORIGIN_HEADERS = { "sec-fetch-site": "same-origin" };
+
+describe("Finding 1 — auth bypass: /authorize requires an owner session", () => {
+  it("GET /authorize with NO session redirects to /login", async () => {
+    const e = consentEnv();
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize?response_type=code&client_id=daemon-client"),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/login");
+  });
+
+  it("POST /authorize with NO session returns 401", async () => {
+    const e = consentEnv();
+    const body = new URLSearchParams({ decision: "approve", consent_id: "x", csrf: "y" });
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize", { method: "POST", body, headers: SAME_ORIGIN_HEADERS }),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("Finding 1 — /login owner authentication", () => {
+  it("POST /login with the WRONG token → 401 and NO Set-Cookie", async () => {
+    const e = consentEnv();
+    const body = new URLSearchParams({ token: "wrong-token" });
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/login", { method: "POST", body, headers: SAME_ORIGIN_HEADERS }),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(401);
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("POST /login with the CORRECT token → Set-Cookie HttpOnly+Secure+SameSite=Strict", async () => {
+    const e = consentEnv();
+    const body = new URLSearchParams({ token: OWNER_TOKEN });
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/login", { method: "POST", body, headers: SAME_ORIGIN_HEADERS }),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(200);
+    const cookie = res.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain(`${SESSION_COOKIE}=`);
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain("SameSite=Strict");
+  });
+});
+
+describe("Finding 2 — scope inflation: scope comes from the server-side record, not the form", () => {
+  it("a tampered/extra scope in the form is IGNORED; granted scope == the KV authReq scope", async () => {
+    const e = consentEnv();
+    const cookie = await ownerCookieHeader(e);
+
+    // GET to mint a server-side consent record (authReq scope = ['gmail.modify']).
+    const getRes = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize?response_type=code&client_id=daemon-client", {
+        headers: { cookie },
+      }),
+      e,
+      makeCtx(),
+    );
+    const html = await getRes.text();
+    const consentId = /name="consent_id" value="([^"]+)"/.exec(html)?.[1] ?? "";
+    const csrf = /name="csrf" value="([^"]+)"/.exec(html)?.[1] ?? "";
+    expect(consentId).not.toBe("");
+
+    // POST with an INFLATED scope in the form — it must be ignored.
+    const body = new URLSearchParams();
+    body.set("decision", "approve");
+    body.set("consent_id", consentId);
+    body.set("csrf", csrf);
+    body.append("scope", "vault.write"); // attacker tries to inflate
+    body.append("scope", "github.write");
+    const postRes = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize", {
+        method: "POST",
+        body,
+        headers: { cookie, ...SAME_ORIGIN_HEADERS },
+      }),
+      e,
+      makeCtx(),
+    );
+    expect(postRes.status).toBe(302);
+    const granted = new URL(postRes.headers.get("location")!).searchParams.get("granted");
+    // ONLY the server-side scope was granted — the form's vault.write/github.write were ignored.
+    expect(granted).toBe("gmail.modify");
+    expect(granted).not.toContain("vault.write");
+  });
+});
+
+describe("Finding 3 — CSRF + same-origin", () => {
+  async function mintConsent(e: AtlasEnv, cookie: string) {
+    const getRes = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize?response_type=code&client_id=daemon-client", {
+        headers: { cookie },
+      }),
+      e,
+      makeCtx(),
+    );
+    const html = await getRes.text();
+    return {
+      consentId: /name="consent_id" value="([^"]+)"/.exec(html)?.[1] ?? "",
+      csrf: /name="csrf" value="([^"]+)"/.exec(html)?.[1] ?? "",
+    };
+  }
+
+  it("POST with an INVALID CSRF token → rejected (403)", async () => {
+    const e = consentEnv();
+    const cookie = await ownerCookieHeader(e);
+    const { consentId } = await mintConsent(e, cookie);
+    const body = new URLSearchParams({ decision: "approve", consent_id: consentId, csrf: "WRONG-CSRF" });
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize", {
+        method: "POST",
+        body,
+        headers: { cookie, ...SAME_ORIGIN_HEADERS },
+      }),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("POST with a CROSS-SITE origin → rejected (403)", async () => {
+    const e = consentEnv();
+    const cookie = await ownerCookieHeader(e);
+    const { consentId, csrf } = await mintConsent(e, cookie);
+    const body = new URLSearchParams({ decision: "approve", consent_id: consentId, csrf });
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize", {
+        method: "POST",
+        body,
+        // Cross-site signal — must be rejected before acting.
+        headers: { cookie, "sec-fetch-site": "cross-site", origin: "https://evil.example" },
+      }),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("Finding 2/3 — consent_id is single-use; unknown/expired → 400", () => {
+  it("POST with an unknown consent_id → 400", async () => {
+    const e = consentEnv();
+    const cookie = await ownerCookieHeader(e);
+    const body = new URLSearchParams({ decision: "approve", consent_id: "does-not-exist", csrf: "x" });
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize", {
+        method: "POST",
+        body,
+        headers: { cookie, ...SAME_ORIGIN_HEADERS },
+      }),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("a consent_id is single-use — the second POST fails", async () => {
+    const e = consentEnv();
+    const cookie = await ownerCookieHeader(e);
+    const getRes = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize?response_type=code&client_id=daemon-client", {
+        headers: { cookie },
+      }),
+      e,
+      makeCtx(),
+    );
+    const html = await getRes.text();
+    const consentId = /name="consent_id" value="([^"]+)"/.exec(html)?.[1] ?? "";
+    const csrf = /name="csrf" value="([^"]+)"/.exec(html)?.[1] ?? "";
+
+    const post = () =>
+      consentHandler.fetch(
+        new Request("https://atlas.example/authorize", {
+          method: "POST",
+          body: new URLSearchParams({ decision: "approve", consent_id: consentId, csrf }),
+          headers: { cookie, ...SAME_ORIGIN_HEADERS },
+        }),
+        e,
+        makeCtx(),
+      );
+
+    const first = await post();
+    expect(first.status).toBe(302); // succeeds once
+    const second = await post();
+    expect(second.status).toBe(400); // single-use: record was deleted
+  });
+});
+
+describe("Finding 4 — clickjacking + cache headers on the auth surface", () => {
+  it("the consent page carries frame-ancestors 'none' / X-Frame-Options DENY / no-store", async () => {
+    const e = consentEnv();
+    const cookie = await ownerCookieHeader(e);
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize?response_type=code&client_id=daemon-client", {
+        headers: { cookie },
+      }),
+      e,
+      makeCtx(),
+    );
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("the login page carries the same hardened headers", async () => {
+    const e = consentEnv();
+    const res = await consentHandler.fetch(
+      new Request("https://atlas.example/login"),
+      e,
+      makeCtx(),
+    );
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });
 

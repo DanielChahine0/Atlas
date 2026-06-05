@@ -23,10 +23,29 @@ export interface AtlasEnv extends SharedEnv {
   NOOP: Service<NoopAgent>;
   /** Injected by the OAuthProvider at runtime into the default + api handlers' env. */
   OAUTH_PROVIDER: OAuthHelpers;
+  /**
+   * The OAuthProvider's backing KV (mandatory on Atlas — startup fails without it). The consent
+   * surface also uses it to store single-use server-side consent records (consent:<id>) so the
+   * canonical authorize request + CSRF token never round-trip through the browser. Required (not
+   * optional) here: the consent handler depends on it.
+   */
+  OAUTH_KV: KVNamespace;
   /** Google confidential client secret — Secrets Store async binding (oauth/google.ts). */
   GOOGLE_CLIENT_SECRET?: SecretsStoreSecret;
   /** Google owner-once refresh token — Secrets Store async binding (oauth/google.ts). */
   GOOGLE_REFRESH_TOKEN?: SecretsStoreSecret;
   /** GitHub App RS256 PKCS8 private key — Secrets Store async binding (oauth/github.ts). */
   GH_APP_PRIVATE_KEY?: SecretsStoreSecret;
+  /**
+   * Owner authentication token — Secrets Store async binding (post-review hardening). `/login`
+   * constant-time-compares the submitted token against this to gate the consent surface.
+   * Declared-and-deferred: provisioned at the owner checkpoint (Gate C), NOT now.
+   */
+  OWNER_AUTH_TOKEN?: SecretsStoreSecret;
+  /**
+   * Session cookie HMAC signing key — Secrets Store async binding (post-review hardening).
+   * Optional: if absent, the session key is HKDF-derived from OWNER_AUTH_TOKEN. Declared-and-
+   * deferred: provisioned at the owner checkpoint (Gate C), NOT now.
+   */
+  SESSION_SIGNING_KEY?: SecretsStoreSecret;
 }

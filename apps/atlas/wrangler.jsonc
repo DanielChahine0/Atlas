@@ -94,6 +94,20 @@
       "binding": "GH_APP_PRIVATE_KEY",
       "store_id": "<atlas-store-id>",
       "secret_name": "github-app-private-key"
+    },
+    // Post-review hardening (the OAuth front door owner-session gate). OWNER_AUTH_TOKEN gates the
+    // /authorize consent surface (/login constant-time-compares against it); SESSION_SIGNING_KEY
+    // signs the session cookie (optional — if omitted the key is HKDF-derived from
+    // OWNER_AUTH_TOKEN). Declared-and-deferred like the three above: seeded at the owner Gate C.
+    {
+      "binding": "OWNER_AUTH_TOKEN",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "owner-auth-token"
+    },
+    {
+      "binding": "SESSION_SIGNING_KEY",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "session-signing-key"
     }
   ],
 

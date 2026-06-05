@@ -127,6 +127,10 @@ const provider = new OAuthProvider<Env>({
     "vault.write",
   ],
   accessTokenTTL: 3600,
+  // Post-review hardening: forbid anonymous RFC-7591 Dynamic Client Registration so an attacker
+  // can't mint attacker-controlled clients at /oauth/register. Atlas's clients (the local daemon,
+  // each MCP client) are confidential and registered out-of-band.
+  disallowPublicClientRegistration: true,
 });
 
 /**
