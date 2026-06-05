@@ -30,9 +30,31 @@ export class StewardWriter extends DurableObject<Env> {
    * Apply one §6.4 Wire event atomically + serially. Returns `{applied:false}` on
    * a replay (the idempotency key was already in the ledger ⇒ counter unchanged,
    * meta.changes === 0) and `{applied:true}` on first application.
+   *
+   * IMPORTANT (C2 / blockConcurrencyWhile): if the callback passed to
+   * `blockConcurrencyWhile` THROWS, workerd resets/aborts the Durable Object (the
+   * input gate breaks). A deliberate contract-violation throw (e.g. a non-integer
+   * delta → NonRetryableError) must NOT brick the single Vault writer. So we CAPTURE
+   * any throw from `applyEvent` INSIDE the gate (the callback returns normally) and
+   * RE-THROW it AFTER the gate closes — the consumer still sees the same error (and
+   * maps a NonRetryableError to ack()+P3), but the DO stays healthy and serialized.
    */
   async apply(e: WireEvent): Promise<{ applied: boolean }> {
-    return this.ctx.blockConcurrencyWhile(async () => applyEvent(this.env.DB, e));
+    const outcome = await this.ctx.blockConcurrencyWhile(
+      async (): Promise<
+        { ok: true; value: { applied: boolean } } | { ok: false; error: unknown }
+      > => {
+        try {
+          return { ok: true, value: await applyEvent(this.env.DB, e) };
+        } catch (error) {
+          // Captured, not thrown — the gate callback resolves normally so the DO is
+          // not reset. The atomic db.batch() already rolled back on error.
+          return { ok: false, error };
+        }
+      },
+    );
+    if (!outcome.ok) throw outcome.error;
+    return outcome.value;
   }
 
   /**
