@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "herald-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }]
+}
