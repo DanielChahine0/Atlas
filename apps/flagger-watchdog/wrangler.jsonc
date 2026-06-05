@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "flagger-watchdog",
+  "main": "src/index.ts",
+  // The one alert path that does not depend on the thing it alerts about (D2-08).
+  // Compatibility date >= 2026-04-07; nodejs_compat required by the Agents SDK transitively.
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // QUEUES — Pillar 1 critical section:
+  //   * PRODUCER: atlas-wire only. The watchdog emits DIRECTLY to atlas-wire
+  //     (bypassing atlas-incidents) because Flagger is the atlas-incidents consumer
+  //     and may be dead. This is NOT a Pillar-1 violation — any agent may produce
+  //     to atlas-wire; only consumers are restricted to Steward.
+  //   * NO consumers block — this Worker never consumes any queue.
+  //
+  // The guard-wire-consumer.js hook will hard-fail if atlas-wire appears in consumers.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" }
+    ]
+  },
+
+  // KV: read selfwatch_threshold + flagger:last_seen (written by Flagger on each batch).
+  // NEVER counters, NEVER secrets.
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }
+  ],
+
+  // Secrets Store — NTFY_TOPIC/NTFY_TOKEN for direct belt-and-suspenders push.
+  // Read via async get(). Same store as Flagger (Plan 02-02 seeded credentials).
+  // Replace <atlas-store-id> with the real Cloudflare Secrets Store ID before deploy.
+  "secrets_store_secrets": [
+    { "binding": "NTFY_TOPIC", "store_id": "<atlas-store-id>", "secret_name": "ntfy-topic" },
+    { "binding": "NTFY_TOKEN", "store_id": "<atlas-store-id>", "secret_name": "ntfy-token" }
+  ],
+
+  // Cron: every 5 minutes. Checks if Flagger last_seen is stale past selfwatch_threshold
+  // (default 15m = 900000ms from CONFIG). Fires at most once per 5-min window.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (convention for all Atlas Workers).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}
