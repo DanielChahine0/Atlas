@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "scout",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Scout is a Wire PRODUCER only — no consumers block (Pillar 1: Steward is sole atlas-wire consumer).
+  // D2-05: Scout also produces onto atlas-incidents via flag() for scout_failed incidents.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 — Scout reads the events table (INSERT OR REPLACE) and runs dedupe queries.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // KV — CONFIG holds Scout knobs: scout/sources/rss, scout/sources/html, scout/interests,
+  // scout/min_relevance (55), scout/relaxed_min_relevance (40), scout/max_per_digest (15),
+  // scout/dedupe_window_weeks (4), scout/sparse_floor (3).
+  // Owner-curated; starter seed ships in code as defaults — no owner action required before go-live.
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // Workers AI gateway routing — Scout calls claudeFor(agent,env) for future model-assisted
+  // relevance enrichment (optional; scoring currently pure text-match, no model call in v1).
+  "ai": { "binding": "AI" },
+
+  // NO own production cron — Atlas drives Scout via service binding RPC (env.SCOUT.weekly(date)).
+  // The cron lives in apps/atlas/wrangler.jsonc ("0 20 * * 5" EDT / "0 21 * * 5" EST for Fri 16:00 ET).
+  // Plan 02-07 adds the SCOUT service binding to Atlas.
+
+  "observability": { "enabled": true },
+
+  "env": {
+    "staging": {
+      // Staging fires NO crons (CLAUDE.md constraint — staging always has empty crons array).
+      "triggers": { "crons": [] }
+    }
+  }
+}

@@ -178,11 +178,11 @@ describe("relevance() scorer purity (D2-12)", () => {
     expect(score1).toBe(score2);
   });
 
-  it("score.ts has no fetch or env.  imports (pure function invariant)", async () => {
+  it("score.ts has no fetch or env. imports (pure function invariant)", () => {
     // Importing the module proves no top-level I/O; we additionally verify
     // the exported function is synchronous (returns a number, not a Promise).
     const result = relevance(matchingCandidate, skills, projects, keywords);
-    expect(result instanceof Promise).toBe(false);
+    // result is a plain number (not a Promise) — the function is synchronous
     expect(typeof result).toBe("number");
   });
 });
