@@ -66,7 +66,12 @@ CREATE TABLE IF NOT EXISTS windows (
   status         TEXT NOT NULL DEFAULT 'open',  -- open | closed | unknown
   last_seen_open TEXT,                        -- ISO-8601 date of last confirmed-open observation
   created_at     INTEGER NOT NULL,            -- Unix epoch ms
-  updated_at     INTEGER NOT NULL            -- Unix epoch ms (upsert bumps this)
+  updated_at     INTEGER NOT NULL,            -- Unix epoch ms (upsert bumps this)
+  -- H5 fix: decideWindow needs deadline + fit_score from this table (not just from jobs).
+  -- Without these columns both SELECTs returned undefined for both fields, making the
+  -- fit-floor guard and the explicit-deadline urgency override structurally unreachable.
+  deadline       TEXT,                        -- ISO-8601 explicit apply-by deadline (nullable)
+  fit_score      REAL                         -- Headhunter fit score 0.0-1.0 (nullable = unscored)
 );
 
 -- Index for Headhunter's status sweep (open windows only) + sort by closes_est.

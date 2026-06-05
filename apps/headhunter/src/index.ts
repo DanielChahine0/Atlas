@@ -167,7 +167,9 @@ export async function runFull(
     openWindows = windows;
   } else {
     const { results } = await env.DB.prepare(
-      "SELECT id,company,cycle,role_class,opens_est,closes_est,confidence,source,status,last_seen_open,created_at,updated_at FROM windows WHERE status != ?",
+      // H5 fix: include deadline and fit_score so decideWindow can apply fit-floor
+      // and explicit-deadline urgency override from D1 data (not just injected rows).
+      "SELECT id,company,cycle,role_class,opens_est,closes_est,confidence,source,status,last_seen_open,created_at,updated_at,deadline,fit_score FROM windows WHERE status != ?",
     )
       .bind("closed")
       .all<WindowRow>();
@@ -262,7 +264,8 @@ export async function runDeadlines(
     openWindows = windows;
   } else {
     const { results } = await env.DB.prepare(
-      "SELECT id,company,cycle,role_class,opens_est,closes_est,confidence,source,status,last_seen_open,created_at,updated_at FROM windows WHERE status != ?",
+      // H5 fix: include deadline and fit_score (same fix as runFull SELECT above).
+      "SELECT id,company,cycle,role_class,opens_est,closes_est,confidence,source,status,last_seen_open,created_at,updated_at,deadline,fit_score FROM windows WHERE status != ?",
     )
       .bind("closed")
       .all<WindowRow>();

@@ -79,8 +79,9 @@ export interface TaskDecision {
 export async function upsertWindow(db: D1Database, w: WindowRow): Promise<void> {
   await db
     .prepare(
-      `INSERT OR REPLACE INTO windows(id,company,cycle,role_class,opens_est,closes_est,confidence,source,status,last_seen_open,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      // H5 fix: include deadline and fit_score columns (added to windows table in 0004).
+      `INSERT OR REPLACE INTO windows(id,company,cycle,role_class,opens_est,closes_est,confidence,source,status,last_seen_open,created_at,updated_at,deadline,fit_score)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .bind(
       w.id,
@@ -95,6 +96,8 @@ export async function upsertWindow(db: D1Database, w: WindowRow): Promise<void> 
       w.last_seen_open ?? null,
       w.created_at,
       w.updated_at,
+      w.deadline ?? null,
+      w.fit_score ?? null,
     )
     .run();
 }
