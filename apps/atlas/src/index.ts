@@ -42,6 +42,9 @@ export { NoopAgent } from "./noop-agent.js";
 // Export the API handler so the OAuthProvider's `apiHandler` (a WorkerEntrypoint class)
 // resolves as a Worker entrypoint.
 export { AtlasApiHandler } from "./auth/api-handler.js";
+// Export the MorningChain Workflow so the `workflows` binding (class_name "MorningChain")
+// in wrangler.jsonc resolves against this Worker (CORE-01).
+export { MorningChain } from "./morning-chain.js";
 
 // Re-export the canonical local Env (defined in ./env.ts to avoid a circular import with the
 // OAuth handlers). `AtlasEnv` is the shared binding surface + NOOP + OAUTH_PROVIDER + the three
@@ -91,9 +94,29 @@ const dispatcher = {
     }
 
     switch (controller.cron) {
-      // 07:45 ET Filer-sweep slot, EST form. The EDT form ("45 11 * * *") is documented in
-      // docs/03-scheduling.md (00-01). Phase 0 only needs this dispatcher BRANCH to exist; the
-      // cron LINES themselves first fire in Phase 1 (so wrangler.jsonc adds no triggers.crons here).
+      // 07:45 ET morning-chain slot — the ONE cron that kicks the MorningChain Workflow
+      // (CORE-01). EDT form "45 11 * * 1-5"; EST form "45 12 * * 1-5" (re-derive at DST). A
+      // single instance id morning-<owner-local-date> makes a re-fire (or a missed-then-
+      // recovered cron) a complete no-op. ctx.waitUntil keeps the dispatch off the tick's
+      // critical path; create() is a no-op if the id already exists.
+      case "45 11 * * 1-5":
+      case "45 12 * * 1-5": {
+        const date = localDate(env);
+        const chain = env.MORNING_CHAIN;
+        if (chain) {
+          _ctx.waitUntil(
+            chain
+              .create({ id: `morning-${date}`, params: { date, tz: "America/Toronto" } })
+              .catch(() => {
+                // An id collision (re-fire) or transient create error is non-fatal — the
+                // existing instance owns the run; the next idempotent cron catches up.
+              }),
+          );
+        }
+        break;
+      }
+      // 07:45 ET Filer-sweep slot, EST form (Phase-0 SPINE-01 no-op smoke). The EDT form
+      // ("45 11 * * *") is documented in docs/03-scheduling.md (00-01).
       case "45 12 * * *": {
         // SPINE-01, in order:
         // (1) Invoke the no-op agent over the PRIVATE service binding (D-11) — Worker-to-Worker

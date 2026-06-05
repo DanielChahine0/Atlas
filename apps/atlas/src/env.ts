@@ -21,6 +21,22 @@ import type { NoopAgent } from "./noop-agent.js";
 export interface AtlasEnv extends SharedEnv {
   /** The D-11 self service-binding; `Service<NoopAgent>` exposes the agent's public RPC. */
   NOOP: Service<NoopAgent>;
+
+  // ── Phase 1: the five morning-chain agent service bindings (D-11 RPC transport) ──────
+  // Each is a Worker-to-Worker service binding to the agent's WorkerEntrypoint (no public
+  // HTTP). The MorningChain Workflow's steps invoke them via invokeAgent(env, codename, …).
+  // Typed loosely as Service so each agent's RPC method (sweep/daily/morning/sync/plan) is
+  // callable without coupling Atlas to each agent's full type. Optional so a Phase-0-shaped
+  // env (no agents deployed yet) still satisfies AtlasEnv in unit tests.
+  FILER?: Service;
+  HERALD?: Service;
+  FORGE?: Service;
+  SUNDIAL?: Service;
+  COMPASS?: Service;
+
+  /** The MorningChain Workflow binding (atlas-morning-chain). Optional for Phase-0 tests. */
+  MORNING_CHAIN?: Workflow;
+
   /** Injected by the OAuthProvider at runtime into the default + api handlers' env. */
   OAUTH_PROVIDER: OAuthHelpers;
   /**

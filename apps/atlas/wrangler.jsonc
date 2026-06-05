@@ -64,8 +64,35 @@
   // over a PRIVATE Worker-to-Worker RPC (no public HTTP surface — T-00-31). NoopAgent is
   // exported from src/index.ts. Atlas remains a Wire producer only (no consumer side).
   "services": [
-    { "binding": "NOOP", "service": "atlas", "entrypoint": "NoopAgent" }
+    { "binding": "NOOP", "service": "atlas", "entrypoint": "NoopAgent" },
+    // Phase 1 (D-11): the five morning-chain agent service bindings. Each points at the
+    // agent's Worker (its WorkerEntrypoint default export), so a MorningChain step's
+    // invokeAgent(env, "filer", …) resolves to env.FILER.sweep(…) over a PRIVATE
+    // Worker-to-Worker RPC (no public HTTP). Atlas stays a Wire producer only.
+    { "binding": "FILER", "service": "filer" },
+    { "binding": "HERALD", "service": "herald" },
+    { "binding": "FORGE", "service": "forge" },
+    { "binding": "SUNDIAL", "service": "sundial" },
+    { "binding": "COMPASS", "service": "compass" }
   ],
+
+  // Phase 1 (CORE-01): the MorningChain Workflow binding. ONE 07:45 cron creates a
+  // single instance (id morning-<date>) that runs the five agents as start-after-success
+  // steps — NOT five racing crons. MorningChain is exported from src/index.ts.
+  "workflows": [
+    {
+      "name": "atlas-morning-chain",
+      "binding": "MORNING_CHAIN",
+      "class_name": "MorningChain"
+    }
+  ],
+
+  // The ONE morning-chain cron (CORE-01). Cron Triggers are UTC-only / no DST (D1):
+  // 07:45 ET = "45 11 * * 1-5" (EDT) / "45 12 * * 1-5" (EST). Weekdays only (Mon-Fri).
+  // Hand-edit at each DST boundary (CLAUDE.md /cron-utc). This is the ONLY cron that
+  // kicks the Workflow; the per-stage 08:00/08:15/08:20/08:30 times are step.sleepUntil
+  // budget gates INSIDE the Workflow, never separate crons.
+  "triggers": { "crons": ["45 11 * * 1-5"] },
 
   // The three OAuth provider secrets the SPINE-04 code reads via `await env.X.get()`
   // (oauth/google.ts + oauth/github.ts) — bound from the single per-account Cloudflare
