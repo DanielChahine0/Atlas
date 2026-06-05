@@ -65,7 +65,13 @@ export class GithubMcp extends McpAgent<Env, unknown, GitHubProps> {
         if (!this.hasScope("github.read")) return this.forbidden();
         // Phase 0: prove the token is minted server-side and never echoed. The live
         // GitHub call lands when Envoy (Phase 4) wires it; here we confirm the seam.
-        await this.mintToken({ permissions: { metadata: "read", contents: "read" } });
+        // W15: mintToken can throw (missing GH_APP_INSTALLATION_ID, or a non-2xx from
+        // GitHub) — catch it and return a structured isError, never a thrown crash.
+        try {
+          await this.mintToken({ permissions: { metadata: "read", contents: "read" } });
+        } catch (err) {
+          return this.mintError(err);
+        }
         return { content: [{ type: "text", text: "(repositories would be listed here)" }] };
       },
     );
@@ -79,7 +85,12 @@ export class GithubMcp extends McpAgent<Env, unknown, GitHubProps> {
       },
       async () => {
         if (!this.hasScope("github.write")) return this.forbidden();
-        await this.mintToken({ permissions: { contents: "write", metadata: "read" } });
+        // W15: same — a mint failure returns a clean tool error, not a request crash.
+        try {
+          await this.mintToken({ permissions: { contents: "write", metadata: "read" } });
+        } catch (err) {
+          return this.mintError(err);
+        }
         return { content: [{ type: "text", text: "(file written via the App installation)" }] };
       },
     );
@@ -96,6 +107,25 @@ export class GithubMcp extends McpAgent<Env, unknown, GitHubProps> {
     return {
       isError: true as const,
       content: [{ type: "text" as const, text: "403 Forbidden: missing required GitHub scope." }],
+    };
+  }
+
+  /**
+   * W15 — a structured MCP error result for a token-mint failure (missing
+   * GH_APP_INSTALLATION_ID, GitHub non-2xx, network error). We log NEITHER the token
+   * (mintToken never surfaces it) NOR the raw internal error detail to the client —
+   * the GitHub-App token-mint helper already restricts its own throw to a status code,
+   * but we emit a fixed, generic message here so no internal detail leaks regardless.
+   */
+  private mintError(_err: unknown) {
+    return {
+      isError: true as const,
+      content: [
+        {
+          type: "text" as const,
+          text: "502 Bad Gateway: GitHub App token could not be minted (configuration or upstream error).",
+        },
+      ],
     };
   }
 
