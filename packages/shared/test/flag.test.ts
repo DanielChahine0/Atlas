@@ -1,57 +1,85 @@
 import { describe, it, expect, vi } from "vitest";
-import { WireEvent } from "@atlas/wire";
+import { RawIncidentSchema } from "../src/incident.js";
 import { flag, writeRunLog } from "../src/index.js";
 
-describe("flag() — the canonical Flagger-emit helper", () => {
-  it("builds an op:'upsert'/entity:'flag' event and emits it via the wire send() helper", async () => {
-    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
-    await flag({ WIRE } as never, "P3", "malformed wire event", "bad shape");
+describe("flag() — reworked to enqueue RawIncident onto INCIDENTS (D2-05)", () => {
+  it("calls env.INCIDENTS.send with the correct RawIncident shape (not env.WIRE.send)", async () => {
+    const INCIDENTS = { send: vi.fn().mockResolvedValue(undefined) };
+    await flag(
+      { INCIDENTS } as never,
+      "P2",
+      "x",
+      "y",
+      { sourceAgent: "Forge", kind: "model_error" },
+    );
 
-    expect(WIRE.send).toHaveBeenCalledTimes(1);
-    const event = WIRE.send.mock.calls[0]![0] as Record<string, unknown>;
-    expect(event.type).toBe("flag");
-    expect(event.entity).toBe("flag");
-    expect(event.op).toBe("upsert");
-
-    const payload = event.payload as Record<string, unknown>;
-    expect(payload.severity).toBe("P3");
-    expect(payload.title).toBe("malformed wire event");
-    expect(payload.status).toBe("open");
-    // source_agent === top-level agent (the emitter); defaults to "Atlas".
-    expect(payload.source_agent).toBe("Atlas");
-    expect(event.agent).toBe(payload.source_agent);
+    expect(INCIDENTS.send).toHaveBeenCalledTimes(1);
+    const incident = INCIDENTS.send.mock.calls[0]![0] as Record<string, unknown>;
+    expect(incident.source_agent).toBe("Forge");
+    expect(incident.kind).toBe("model_error");
+    expect(incident.severity_hint).toBe("P2");
+    expect(incident.title).toBe("x");
+    expect(incident.detail).toBe("y");
+    // WIRE must NOT be called
+    expect((incident as unknown as { WIRE?: unknown }).WIRE).toBeUndefined();
   });
 
-  it("the event flag() builds is a valid §6.4 WireEvent (parses the captured WIRE.send arg)", async () => {
-    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
-    await flag({ WIRE } as never, "P2", "steward write failing");
-    const event = WIRE.send.mock.calls[0]![0];
-    expect(() => WireEvent.parse(event)).not.toThrow();
+  it("omitted kind defaults to 'unknown'; omitted sourceAgent defaults to 'Atlas'", async () => {
+    const INCIDENTS = { send: vi.fn().mockResolvedValue(undefined) };
+    await flag({ INCIDENTS } as never, "P3", "some incident");
+
+    const incident = INCIDENTS.send.mock.calls[0]![0] as Record<string, unknown>;
+    expect(incident.source_agent).toBe("Atlas");
+    expect(incident.kind).toBe("unknown");
   });
 
-  it("idempotencyKey === payload.id, a STRUCTURED non-random flg:<date>:<agent>:<hash>", async () => {
-    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
-    await flag({ WIRE } as never, "P1", "heartbeat stale", undefined, { sourceAgent: "Atlas" });
-    const event = WIRE.send.mock.calls[0]![0] as Record<string, unknown>;
-    const payload = event.payload as Record<string, unknown>;
-    expect(event.idempotencyKey).toBe(payload.id);
-    expect(event.idempotencyKey).toMatch(/^flg:\d{4}-\d{2}-\d{2}:Atlas:/);
+  it("runId option is passed through as run_id when provided, absent when not", async () => {
+    const INCIDENTS = { send: vi.fn().mockResolvedValue(undefined) };
+    await flag({ INCIDENTS } as never, "P4", "heartbeat", undefined, {
+      sourceAgent: "Filer",
+      kind: "heartbeat",
+      runId: "2026-06-05",
+    });
+
+    const incident = INCIDENTS.send.mock.calls[0]![0] as Record<string, unknown>;
+    expect(incident.run_id).toBe("2026-06-05");
+
+    // Now without runId — run_id should be absent or undefined
+    const INCIDENTS2 = { send: vi.fn().mockResolvedValue(undefined) };
+    await flag({ INCIDENTS: INCIDENTS2 } as never, "P4", "heartbeat", undefined, {
+      sourceAgent: "Filer",
+      kind: "heartbeat",
+    });
+    const incident2 = INCIDENTS2.send.mock.calls[0]![0] as Record<string, unknown>;
+    expect(incident2.run_id).toBeUndefined();
   });
 
-  it("is replay-safe: two calls describing the same incident produce the SAME id (one row)", async () => {
-    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
-    await flag({ WIRE } as never, "P3", "drift detected", "counter X");
-    await flag({ WIRE } as never, "P3", "drift detected", "counter X");
-    const id1 = (WIRE.send.mock.calls[0]![0] as Record<string, unknown>).idempotencyKey;
-    const id2 = (WIRE.send.mock.calls[1]![0] as Record<string, unknown>).idempotencyKey;
-    expect(id1).toBe(id2);
-  });
+  it("RawIncident.parse rejects an object missing source_agent/kind/severity_hint/title", () => {
+    expect(() =>
+      RawIncidentSchema.parse({ source_agent: "Atlas", kind: "ok", severity_hint: "P3" }),
+    ).toThrow(); // missing title
 
-  it("carries the default trust per severity (P1 → 100)", async () => {
-    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
-    await flag({ WIRE } as never, "P1", "critical");
-    const payload = (WIRE.send.mock.calls[0]![0] as Record<string, unknown>).payload as Record<string, unknown>;
-    expect(payload.trust).toBe(100);
+    expect(() =>
+      RawIncidentSchema.parse({ kind: "ok", severity_hint: "P3", title: "t" }),
+    ).toThrow(); // missing source_agent
+
+    expect(() =>
+      RawIncidentSchema.parse({ source_agent: "Atlas", severity_hint: "P3", title: "t" }),
+    ).toThrow(); // missing kind
+
+    expect(() =>
+      RawIncidentSchema.parse({ source_agent: "Atlas", kind: "ok", title: "t" }),
+    ).toThrow(); // missing severity_hint
+
+    // Valid should pass
+    expect(() =>
+      RawIncidentSchema.parse({
+        source_agent: "Atlas",
+        kind: "ok",
+        severity_hint: "P1",
+        title: "title",
+      }),
+    ).not.toThrow();
   });
 });
 

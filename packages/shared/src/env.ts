@@ -1,4 +1,5 @@
 import type { WireEvent } from "@atlas/wire";
+import type { RawIncident } from "./incident.js";
 
 /**
  * Flag/incident severity (SPEC-CANON §8 / docs/08-flagger.md §4). Deterministic by source
@@ -21,6 +22,10 @@ export type Severity = "P1" | "P2" | "P3" | "P4";
 export interface Env {
   // ── The Wire (Queue producer; every agent except Steward) ───────────────────────────
   WIRE: Queue<WireEvent>;
+
+  // ── atlas-incidents queue (producer; every agent that calls flag()) ───────────────────
+  // Optional so any not-yet-retrofitted Worker still compiles. Flagger is the sole consumer.
+  INCIDENTS?: Queue<RawIncident>;
 
   // ── D1 system-of-record — ALL counters + idempotency keys live here, never KV ────────
   DB: D1Database;
