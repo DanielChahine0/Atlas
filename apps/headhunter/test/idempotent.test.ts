@@ -149,7 +149,8 @@ describe("Headhunter window idempotency (GATING)", () => {
     expect(decision1!.idempotencyKey).toBe(decision2!.idempotencyKey);
     // H2 fix: key must include role_class so google:fall-2026:new-grad and google:fall-2026:intern
     // produce DISTINCT keys (not headhunter:window:google:fall-2026 for both).
-    expect(decision1!.idempotencyKey).toBe(`headhunter:window:google:fall-2026:newgrad`);
+    // role_class "new-grad" → "new-grad" (spaces stripped, hyphens preserved)
+    expect(decision1!.idempotencyKey).toBe(`headhunter:window:google:fall-2026:new-grad`);
   });
 
   // H2 — two windows differing ONLY by role_class must produce DISTINCT idempotencyKeys
@@ -167,7 +168,7 @@ describe("Headhunter window idempotency (GATING)", () => {
     expect(decision2).not.toBeNull();
     // Keys MUST differ — if they are the same Forge deduplicates and one deadline is silently dropped
     expect(decision1!.idempotencyKey).not.toBe(decision2!.idempotencyKey);
-    expect(decision1!.idempotencyKey).toBe("headhunter:window:google:fall-2026:newgrad");
+    expect(decision1!.idempotencyKey).toBe("headhunter:window:google:fall-2026:new-grad");
     expect(decision2!.idempotencyKey).toBe("headhunter:window:google:fall-2026:intern");
   });
 });

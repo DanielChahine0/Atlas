@@ -191,7 +191,9 @@ describe("Headhunter apply-by task via Forge (T-02-hh3)", () => {
 
     expect(forgeTasks.length).toBeGreaterThanOrEqual(1);
     const taskOpts = forgeTasks[0]?.opts as { idempotencyKey: string };
-    expect(taskOpts.idempotencyKey).toBe("headhunter:window:shopify:fall-2026");
+    // H2 fix: key now includes role_class to prevent same-company/cycle dedup across roles
+    // role_class "new-grad" → "new-grad" (spaces stripped, hyphens preserved)
+    expect(taskOpts.idempotencyKey).toBe("headhunter:window:shopify:fall-2026:new-grad");
   });
 
   it("task idempotencyKey is stable across re-scans (replay produces same key)", async () => {
@@ -207,7 +209,8 @@ describe("Headhunter apply-by task via Forge (T-02-hh3)", () => {
     const secondKey = (forgeTasks[0]?.opts as { idempotencyKey: string }).idempotencyKey;
 
     expect(firstKey).toBe(secondKey);
-    expect(firstKey).toBe("headhunter:window:shopify:fall-2026");
+    // H2 fix: key now includes role_class
+    expect(firstKey).toBe("headhunter:window:shopify:fall-2026:new-grad");
   });
 });
 

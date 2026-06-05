@@ -235,12 +235,15 @@ export function decideWindow(
     return null;
   }
 
-  // Build the idempotencyKey: lowercase company (no spaces) + raw cycle value.
+  // Build the idempotencyKey: lowercase company (no spaces) + raw cycle value + role_class.
   // We preserve the cycle as-is (e.g. "fall-2026") because it's already a stable structured tag.
   // Company is lowercased and spaces removed so "Google LLC" → "googlellc".
+  // role_class is included (H2 fix) so "new-grad" and "intern" windows for the same company/cycle
+  // produce DISTINCT keys — omitting it caused Forge to silently dedup one deadline.
   const coKey = window.company.toLowerCase().replace(/\s+/g, "");
   const cycleKey = window.cycle.toLowerCase().replace(/\s+/g, "");
-  const idempotencyKey = `headhunter:window:${coKey}:${cycleKey}`;
+  const roleKey = window.role_class.toLowerCase().replace(/\s+/g, "");
+  const idempotencyKey = `headhunter:window:${coKey}:${cycleKey}:${roleKey}`;
 
   const due = window.closes_est ?? null;
   const dueKind: "explicit" | "inferred" =
