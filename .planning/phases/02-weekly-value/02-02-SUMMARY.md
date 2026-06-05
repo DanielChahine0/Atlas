@@ -165,6 +165,13 @@ Created `apps/flagger/src/score.ts` — pure `score(incident, recurrence, config
 - **Files modified:** `apps/flagger/src/score.ts`, `apps/flagger/src/auth.ts`
 - **Commits:** 9c1fbe0, 65a5ec4
 
+**6. [Rule 1 - Bug] missing `apps/flagger/tsconfig.json` masked 5 real typecheck errors (post-wave gate)**
+- **Found during:** Post-wave gate (after plan completion) — `pnpm --filter @atlas/flagger typecheck` was silently printing tsc help text (exit 1, never typechecking) because package.json had a `tsc --noEmit` script but no tsconfig.json. Wrangler build + vitest passed (neither uses tsc), so the gap was invisible during the plan.
+- **Fix:** Added `apps/flagger/tsconfig.json` (extends ../../tsconfig.base.json; sibling-matching types + include). Resolved the 5 surfaced errors without weakening shared contracts: removed redundant `export type { Env }` (TS2484); typed queue() param as `MessageBatch<unknown>` (TS2322, safeParse narrows at runtime); cast `payload` locally at the emit boundary `flag as unknown as Record<string, unknown>` — FlagRecord and the §6.4 WireEvent contract unchanged (TS2345 ×2); typed the indexed fetch-mock param so `mock.calls[0]` is index-safe (TS2493).
+- **Files modified:** `apps/flagger/tsconfig.json` (new), `apps/flagger/src/index.ts`, `apps/flagger/test/routing.test.ts`
+- **Commit:** c35b85a
+- **Result:** `pnpm --filter @atlas/flagger typecheck` exits 0; all 25 tests stay green; Pillar 1 unchanged (guard hook passes).
+
 ## Known Stubs
 
 None — all modules are fully implemented. The `store_id` placeholder `<atlas-store-id>` in `wrangler.jsonc` `secrets_store_secrets` is a deploy-time configuration (the real Cloudflare Secrets Store ID must be substituted before deployment — same pattern as all other workers in the repo). This is intentional and documented in the wrangler.jsonc.
