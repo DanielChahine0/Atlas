@@ -64,57 +64,75 @@ interface StepResult {
   resultJson: string;
 }
 
-export class MorningChain extends WorkflowEntrypoint<AtlasEnv, MorningChainParams> {
-  override async run(event: Readonly<WorkflowEvent<MorningChainParams>>, step: WorkflowStep): Promise<void> {
-    const { date, tz } = event.payload;
+/**
+ * The orchestration body, factored OUT of the class so it is unit-testable with a fake `step`
+ * + injected agent bindings (constructing a WorkflowEntrypoint directly is unsupported in the
+ * test pool). The class `run()` is a thin delegate to this. `step` is typed to the subset the
+ * chain uses (do + sleepUntil) so a fake harness satisfies it.
+ */
+export async function runMorningChain(
+  env: AtlasEnv,
+  event: Readonly<WorkflowEvent<MorningChainParams>>,
+  step: Pick<WorkflowStep, "do" | "sleepUntil">,
+): Promise<void> {
+  const { date, tz } = event.payload;
 
-    // The state passed forward between steps (never mutate event.payload — it reverts on replay).
-    // `carry` accumulates each completed step's JSON-encoded result keyed by codename.
-    const carry: Record<string, string> = { date };
+  // The state passed forward between steps (never mutate event.payload — it reverts on replay).
+  // `carry` accumulates each completed step's JSON-encoded result keyed by codename.
+  const carry: Record<string, string> = { date };
 
-    for (const s of STEPS) {
-      // Per-step budget gate (DST-safe owner-local wall-clock; NOT a UTC cron). The first step
-      // (filer-sweep) has no gate — it runs at chain start.
-      if (s.gate) {
-        await step.sleepUntil(`budget-${s.codename}`, localTime(date, s.gate, tz));
-      }
+  for (const s of STEPS) {
+    // Per-step budget gate (DST-safe owner-local wall-clock; NOT a UTC cron). The first step
+    // (filer-sweep) has no gate — it runs at chain start.
+    if (s.gate) {
+      await step.sleepUntil(`budget-${s.codename}`, localTime(date, s.gate, tz));
+    }
 
-      const cfg = s.codename === "filer" ? STEP_CONFIG.filer : STEP_CONFIG.other;
-      const carrySnapshot: Record<string, string> = { ...carry };
-      try {
-        const result = await step.do<StepResult>(s.name, cfg, async () => {
-          // Pass the prior steps' returns forward as this step's input (state forward, never
-          // mutate event.payload). invokeAgent dispatches over the agent's service binding.
-          const out = await invokeAgent(this.env, s.codename, { ...carrySnapshot, date });
-          return { resultJson: JSON.stringify(out ?? null) };
-        });
-        // Memoized step return becomes part of the next step's input context.
-        carry[s.codename] = result.resultJson;
-      } catch (err) {
-        // HALT-DOWNSTREAM: this step exhausted its retries (or threw a terminal
-        // NonRetryableError). Sundial/Compass after a failed Forge never run on stale data.
-        // Emit EXACTLY ONE chain.halted P2 toward Flagger, then rethrow so the instance errors
-        // (its terminal state is observable in `wrangler workflows instances describe`).
-        await this.emitHalt(date, s.name, err);
-        throw err;
-      }
+    const cfg = s.codename === "filer" ? STEP_CONFIG.filer : STEP_CONFIG.other;
+    const carrySnapshot: Record<string, string> = { ...carry };
+    try {
+      const result = await step.do<StepResult>(s.name, cfg, async () => {
+        // Pass the prior steps' returns forward as this step's input (state forward, never
+        // mutate event.payload). invokeAgent dispatches over the agent's service binding.
+        const out = await invokeAgent(env, s.codename, { ...carrySnapshot, date });
+        return { resultJson: JSON.stringify(out ?? null) };
+      });
+      // Memoized step return becomes part of the next step's input context.
+      carry[s.codename] = result.resultJson;
+    } catch (err) {
+      // HALT-DOWNSTREAM: this step exhausted its retries (or threw a terminal NonRetryableError).
+      // Sundial/Compass after a failed Forge never run on stale data. Emit EXACTLY ONE
+      // chain.halted P2 toward Flagger, then rethrow so the instance errors (its terminal state
+      // is observable in `wrangler workflows instances describe`).
+      await emitHalt(env, date, s.name, err);
+      throw err;
     }
   }
+}
 
-  /**
-   * Emit the single chain.halted P2 incident. The flag() helper derives a STRUCTURED, stable
-   * idempotency key from (severity, title, detail) so a replayed halt re-upserts ONE board row
-   * (never a duplicate). The detail names the halted step + a neutral error summary (never a
-   * secret).
-   */
-  private async emitHalt(date: string, stepName: string, err: unknown): Promise<void> {
-    const message = err instanceof Error ? err.message : String(err);
-    await flag(
-      this.env,
-      "P2",
-      "chain.halted",
-      `MorningChain ${date} halted at ${stepName}: ${message}. Downstream steps did not run (no planning on stale data); upstream side effects stand.`,
-      { sourceAgent: "Atlas", suggestedAction: `Investigate ${stepName}; re-fire morning-${date} once fixed (a re-fire is a no-op for completed steps).` },
-    );
+/**
+ * Emit the single chain.halted P2 incident. The flag() helper derives a STRUCTURED, stable
+ * idempotency key from (severity, title, detail) so a replayed halt re-upserts ONE board row
+ * (never a duplicate). The detail names the halted step + a neutral error summary (never a secret).
+ */
+export async function emitHalt(
+  env: AtlasEnv,
+  date: string,
+  stepName: string,
+  err: unknown,
+): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  await flag(
+    env,
+    "P2",
+    "chain.halted",
+    `MorningChain ${date} halted at ${stepName}: ${message}. Downstream steps did not run (no planning on stale data); upstream side effects stand.`,
+    { sourceAgent: "Atlas", suggestedAction: `Investigate ${stepName}; re-fire morning-${date} once fixed (a re-fire is a no-op for completed steps).` },
+  );
+}
+
+export class MorningChain extends WorkflowEntrypoint<AtlasEnv, MorningChainParams> {
+  override async run(event: Readonly<WorkflowEvent<MorningChainParams>>, step: WorkflowStep): Promise<void> {
+    await runMorningChain(this.env, event, step);
   }
 }
