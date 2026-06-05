@@ -4,6 +4,11 @@
 > synthesized from the classified document set. Detail lives in the per-type intel files and the
 > conflicts report linked below.
 
+> ⚠️ **Superseded snapshot (2026-06-01 doc-ingest bootstrap).** Pre-execution synthesis of the design
+> corpus — kept for provenance only. For CURRENT project state use `.planning/STATE.md`,
+> `.planning/ROADMAP.md`, and `.planning/REQUIREMENTS.md` (Phases 0 + 1 are now code-complete; the
+> finalized requirement set is the 19 IDs in REQUIREMENTS.md, not the count derived here).
+
 Mode: new (net-new bootstrap — no existing .planning/ context)
 Precedence: ADR > SPEC > PRD > DOC. Authoritative source: docs/SPEC-CANON.md.
 Project: Atlas — a personal multi-agent orchestrator on Cloudflare running a fleet of 16

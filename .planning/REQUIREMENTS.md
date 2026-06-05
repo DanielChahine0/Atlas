@@ -9,22 +9,24 @@
 
 Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = SPINE + CORE (Phase 0 + Phase 1).**
 
+> **Status legend:** `[x]` done · `[~]` **code-complete, owner go-live gate pending** — the implementation + automated/mocked contracts are built and tested, but a live activation step only the owner can perform (OAuth consent, Secrets Store seed, AI-Gateway ceilings, live smoke) is outstanding · `[ ]` not started. As of 2026-06-05, Phases 0 + 1 are code-complete (HEAD `09518da`, 315 tests green); the remaining `[~]` items are gated on owner actions, not code.
+
 ### Spine (Phase 0 — Infrastructure)
 
 - [x] **SPINE-01**: Atlas can schedule a no-op agent and route a message onto the Wire (the Cloudflare Queue event bus). _(docs/agents/atlas.md, 02-architecture.md)_
 - [x] **SPINE-02**: Steward consumes one Wire event and applies it to the Vault per the §6.4 contract `{ agent, type, entity, op, payload, idempotencyKey }`, serialized single-consumer; `increment` is idempotent on replay (same idempotencyKey twice → counter unchanged, `meta.changes === 0`). _(docs/agents/steward.md, SPEC-CANON §6.4, 13-build-plan §2 T5/T6)_
 - [x] **SPINE-03**: The Codex exists with the §11 sections (identity, education, work, skills, projects, bios, socials), read-only to agents except the explicit "update my profile" flow. _(07-source-of-truth-codex.md, SPEC-CANON §11)_
-- [ ] **SPINE-04**: Google (least-privilege scopes) and GitHub (GitHub App) OAuth round-trips succeed; tokens live in Cloudflare Secrets Store, never in the Vault or Codex. _(11-security-privacy.md, 06-hosting-cloudflare-mcp.md)_
+- [~] **SPINE-04**: Google (least-privilege scopes) and GitHub (GitHub App) OAuth round-trips succeed; tokens live in Cloudflare Secrets Store, never in the Vault or Codex. _(11-security-privacy.md, 06-hosting-cloudflare-mcp.md)_ — *OAuth/MCP code + 37 mocked tests complete; live round-trip + 6-secret Secrets Store seed = owner gate (2 `describe.skip` live tests).*
 - [x] **SPINE-05**: The DLQ (`atlas-wire-dlq`) exists; an exhausted-retry message lands there, produces an audit row + a P2/P3 incident, and never silently buffers. The Obsidian bridge writes outbound-only from Steward to the Vault. _(13-build-plan §2 T7, 06-hosting-cloudflare-mcp.md)_
 
 ### Core Loop (Phase 1 — the MVP morning pipeline)
 
-- [ ] **CORE-01**: The strictly-sequential morning chain Filer → Herald → Forge → Sundial → Compass runs as one Cloudflare Workflow off a single 07:45 cron (start-after-success); a forced Forge failure leaves Filer's labels + Herald's draft intact, halts before Sundial/Compass, and emits one `chain.halted` P2 to Flagger. Re-firing the same date is a complete no-op (`instance.id = morning-${date}`); killing mid-`forge-morning` resumes at Forge (Filer/Herald memoized). _(02-architecture.md, 03-scheduling.md §10, 13-build-plan §3)_
-- [ ] **FILER-01**: Filer applies the literal Gmail label taxonomy (Triage/Type/Needs/Deadline/Relationship/Suggestion/Agent-state) in near-real-time (Gmail push) and on a 07:45 sweep; labels only — never archives or deletes (`gmail.modify` scope, no delete path reachable); idempotent via `AI/Reviewed`; security-mail bodies stripped. _(docs/agents/filer.md, 04-email-taxonomy.md, SPEC-CANON §5)_
-- [ ] **HERALD-01**: Herald reads Filer's labels and produces a real 08:00 daily digest as an owner draft (and a Fri 16:00 weekly digest), plus a digest event to Steward; read + draft only — no send; ZERO 2FA codes / reset links ever surfaced. _(docs/agents/herald.md, SPEC-CANON §2/§10)_
-- [ ] **FORGE-01**: Forge extracts tasks/subtasks with deadlines from Herald's `① Action Required` set, stores them in D1 under a `dedupe_key` + DO lock, and emits Wire events; the action-required set yields ≥1 D1 task with a deadline and dedupe prevents duplicate tasks on re-run. _(docs/agents/forge.md, SPEC-CANON §4)_
-- [ ] **SUNDIAL-01**: Sundial idempotently syncs Forge deadline tasks to Google Calendar blocks (`⏳`, deduped by `atlasTaskId` extended properties) and reports `calendar.sync` to Steward; a re-run creates no duplicate events. _(docs/agents/sundial.md, SPEC-CANON §4/§10)_
-- [ ] **COMPASS-01**: Compass merges Forge tasks with calendar free/busy into a time-blocked day plan + a top-3 (handling overcommitment), emits a `day_plan` event to Steward, and runs an 08:30 plan + 21:00 preview; the Vault Today view renders the top-3 and the §6.3 morning-glance set (action-required emails, deadlines next 7 days, today's meetings, open flags, waiting-on). _(docs/agents/compass.md, SPEC-CANON §4/§6.3)_
+- [~] **CORE-01**: The strictly-sequential morning chain Filer → Herald → Forge → Sundial → Compass runs as one Cloudflare Workflow off a single 07:45 cron (start-after-success); a forced Forge failure leaves Filer's labels + Herald's draft intact, halts before Sundial/Compass, and emits one `chain.halted` P2 to Flagger. Re-firing the same date is a complete no-op (`instance.id = morning-${date}`); killing mid-`forge-morning` resumes at Forge (Filer/Herald memoized). _(02-architecture.md, 03-scheduling.md §10, 13-build-plan §3)_
+- [~] **FILER-01**: Filer applies the literal Gmail label taxonomy (Triage/Type/Needs/Deadline/Relationship/Suggestion/Agent-state) in near-real-time (Gmail push) and on a 07:45 sweep; labels only — never archives or deletes (`gmail.modify` scope, no delete path reachable); idempotent via `AI/Reviewed`; security-mail bodies stripped. _(docs/agents/filer.md, 04-email-taxonomy.md, SPEC-CANON §5)_
+- [~] **HERALD-01**: Herald reads Filer's labels and produces a real 08:00 daily digest as an owner draft (and a Fri 16:00 weekly digest), plus a digest event to Steward; read + draft only — no send; ZERO 2FA codes / reset links ever surfaced. _(docs/agents/herald.md, SPEC-CANON §2/§10)_
+- [~] **FORGE-01**: Forge extracts tasks/subtasks with deadlines from Herald's `① Action Required` set, stores them in D1 under a `dedupe_key` + DO lock, and emits Wire events; the action-required set yields ≥1 D1 task with a deadline and dedupe prevents duplicate tasks on re-run. _(docs/agents/forge.md, SPEC-CANON §4)_
+- [~] **SUNDIAL-01**: Sundial idempotently syncs Forge deadline tasks to Google Calendar blocks (`⏳`, deduped by `atlasTaskId` extended properties) and reports `calendar.sync` to Steward; a re-run creates no duplicate events. _(docs/agents/sundial.md, SPEC-CANON §4/§10)_
+- [~] **COMPASS-01**: Compass merges Forge tasks with calendar free/busy into a time-blocked day plan + a top-3 (handling overcommitment), emits a `day_plan` event to Steward, and runs an 08:30 plan + 21:00 preview; the Vault Today view renders the top-3 and the §6.3 morning-glance set (action-required emails, deadlines next 7 days, today's meetings, open flags, waiting-on). _(docs/agents/compass.md, SPEC-CANON §4/§6.3)_
 
 ### Weekly Value (Phase 2)
 
@@ -74,14 +76,14 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | SPINE-01 | Phase 0 | Complete |
 | SPINE-02 | Phase 0 | Complete |
 | SPINE-03 | Phase 0 | Complete |
-| SPINE-04 | Phase 0 | Pending |
+| SPINE-04 | Phase 0 | Code-complete (owner-gated) |
 | SPINE-05 | Phase 0 | Complete |
-| CORE-01 | Phase 1 | Pending |
-| FILER-01 | Phase 1 | Pending |
-| HERALD-01 | Phase 1 | Pending |
-| FORGE-01 | Phase 1 | Pending |
-| SUNDIAL-01 | Phase 1 | Pending |
-| COMPASS-01 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Code-complete (owner-gated) |
+| FILER-01 | Phase 1 | Code-complete (owner-gated) |
+| HERALD-01 | Phase 1 | Code-complete (owner-gated) |
+| FORGE-01 | Phase 1 | Code-complete (owner-gated) |
+| SUNDIAL-01 | Phase 1 | Code-complete (owner-gated) |
+| COMPASS-01 | Phase 1 | Code-complete (owner-gated) |
 | WEEKLY-01 | Phase 2 | Pending |
 | WEEKLY-02 | Phase 2 | Pending |
 | CAPTURE-01 | Phase 3 | Pending |
@@ -98,4 +100,4 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 
 ---
 *Requirements defined: 2026-06-01*
-*Last updated: 2026-06-01 after doc-ingest bootstrap (new-project-from-ingest)*
+*Last updated: 2026-06-05 — reconciled to reality: Phases 0 + 1 code-complete (HEAD 09518da, 315 tests); SPINE-04 + the six Phase-1 requirements marked `[~]` code-complete (owner-gated). Scope unchanged.*
