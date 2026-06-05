@@ -27,10 +27,44 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createMcpHandler, getMcpAuthContext } from "agents/mcp";
+import { createMcpHandler } from "agents/mcp";
 import { redact, containsSecret } from "@atlas/security";
 import { flag } from "@atlas/shared";
 import type { Env as SharedEnv } from "@atlas/shared";
+import {
+  GMAIL_MODIFY_SCOPE,
+  GMAIL_COMPOSE_SCOPE,
+  GMAIL_READONLY_SCOPE,
+  CALENDAR_EVENTS_SCOPE,
+  CALENDAR_READONLY_SCOPE,
+  FORBIDDEN_TEXT,
+  grantedScopes,
+  forbiddenResult,
+  hasGmailModify,
+  hasGmailCompose,
+  hasGmailReadonly,
+  hasCalendarEvents,
+  hasCalendarReadonly,
+} from "./scopes.js";
+
+// Re-export the scope surface so existing importers (test/scope.test.ts) and the new
+// Phase-1 tools resolve everything through index.ts unchanged. scopes.ts is the single
+// source of truth for the per-agent least-privilege floors.
+export {
+  GMAIL_MODIFY_SCOPE,
+  GMAIL_COMPOSE_SCOPE,
+  GMAIL_READONLY_SCOPE,
+  CALENDAR_EVENTS_SCOPE,
+  CALENDAR_READONLY_SCOPE,
+  FORBIDDEN_TEXT,
+  grantedScopes,
+  forbiddenResult,
+  hasGmailModify,
+  hasGmailCompose,
+  hasGmailReadonly,
+  hasCalendarEvents,
+  hasCalendarReadonly,
+};
 
 /** The Google MCP env surface. */
 export interface Env extends SharedEnv {
@@ -42,45 +76,6 @@ export interface Env extends SharedEnv {
   GOOGLE_CLIENT_SECRET?: SecretsStoreSecret;
   /** Google refresh token — Secrets Store async binding (never logged/persisted). */
   GOOGLE_REFRESH_TOKEN?: SecretsStoreSecret;
-}
-
-/**
- * The least-privilege scope floor for the Filer label tools. Filer is granted
- * `gmail.modify` ONLY (labels) — it can NEVER delete/archive (that needs the
- * never-granted full `https://mail.google.com/` scope). The full URI form is what
- * the grant carries; the short form is accepted as an alias for resilience.
- */
-export const GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
-const GMAIL_MODIFY_ALIASES = new Set([GMAIL_MODIFY_SCOPE, "gmail.modify"]);
-
-/**
- * Read the inbound granted scopes from the MCP auth context the OAuthProvider
- * attaches (`ctx.props.scopes`). A missing context / missing scopes array means an
- * unauthenticated or scope-less caller — treated as the empty set (fail-closed).
- */
-export function grantedScopes(): string[] {
-  const auth = getMcpAuthContext();
-  const raw = auth?.props?.["scopes"];
-  if (Array.isArray(raw)) {
-    return raw.filter((s): s is string => typeof s === "string");
-  }
-  return [];
-}
-
-/** True iff the granted scopes include the `gmail.modify` floor (in either form). */
-export function hasGmailModify(scopes: string[]): boolean {
-  return scopes.some((s) => GMAIL_MODIFY_ALIASES.has(s));
-}
-
-/** A 403-equivalent MCP error result for an out-of-scope tool call. */
-export const FORBIDDEN_TEXT =
-  "403 Forbidden: this tool requires the gmail.modify scope, which the presented token does not carry.";
-
-function forbiddenResult() {
-  return {
-    isError: true as const,
-    content: [{ type: "text" as const, text: FORBIDDEN_TEXT }],
-  };
 }
 
 /** A neutral, secret-free message surfaced when a leak was detected and blocked. */
@@ -197,6 +192,144 @@ export function buildGoogleMcpServer(env: Env): McpServer {
       // In Phase 1 the raw body comes from the Gmail API; here a placeholder proves
       // the egress path. Any real secret in the body would be stripped by safeToolOutput.
       return await safeToolOutput("(message body would be fetched and redacted here)", env);
+    },
+  );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Phase 1 — the four reasoning agents' least-privilege tool surfaces.
+  // Each tool checks its EXACT scope floor (forbiddenResult names the scope) BEFORE
+  // doing anything, and funnels EVERY output through safeToolOutput(body, env) so a
+  // 2FA code / reset link / login URL is stripped server-side regardless of scope.
+  // The tool bodies here are Phase-1 placeholders proving scope-floor + redaction are
+  // wired; each agent's Wave-2 plan adds the live Gmail/Calendar fetch.
+  //
+  // Pillar 2 (suggest, don't destroy) by CONSTRUCTION: there is NO gmail_send tool
+  // (Herald is draft-only), NO gmail delete/archive tool, and NO calendar_delete tool.
+  // Those outward/destructive paths are unreachable — not merely gated.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Herald + Forge: read Gmail threads. Requires gmail.readonly (NOT gmail.modify —
+  // these agents never mutate the inbox). The redaction egress is critical on
+  // gmail_get_thread: a Type/Security thread body is stripped before egress.
+  server.registerTool(
+    "gmail_search_threads",
+    {
+      title: "Search Gmail threads",
+      description:
+        "Search Gmail threads in a window (Herald/Forge input). Read-only. Requires gmail.readonly.",
+    },
+    async () => {
+      if (!hasGmailReadonly(grantedScopes())) return forbiddenResult(GMAIL_READONLY_SCOPE);
+      return await safeToolOutput("(matching threads would be listed here)", env);
+    },
+  );
+
+  server.registerTool(
+    "gmail_get_thread",
+    {
+      title: "Get a Gmail thread",
+      description:
+        "Fetch a thread's messages (server-side redacted). Read-only. Requires gmail.readonly.",
+    },
+    async () => {
+      if (!hasGmailReadonly(grantedScopes())) return forbiddenResult(GMAIL_READONLY_SCOPE);
+      // Critical egress: a Type/Security body (2FA code / reset link / login URL) is
+      // stripped server-side by safeToolOutput before it can reach Herald/Forge.
+      return await safeToolOutput("(thread messages would be fetched and redacted here)", env);
+    },
+  );
+
+  // Herald: create a Gmail DRAFT to the owner (never sent). Requires gmail.compose.
+  // There is deliberately NO gmail_send tool — the send path needs no scope here
+  // because it is simply not registered (unreachable by construction, Pillar 2).
+  server.registerTool(
+    "gmail_create_draft",
+    {
+      title: "Create a Gmail draft",
+      description:
+        "Create a DRAFT email to the owner (never sent). Requires gmail.compose. No send path exists.",
+    },
+    async () => {
+      if (!hasGmailCompose(grantedScopes())) return forbiddenResult(GMAIL_COMPOSE_SCOPE);
+      return await safeToolOutput("(a draft would be created here — never sent)", env);
+    },
+  );
+
+  // Sundial: write calendar deadline blocks. Requires calendar.events (create/update/
+  // list). There is deliberately NO calendar_delete_event tool — Sundial can never
+  // delete an event (the autonomous-delete path stays off the toolset, Pillar 2).
+  server.registerTool(
+    "calendar_list_events",
+    {
+      title: "List calendar events",
+      description: "List calendar events in a window (Sundial reconcile). Requires calendar.events.",
+    },
+    async () => {
+      if (!hasCalendarEvents(grantedScopes())) return forbiddenResult(CALENDAR_EVENTS_SCOPE);
+      return await safeToolOutput("(events would be listed here)", env);
+    },
+  );
+
+  server.registerTool(
+    "calendar_create_event",
+    {
+      title: "Create a calendar event",
+      description: "Create a deadline-block event (Sundial). Requires calendar.events.",
+    },
+    async () => {
+      if (!hasCalendarEvents(grantedScopes())) return forbiddenResult(CALENDAR_EVENTS_SCOPE);
+      return await safeToolOutput("(an event would be created here)", env);
+    },
+  );
+
+  server.registerTool(
+    "calendar_update_event",
+    {
+      title: "Update a calendar event",
+      description: "Update an existing deadline block (Sundial reconcile). Requires calendar.events.",
+    },
+    async () => {
+      if (!hasCalendarEvents(grantedScopes())) return forbiddenResult(CALENDAR_EVENTS_SCOPE);
+      return await safeToolOutput("(an event would be updated here)", env);
+    },
+  );
+
+  server.registerTool(
+    "calendar_suggest_time",
+    {
+      title: "Suggest a free time slot",
+      description: "Suggest a free slot for a deadline block (Sundial). Requires calendar.events.",
+    },
+    async () => {
+      if (!hasCalendarEvents(grantedScopes())) return forbiddenResult(CALENDAR_EVENTS_SCOPE);
+      return await safeToolOutput("(a free slot would be suggested here)", env);
+    },
+  );
+
+  // Compass: read-only calendar access. Requires ONLY calendar.readonly — Compass
+  // never needs (and is never granted) the calendar.events write scope. Separate
+  // read-only variants so the read path never depends on a write floor.
+  server.registerTool(
+    "calendar_list_events_readonly",
+    {
+      title: "List calendar events (read-only)",
+      description: "List calendar events for day planning (Compass). Requires calendar.readonly.",
+    },
+    async () => {
+      if (!hasCalendarReadonly(grantedScopes())) return forbiddenResult(CALENDAR_READONLY_SCOPE);
+      return await safeToolOutput("(events would be listed read-only here)", env);
+    },
+  );
+
+  server.registerTool(
+    "calendar_freebusy",
+    {
+      title: "Query calendar free/busy",
+      description: "Query free/busy windows for day planning (Compass). Requires calendar.readonly.",
+    },
+    async () => {
+      if (!hasCalendarReadonly(grantedScopes())) return forbiddenResult(CALENDAR_READONLY_SCOPE);
+      return await safeToolOutput("(free/busy windows would be returned here)", env);
     },
   );
 
