@@ -65,6 +65,46 @@ describe("modelFor — tiering is config-driven, not hardcoded", () => {
   });
 });
 
+describe("modelFor — rejects a misconfigured id and falls back to the tier default (W18)", () => {
+  it("rejects a RETIRED dated KV override → falls back to the tier id (not returned verbatim)", async () => {
+    const { env, send } = makeEnv({ kv: { "model:filer": "claude-haiku-4-20250514" } });
+    const id = await modelFor("filer", env);
+    expect(id).toBe("claude-haiku-4-5"); // the allowlisted tier-map default, NOT the bad id
+    expect(id).not.toBe("claude-haiku-4-20250514");
+    // Best-effort P3 flag for the misconfig.
+    expect(send).toHaveBeenCalledTimes(1);
+    const event = send.mock.calls[0]![0] as Record<string, unknown>;
+    expect((event.payload as Record<string, unknown>).severity).toBe("P3");
+  });
+
+  it("rejects a GARBAGE / unknown-family KV override → falls back", async () => {
+    const { env } = makeEnv({ kv: { "model:compass": "gpt-4o" } });
+    expect(await modelFor("compass", env)).toBe("claude-opus-4-8");
+  });
+
+  it("rejects a misconfigured [vars] MODEL_<CODENAME> default → falls back", async () => {
+    const { env } = makeEnv({ vars: { MODEL_FORGE: "claude-sonnet-4-20250101" } });
+    expect(await modelFor("forge", env)).toBe("claude-sonnet-4-6");
+  });
+
+  it("an unknown agent with a garbage override falls back to the Sonnet default", async () => {
+    const { env } = makeEnv({ kv: { "model:nobody": "not-a-model" } });
+    expect(await modelFor("nobody", env)).toBe("claude-sonnet-4-6");
+  });
+});
+
+describe("claudeFor — fails fast on an unprovisioned AI Gateway (I30)", () => {
+  it("throws a clear construction-time error when AIG_GATEWAY_ID is empty (not a silent malformed URL)", async () => {
+    const { env } = makeEnv({ vars: { AIG_GATEWAY_ID: "" } });
+    await expect(claudeFor("filer", env)).rejects.toThrow(/AIG_ACCOUNT_ID and AIG_GATEWAY_ID/);
+  });
+
+  it("throws when AIG_ACCOUNT_ID is empty", async () => {
+    const { env } = makeEnv({ vars: { AIG_ACCOUNT_ID: "" } });
+    await expect(claudeFor("filer", env)).rejects.toThrow(/not provisioned/);
+  });
+});
+
 describe("claudeFor — routes through the AI Gateway, never api.anthropic.com", () => {
   it("builds a client whose baseURL is the gateway Anthropic endpoint (not the direct host)", async () => {
     const { env } = makeEnv();
@@ -128,15 +168,52 @@ describe("claudeFor — a non-2xx Gateway response raises a Flagger P3 flag", ()
     expect(event.idempotencyKey).toMatch(/^flg:\d{4}-\d{2}-\d{2}:Model:/);
   });
 
-  it("does NOT flag a 2xx/non-HTTP throw — only a genuine non-2xx Gateway response", async () => {
+  it("does NOT flag a 2xx/non-SDK throw — a plain Error stays quiet", async () => {
     const { env, send } = makeEnv();
     const c = await claudeFor("forge", env);
-    const plainError = new Error("network blip"); // no HTTP status
+    const plainError = new Error("network blip"); // not an SDK error, no HTTP status
     vi.spyOn(c.client.messages, "create").mockRejectedValue(plainError as never);
 
     await expect(
       c.messages.create({ max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
     ).rejects.toBe(plainError);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("claudeFor — connection/timeout failures are flagged P3, not silent (W19)", () => {
+  it("flags a P3 'gateway unreachable' on an APIConnectionError (status===undefined)", async () => {
+    const { env, send } = makeEnv();
+    const c = await claudeFor("forge", env);
+    const connErr = new Anthropic.APIConnectionError({ message: "fetch failed" });
+    expect((connErr as { status?: unknown }).status).toBeUndefined(); // the silent-path trigger
+    vi.spyOn(c.client.messages, "create").mockRejectedValue(connErr as never);
+
+    await expect(
+      c.messages.create({ max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+    ).rejects.toBe(connErr);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    const event = send.mock.calls[0]![0] as Record<string, unknown>;
+    const payload = event.payload as Record<string, unknown>;
+    expect(payload.severity).toBe("P3");
+    expect(payload.title).toMatch(/unreachable/i);
+    expect(event.idempotencyKey).toBe(payload.id);
+  });
+
+  it("flags a P3 (timeout variant) on an APIConnectionTimeoutError", async () => {
+    const { env, send } = makeEnv();
+    const c = await claudeFor("herald", env);
+    const timeoutErr = new Anthropic.APIConnectionTimeoutError({ message: "timed out" });
+    vi.spyOn(c.client.messages, "create").mockRejectedValue(timeoutErr as never);
+
+    await expect(
+      c.messages.create({ max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+    ).rejects.toBe(timeoutErr);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    const payload = (send.mock.calls[0]![0] as Record<string, unknown>).payload as Record<string, unknown>;
+    expect(payload.severity).toBe("P3");
+    expect(payload.title).toMatch(/timeout/i);
   });
 });

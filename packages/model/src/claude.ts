@@ -37,6 +37,24 @@ const TIER_MAP: Record<string, string> = {
 /** The Sonnet default for any agent not explicitly tiered (mid-cost, safe middle ground). */
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 
+/**
+ * The allowlist of valid, currently-pinned dateless 4.x ids (CLAUDE.md MODEL table). A
+ * resolved id from KV / [vars] is accepted ONLY if it is one of these — so the docstring's
+ * "always a valid 4.x id, never retired" holds even for a misconfigured operator value
+ * (W18). A retired `claude-*-4-<8-digit-date>` id, an unknown family, or any garbage value
+ * is REJECTED and the resolution falls back to the tier-map default.
+ */
+const VALID_MODEL_IDS: ReadonlySet<string> = new Set([
+  "claude-opus-4-8",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
+]);
+
+/** True iff `id` is an accepted, currently-pinned model id (allowlist membership). */
+function isValidModelId(id: string): boolean {
+  return VALID_MODEL_IDS.has(id);
+}
+
 /** Normalize an agent codename to its canonical lowercase key (CLAUDE.md: Wire agent = codename). */
 function codename(agent: string): string {
   return agent.trim().toLowerCase();
@@ -49,25 +67,74 @@ function codename(agent: string): string {
  *   2. `[vars]` `MODEL_<CODENAME>` default (e.g. env.MODEL_FILER),
  *   3. the CLAUDE.md tiering map fallback,
  *   4. the Sonnet default.
- * The returned id is always one of the valid 4.x ids — never a retired dated id.
+ *
+ * Each operator-supplied candidate (1, 2) is validated against the dateless-4.x allowlist
+ * (W18): a misconfigured value (a retired `-4-<date>` id, an unknown family, garbage) is
+ * REJECTED — we do NOT return it verbatim — and resolution falls through to the tier-map
+ * default, with a best-effort P3 flag when a WIRE binding is present. The tier-map / Sonnet
+ * defaults (3, 4) are allowlisted constants and never need validation. The returned id is
+ * therefore ALWAYS one of the valid 4.x ids — never a retired dated id.
  */
 export async function modelFor(
   agent: string,
   env: Pick<Env, "CONFIG"> & Record<string, unknown>,
 ): Promise<string> {
   const name = codename(agent);
+  const fallback = TIER_MAP[name] ?? DEFAULT_MODEL;
 
   // 1. KV override (the operator can re-tier any agent live).
   const override = await env.CONFIG.get(`model:${name}`);
-  if (override) return override;
+  if (override) {
+    if (isValidModelId(override)) return override;
+    await flagBadModelId(env, name, "KV model override", override, fallback);
+    return fallback;
+  }
 
   // 2. [vars] MODEL_<CODENAME> default (per-codename, NOT a per-tier set).
   const varKey = `MODEL_${name.toUpperCase()}`;
   const varDefault = env[varKey];
-  if (typeof varDefault === "string" && varDefault !== "") return varDefault;
+  if (typeof varDefault === "string" && varDefault !== "") {
+    if (isValidModelId(varDefault)) return varDefault;
+    await flagBadModelId(env, name, `[vars] ${varKey}`, varDefault, fallback);
+    return fallback;
+  }
 
-  // 3. CLAUDE.md tiering map → 4. Sonnet default.
-  return TIER_MAP[name] ?? DEFAULT_MODEL;
+  // 3. CLAUDE.md tiering map → 4. Sonnet default (both allowlisted constants).
+  return fallback;
+}
+
+/**
+ * Best-effort P3 flag for a rejected (misconfigured) model id. Non-fatal: model resolution
+ * always proceeds with the allowlisted fallback regardless. We only emit when a WIRE binding
+ * is present (modelFor's env surface does not type WIRE, but claudeFor's ModelEnv does), and
+ * we swallow any emit failure — a degraded telemetry path must never break model resolution.
+ */
+async function flagBadModelId(
+  env: Record<string, unknown>,
+  agent: string,
+  source: string,
+  badId: string,
+  fallback: string,
+): Promise<void> {
+  const wire = env["WIRE"];
+  if (!isQueueLike(wire)) return;
+  try {
+    await flag(
+      { WIRE: wire as Env["WIRE"] },
+      "P3",
+      `Invalid model id configured for ${agent}`,
+      `${source} resolved "${badId}", which is not an allowlisted 4.x id; ` +
+        `fell back to "${fallback}".`,
+      { sourceAgent: "Model", suggestedAction: "Fix the KV/[vars] model id (use a pinned 4.x id)." },
+    );
+  } catch {
+    // Telemetry is best-effort — never let a flag failure break model resolution.
+  }
+}
+
+/** Narrow an unknown binding to the Queue producer surface flag()/send() need. */
+function isQueueLike(v: unknown): v is { send: (...args: unknown[]) => unknown } {
+  return !!v && typeof (v as { send?: unknown }).send === "function";
 }
 
 /** The AI-Gateway base host (CLAUDE.md / build-plan T14). NEVER the direct Anthropic host. */
@@ -128,6 +195,16 @@ export async function claudeFor(agent: string, env: ModelEnv): Promise<AgentClau
   const name = codename(agent);
   const accountId = env.AIG_ACCOUNT_ID ?? "";
   const gatewayId = env.AIG_GATEWAY_ID ?? "";
+  // Fail fast on an unprovisioned gateway (I30): an empty account/gateway id silently builds
+  // a malformed baseURL (`.../v1///anthropic`) that only surfaces as a runtime 404 on the
+  // first live call. Throw a clear, actionable error at construction time instead.
+  if (accountId === "" || gatewayId === "") {
+    throw new Error(
+      "AI Gateway is not provisioned: AIG_ACCOUNT_ID and AIG_GATEWAY_ID must be set in " +
+        "[vars] (see CLAUDE.md — AIG_ACCOUNT_ID/AIG_GATEWAY_ID are plaintext non-secret vars). " +
+        `Got AIG_ACCOUNT_ID="${accountId}", AIG_GATEWAY_ID="${gatewayId}".`,
+    );
+  }
   const baseURL = gatewayBaseURL(accountId, gatewayId);
 
   // Secrets are async-read bindings (await .get()); never read from [vars] (T-00-73).
@@ -165,21 +242,41 @@ export async function claudeFor(agent: string, env: ModelEnv): Promise<AgentClau
 }
 
 /**
- * On a non-2xx Gateway response, raise a Flagger P3 flag (degraded model access is
- * non-fatal in Phase 0). `flag()` builds the FULL flag record and emits the canonical
+ * On a degraded-Gateway throw, raise a Flagger P3 flag (degraded model access is non-fatal
+ * in Phase 0). `flag()` builds the FULL flag record and emits the canonical
  * `op:"upsert"`/`entity:"flag"` Wire event with a STRUCTURED idempotencyKey (the flag id;
- * derived deterministically inside flag() — never a random UUID). We only flag genuine
- * HTTP errors from the Gateway (an `APIError` carries a numeric `status`); other throws are
- * rethrown unflagged by the caller.
+ * derived deterministically inside flag() — never a random UUID). Two degraded classes are
+ * flagged:
+ *   1. a genuine non-2xx HTTP response (an `APIError` carrying a numeric `status`), and
+ *   2. a connection/timeout failure reaching the Gateway (`APIConnectionError` and its
+ *      `APIConnectionTimeoutError` subclass) — these carry `status===undefined`, so the
+ *      old numeric-only check NEVER flagged them and degraded gateway access was silent
+ *      (W19).
+ * Genuine non-error paths (a 2xx, a plain non-SDK throw) stay quiet; the caller rethrows.
  */
 async function flagGatewayError(
   env: { WIRE: Env["WIRE"] },
   agent: string,
   err: unknown,
 ): Promise<void> {
+  // 2. Connection / timeout failure — the Gateway was unreachable (no HTTP status at all).
+  if (err instanceof Anthropic.APIConnectionError) {
+    const timeout = err instanceof Anthropic.APIConnectionTimeoutError;
+    const detail = err instanceof Error ? err.message : String(err);
+    await flag(
+      env,
+      "P3",
+      `Model gateway unreachable for ${agent}${timeout ? " (timeout)" : ""}`,
+      detail,
+      { sourceAgent: "Model", suggestedAction: "Check AI Gateway reachability / network." },
+    );
+    return;
+  }
+
+  // 1. Non-2xx HTTP response from the Gateway.
   const status = errorStatus(err);
   if (status === undefined || (status >= 200 && status < 300)) {
-    // Not an HTTP non-2xx — nothing to flag here (the caller still rethrows).
+    // Not a degraded-gateway signal — nothing to flag here (the caller still rethrows).
     return;
   }
   const detail = err instanceof Error ? err.message : String(err);
