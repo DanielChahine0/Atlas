@@ -982,22 +982,27 @@ const resp = await fetch("https://ntfy.sh/", {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three resolved during Phase-2 planning — inline **RESOLVED** notes below (plans 02-07, 02-02/02-01, 02-05).
 
 1. **Workers Free plan cron limit (A1)**
    - What we know: Build plan §1 says Paid is optional headroom for "higher per-Worker cron cap"; Atlas currently has 3 crons
    - What's unclear: Exact limit on Free for crons per Worker in 2026
    - Recommendation: Planner must add a `checkpoint:human-verify` task "verify cron limit before adding Phase 2 crons" before the Atlas wrangler.jsonc update task
+   - **RESOLVED:** plan 02-07 Task 1 is exactly this blocking `checkpoint:human-verify` gating the Atlas cron expansion (Paid upgrade only if the cap is hit).
 
 2. **FlaggerState DO vs D1 `flags` table for flag storage**
    - What we know: DO SQLite is free-form; D1 is the system-of-record; CONTEXT.md left DO shape to discretion
    - What's unclear: Whether flag volume over time warrants D1 queryability (e.g. reporting, bulk queries)
    - Recommendation: Start with DO SQLite for live state (faster, consistent); emit each flag to D1 audit_log (already exists). Migrate to D1 `flags` table if query patterns emerge.
+   - **RESOLVED:** plan 02-02 uses FlaggerState DO SQLite for live flag state; migration 0004 (plan 02-01) adds a minimal D1 `flags` audit table for resolved-flag history — no later migration needed.
 
 3. **Headhunter → Forge service binding vs direct D1 write**
    - What we know: D2-14 says "emits apply-by tasks through Forge's path"; `packages/tasks` has the dedupe logic; Forge is a separate Worker
    - What's unclear: Whether Headhunter calls Forge via service binding RPC or emits a WireEvent that Forge picks up (both patterns exist)
    - Recommendation: Service binding RPC (D-11 pattern, `env.FORGE.createTask(...)`) — consistent with how the morning chain invokes agents; avoids adding a new event type to atlas-wire that Steward would need to handle
+   - **RESOLVED:** plan 02-05 adopts service-binding RPC (`env.FORGE.createTask`), not a new atlas-wire event type.
 
 ---
 
