@@ -20,6 +20,11 @@
  * CLAUDE.md gotcha: `NonRetryableError` imports from `cloudflare:workflows` (a DIFFERENT module
  * than WorkflowEntrypoint/WorkflowStep from `cloudflare:workers`). Do NOT mutate event.payload
  * inside a step (reverts on replay) — return state and pass it forward.
+ *
+ * Measurement affordance (D1-04): the compass-plan step's `day_plan` event drives the §6.3
+ * morning-glance (Dashboard/Home.md top-3). The daily ~1-min "did Atlas miss anything?" review
+ * is logged by the OWNER as a line under a "Misses" section in that note — never by an agent.
+ * See GO-LIVE-CHECKLIST.md (Gate 2) for the affordance + the three go-live gates.
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
