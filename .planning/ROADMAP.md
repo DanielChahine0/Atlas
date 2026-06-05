@@ -14,7 +14,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 ## Phases
 
 - [x] **Phase 0: Spine** - Infrastructure substrate (Atlas, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth); zero user-visible features. _[MVP]_ (completed 2026-06-05)
-- [ ] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_
+- [x] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_ (completed 2026-06-05)
 - [ ] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog).
 - [ ] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first.
 - [ ] **Phase 4: Outward (Gated)** - Usher (gated registration), Envoy (gated public posts); confirmation-gate UX is the real work, gate hardest.
@@ -60,7 +60,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 01-07-PLAN.md — Compass: daily planner (free/busy bin-pack, overcommit→Couldn't-fit+P3), Opus effort=medium KV-overridable, calendar read-only
 
 **Wave 3** *(integration — blocked on Wave 2 completion)*
-- [ ] 01-08-PLAN.md — MorningChain Workflow + 07:45 dispatcher + invokeAgent transport + halt→Flagger P2 + go-live checklist (D1-03/D1-04/D1-06)
+- [x] 01-08-PLAN.md — MorningChain Workflow + 07:45 dispatcher + invokeAgent transport + halt→Flagger P2 + go-live checklist (D1-03/D1-04/D1-06)
 
 **Cross-cutting constraints** (truths appearing in 2+ plans):
 - No agent declares an `atlas-wire` consumer — Steward stays the sole consumer + sole Vault writer (Pillar 1).
@@ -126,7 +126,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
-| 1. Core Loop / Morning Pipeline | 7/8 | In Progress|  |
+| 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 0/TBD | Not started | - |
 | 3. Capture (Local) | 0/TBD | Not started | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
