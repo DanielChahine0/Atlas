@@ -46,8 +46,28 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
   3. Deadline tasks appear as Google Calendar blocks (`agent=sundial` / `atlasTaskId` extendedProperty); a re-run creates no duplicate events.
   4. The Vault Today view renders Compass's top-3 plus the §6.3 morning-glance set (action-required emails, deadlines next 7 days, today's meetings, open flags, waiting-on).
   5. A forced Forge failure leaves Filer's labels + Herald's draft intact, halts before Sundial/Compass, and emits one `chain.halted` P2 to Flagger; re-firing the same date is a complete no-op (`instance.id = morning-${date}`); killing mid-`forge-morning` resumes at Forge (Filer/Herald memoized, not re-run).
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 8 plans
+
+**Wave 1** *(foundation — parallel, no file overlap)*
+- [ ] 01-01-PLAN.md — Expand mcp-google with Herald/Forge/Sundial/Compass scope-floored tools (gmail.compose/readonly, calendar.events/readonly) + redaction egress
+- [ ] 01-02-PLAN.md — D1 `tasks`/`subtasks` migration (`idx_tasks_dedupe`) + `@atlas/tasks` data-access (dedupe/merge)
+
+**Wave 2** *(the five agents — parallel, each owns its own apps/ dir; blocked on Wave 1)*
+- [ ] 01-03-PLAN.md — Filer: Gmail labeler (sweep + FilerCursor DO + push/renewal), labels-only, idempotent on AI/Reviewed, never surfaces 2FA/phishing
+- [ ] 01-04-PLAN.md — Herald: daily draft digest (five sections, no Friday case), output-side redaction guardrail (leak → block draft + P2)
+- [ ] 01-05-PLAN.md — Forge: task/subtask extractor → D1 (dedupe/merge in DO lock), security-skip, per-task replay-safe events
+- [ ] 01-06-PLAN.md — Sundial: task → calendar deadline blocks (reconcile by atlasTaskId, no delete, no dup on re-run)
+- [ ] 01-07-PLAN.md — Compass: daily planner (free/busy bin-pack, overcommit→Couldn't-fit+P3), Opus effort=medium KV-overridable, calendar read-only
+
+**Wave 3** *(integration — blocked on Wave 2 completion)*
+- [ ] 01-08-PLAN.md — MorningChain Workflow + 07:45 dispatcher + invokeAgent transport + halt→Flagger P2 + go-live checklist (D1-03/D1-04/D1-06)
+
+**Cross-cutting constraints** (truths appearing in 2+ plans):
+- No agent declares an `atlas-wire` consumer — Steward stays the sole consumer + sole Vault writer (Pillar 1).
+- Every emitted Wire event uses the canonical §6.4 shape with a stable structured `idempotencyKey`; a replay through Steward leaves counters unchanged (`meta.changes === 0`).
+- 2FA codes / reset links / login URLs are never surfaced (server-side redaction + per-agent guardrails + CI backstop).
+
+**UI hint**: yes — but **frontend-free** (the only "UI" is Obsidian markdown rendered by Steward per `docs/05-dashboard.md`; no web UI / no UI-SPEC).
 
 ### Phase 2: Weekly Value
 **Maps to**: Atlas Build Phase 2 (Weekly value) · Milestones M2–M3 · sequencing in `docs/13-build-plan.md §4` · per-agent specs `docs/agents/scout.md`, `headhunter.md`, `flagger.md`, `08-flagger.md`
