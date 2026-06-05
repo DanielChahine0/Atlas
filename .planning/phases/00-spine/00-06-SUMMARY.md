@@ -40,15 +40,17 @@ key-files:
     - "apps/atlas/src/oauth/google.ts — googleAuthorizeUrl / exchangeCode / googleAccessToken + GOOGLE_SCOPE_FLOOR"
     - "apps/atlas/src/oauth/github.ts — appJwt (jose RS256) / installationToken"
     - "apps/atlas/src/auth/consent.ts — the OAuthProvider defaultHandler (owner-session-gated /login + /authorize consent surface, server-side consent record, CSRF + same-origin)"
-    - "apps/atlas/src/auth/session.ts — owner-session primitives (constant-time compare, HMAC cookie sign/verify, randomId, cookie helpers) [post-review hardening]"
-    - "apps/atlas/src/auth/headers.ts — shared hardened auth-surface security headers (CSP/XFO/Referrer/no-store) [post-review hardening]"
+    - "apps/atlas/src/auth/session.ts — owner-session primitives (length-independent HMAC constant-time compare, HMAC cookie sign/verify, randomId, cookie helpers) [round-1 + round-2 hardening]"
+    - "apps/atlas/src/auth/headers.ts — shared hardened auth-surface security headers (CSP/XFO/Referrer/no-store) [round-1 hardening]"
+    - "apps/atlas/src/auth/scopes.ts — SCOPES_SUPPORTED single-source-of-truth allow-list + disallowedScopes() (the ENFORCED scope floor) [round-2 hardening]"
+    - "apps/atlas/src/auth/clients.ts — ensureSeededClients() out-of-band confidential-client seeding (D4; no anonymous DCR) [round-2 hardening]"
     - "apps/atlas/src/auth/api-handler.ts — the OAuthProvider apiHandler (WorkerEntrypoint reading ctx.props for door-level least privilege)"
     - "apps/atlas/src/env.ts — local AtlasEnv (shared surface + NOOP + OAUTH_PROVIDER + required OAUTH_KV + the OAuth secret bindings incl. OWNER_AUTH_TOKEN / SESSION_SIGNING_KEY)"
     - "apps/atlas/test/oauth.test.ts — the OAuth round-trip + consent-hardening suite (20 active + 2 gated-skip)"
     - "apps/atlas/test/apply-migrations.ts — D1 migration setup for the workerd harness (audit_log query)"
   modified:
-    - "apps/atlas/src/index.ts — REWRITTEN: default export = OAuthProvider composed with the Wave-3 scheduled() dispatcher; re-exports AtlasCoordinator + NoopAgent + AtlasApiHandler; disallowPublicClientRegistration: true [post-review hardening]"
-    - "apps/atlas/wrangler.jsonc — ADDED secrets_store_secrets (W4 leg: the 3 OAuth + the 2 hardening secrets) + OAuth non-secret [vars]; 00-01 base + 00-03 NOOP services binding preserved"
+    - "apps/atlas/src/index.ts — REWRITTEN: default export = OAuthProvider composed with the Wave-3 scheduled() dispatcher; re-exports AtlasCoordinator + NoopAgent + AtlasApiHandler; scopesSupported = the shared SCOPES_SUPPORTED; clientRegistrationEndpoint REMOVED + out-of-band client seeding at startup [round-1 + round-2 hardening]"
+    - "apps/atlas/wrangler.jsonc — ADDED secrets_store_secrets (W4 leg: the 3 OAuth + the 2 round-1 hardening secrets) + OAuth non-secret [vars] (incl. CLIENT_REGISTRY round-2); 00-01 base + 00-03 NOOP services binding preserved"
     - "apps/atlas/package.json — linked @cloudflare/workers-oauth-provider + jose (workspace link, downloaded 0)"
     - "apps/atlas/vitest.config.ts — setupFiles + provide(migrations) so the harness applies the D1 schema"
     - "pnpm-lock.yaml — apps/atlas importer links the two packages"
@@ -67,9 +69,9 @@ patterns-established:
 requirements-completed: []
 
 # Metrics
-duration: ~11min (autonomous tasks 1-3) + post-review security hardening
+duration: ~11min (autonomous tasks 1-3) + round-1 + round-2 security hardening
 completed: 2026-06-05
-status: checkpoint-paused (3 blocking human-action gates remain; 2 new secrets folded into Gate C)
+status: checkpoint-paused (3 blocking human-action gates remain; 2 new secrets + CLIENT_REGISTRY folded into Gate C)
 ---
 
 # Phase 0 Plan 06: OAuth Substrate (SPINE-04) Summary
@@ -80,9 +82,9 @@ status: checkpoint-paused (3 blocking human-action gates remain; 2 new secrets f
 
 This plan is `autonomous: false`. Tasks 1-3 (all autonomously-implementable code + mocked-exchange tests + declared secret bindings) are **complete and committed**. Tasks 4-6 are **blocking `checkpoint:human-action` gates** requiring real owner actions in the Google Cloud Console, the GitHub UI, and Cloudflare Secrets Store — these cannot be automated or fabricated. The structured checkpoint with exact owner commands is returned to the orchestrator (and reproduced under "User Setup Required" below).
 
-A subsequent **security review found 4 real vulnerabilities** in the consent front door (`auth/consent.ts`, commit `e3d6c49`); all four were confirmed valid and **remediated as autonomous code hardening** (commit `4ce8aff`) — the two new secrets they require are declared-and-deferred to Gate C exactly like the existing ones, so the plan remains checkpoint-paused with no fabricated credentials.
+Two subsequent **adversarial security reviews** found vulnerabilities in the consent front door. **Round-1** found 4 (commit `e3d6c49`) → remediated in `4ce8aff`. **Round-2** (a 4-lens review of the hardened surface) found 5 residual findings the form-field round-1 fixes missed → remediated in `d445b27`. All confirmed valid; all closed as autonomous code with proving tests; the new secrets/vars they require are declared-and-deferred to Gate C exactly like the existing ones, so the plan remains checkpoint-paused with no fabricated credentials.
 
-## Security hardening (post-review)
+## Security hardening — Round 1 (post-review)
 
 A security review of commit `e3d6c49` flagged 4 valid vulnerabilities in the inbound `/authorize` consent surface — the front door to the owner's entire digital life. All four are closed in commit `4ce8aff`, each proven by a workerd test.
 
@@ -95,7 +97,29 @@ A security review of commit `e3d6c49` flagged 4 valid vulnerabilities in the inb
 
 **New secrets (declared-and-deferred, seeded at Gate C — NOT fabricated):** `OWNER_AUTH_TOKEN` (gates the consent surface) and `SESSION_SIGNING_KEY` (signs the session cookie; optional — HKDF-derived from `OWNER_AUTH_TOKEN` if omitted). Both are added to `secrets_store_secrets` in `apps/atlas/wrangler.jsonc` with the `<atlas-store-id>` placeholder and folded into the Gate-C provisioning commands below. `OAUTH_KV` was made **required** (not optional) on `AtlasEnv` — it is the consent-record store as well as the provider's backing KV.
 
-**Verification after hardening:** `pnpm -r typecheck` exits 0; the atlas suite is **28 passed / 2 gated-skip** (the 8 prior + 9 OAuth round-trip + 11 new hardening tests); full repo `pnpm test` is **74 passed / 2 skipped** (no regression). Pillar 1 holds — Steward remains the sole `atlas-wire` consumer (`grep -c consumers apps/atlas/wrangler.jsonc` == 0; the only consumer blocks are Steward→atlas-wire and dlq-sink→atlas-wire-dlq).
+**Verification after Round-1:** `pnpm -r typecheck` exits 0; the atlas suite is **28 passed / 2 gated-skip**; full repo `pnpm test` is **74 passed / 2 skipped**. Pillar 1 holds.
+
+## Security hardening — Round 2 (adversarial review)
+
+A 4-lens adversarial review of the Round-1-hardened surface (each finding independently refuted-or-confirmed) found 5 residual findings — the round-1 fixes closed the *form-field* vectors but missed deeper ones, most importantly that the advertised scope "FLOOR" was **never enforced in code**. All 5 are closed in commit `d445b27`, each with a proving test.
+
+| # | Severity | Finding (confirmed) | Remediation | Proving test |
+|---|----------|---------------------|-------------|--------------|
+| P1 | MEDIUM | **Scope floor not enforced** — `parseAuthRequest` reads `?scope=` VERBATIM from the URL; provider 0.7.2 uses `scopesSupported` for RFC-8414 metadata advertising ONLY (it never rejects/clamps). `consent.ts` passed `authReq.scope` straight into `completeAuthorization` (`scope` + `props.scopes`), so an over-broad `?scope=` (the full `https://mail.google.com/` CLAUDE.md says is NEVER granted, or `vault.write`) flowed into the grant + `ctx.props.scopes` — the Phase-0 door authority. The `index.ts` "FLOOR" comment was materially false. | New shared `auth/scopes.ts` `SCOPES_SUPPORTED` is the single source of truth; `index.ts` passes the SAME array as `scopesSupported`. `consent.ts` REJECTS (400 `invalid_scope`, NOT silent downscope) any disallowed scope on the authorize GET **and again** before `completeAuthorization`. False `index.ts` comments fixed (advertised metadata vs enforced-in-consent). | URL-driven `parseAuthRequest` echoes `?scope=`; request `?scope=https://mail.google.com/` with a valid owner session → **400** + `completeAuthorization` never called. **Confirmed to FAIL pre-fix (200, scope grantable) and PASS post-fix.** Plus a control (in-floor scope → consent renders). The round-1 Finding-2 test (constant-scope mock) was theater for this vector — augmented. |
+| P2 | MEDIUM | **Anonymous confidential-client registration** — `disallowPublicClientRegistration:true` blocks only PUBLIC clients; the `clientRegistrationEndpoint` still accepted anonymous CONFIDENTIAL-client registration, so an attacker could register a confidential client with THEIR redirect_uri and phish the owner into approving it (code/token → attacker). | Per plan **D4**: `clientRegistrationEndpoint` **removed** (provider returns 404 for `/oauth/register`); clients seeded **out-of-band** at startup via `auth/clients.ts` `ensureSeededClients` (`getOAuthApi(options, env)` → `createClient`, idempotent) from the non-secret `CLIENT_REGISTRY` `[vars]` JSON. No unauthenticated party can register any client. | `POST /oauth/register` on the composed worker → not 200/201 (404/400/405) — endpoint closed. |
+| P3 | LOW | **Responses not all governed** — `parseAuthRequest`/`lookupClient` errors leaked provider-internal/enumeration text; the 404 fall-through + some responses bypassed the hardened-header helper. | `parseAuthRequest`/`lookupClient` wrapped in try/catch → generic 400 (no leak) WITH headers; the 404 fall-through and all bare responses now route through `authResponse`/`authHtmlResponse`. | parametrized headers test below covers the 404 (and 7 other types). |
+| P4 | LOW | **Test rigor** — no test asserted the hardened headers on every response type (which let the round-1 bare 404 slip). | Parametrized test asserts CSP `frame-ancestors 'none'` + `X-Frame-Options: DENY` + `Cache-Control: no-store` + `Referrer-Policy: no-referrer` on **consent GET, login GET, 302, 400, 401, 403, 404, 405**. | the 8-response-type parametrized header test |
+| P5 | INFO | **Timing leak in `timingSafeEqual`** — the `max(lenA,lenB)` loop leaked the longer input's length via iteration count. | Rewritten length-independent: HMAC-SHA-256 both inputs under a fresh **ephemeral random key**, compare the fixed 32-byte digests (content+length-independent; not precomputable). Now async; awaited at all 3 sites (owner-token, session-signature, CSRF). | covered by the existing /login + CSRF tests (still green under the async compare). |
+
+**New non-secret config (declared-and-deferred to Gate C — NOT fabricated):** `CLIENT_REGISTRY` (a `[vars]` JSON array of `{ clientId, redirectUris, clientName }` for the out-of-band client seed; `"[]"` placeholder = seeding no-op until the owner fills the daemon + MCP client ids/redirect URIs). No new *secret* was added in Round-2.
+
+**Accepted-risk / low-priority follow-ups (refuted or deferred by the review — NOT implemented now):**
+- **No session logout/revocation** — mitigated by the 15-min cookie TTL + single owner; a future add.
+- **No `__Host-` cookie prefix** — single hostname deployment; low value now.
+- **No `/login` rate-limit + Flagger on failed owner-token attempts** — the owner token is strong-random; noted as a future Pillar-5 add (failed-auth → Flagger incident) when Flagger lands (Phase 2).
+- **KV single-use consent get-then-delete race** — minor; gated by an unguessable `consent_id` + a valid owner session.
+
+**Verification after Round-2:** `pnpm -r typecheck` exits 0; the atlas suite is **33 passed / 2 gated-skip** (the 28 prior + 5 new Round-2 tests); full repo `pnpm test` is **79 passed / 2 skipped** (no regression). Pillar 1 holds — Steward remains the sole `atlas-wire` consumer (`grep -c '"consumers"' apps/atlas/wrangler.jsonc` == 0; the only consumer blocks are Steward→atlas-wire and dlq-sink→atlas-wire-dlq).
 
 ## API confirmation (OAuthProvider 0.7.2 + jose 6.2.3)
 
@@ -119,10 +143,12 @@ Each autonomous task was committed atomically:
 1. **Task 1: Google + GitHub outbound OAuth helpers** — `5be890d` (feat)
 2. **Task 2: compose the inbound OAuthProvider front door + secrets_store_secrets binding** — `e3d6c49` (feat)
 3. **Task 3: OAuth round-trip test suite** — `0731359` (test)
-4. **Post-review: harden the OAuth consent front door (4 security-review findings)** — `4ce8aff` (fix)
+4. **Round-1 review: harden the OAuth consent front door (4 findings)** — `4ce8aff` (fix)
+5. **Round-2 adversarial review: 5 residual findings (scope-floor enforcement, anon-DCR, response governance, timing, test rigor)** — `d445b27` (fix)
 
 **Plan metadata (first pass):** `e2765e4` `docs(00-06): land OAuth substrate code + tests; pause at owner-provisioning gates`
-**Plan metadata (this commit):** `docs(00-06): security hardening (4 consent findings) + folded Gate-C secrets`
+**Plan metadata (round-1):** `c7c4baa` `docs(00-06): security hardening (4 consent findings) + folded Gate-C secrets`
+**Plan metadata (this commit):** `docs(00-06): round-2 adversarial hardening (5 findings) + accepted-risk follow-ups`
 
 Tasks 4-6 (owner gates) are NOT committed — they are real-world actions, not code.
 
@@ -190,7 +216,7 @@ None. No new security-relevant surface beyond the plan's `<threat_model>` was in
    - `npx wrangler secrets-store secret create <atlas-store-id> --name owner-auth-token --scopes workers --remote` **(post-review hardening: the token the owner enters at `/login` to gate the consent surface — choose a strong random value)**
    - `npx wrangler secrets-store secret create <atlas-store-id> --name session-signing-key --scopes workers --remote` **(post-review hardening: the HMAC key that signs the owner session cookie — a strong random value; OPTIONAL — if you skip it, the session key is HKDF-derived from `owner-auth-token`)**
 3. Also `wrangler secret put ANTHROPIC_API_KEY` and `wrangler secret put CF_AIG_TOKEN` (spine secrets for later phases). Make non-remote dev copies for `wrangler dev` (`--remote` secrets aren't readable locally).
-4. Fill the OAuth `[vars]` placeholders: `GOOGLE_CLIENT_ID`, `GOOGLE_REDIRECT_URI`, `GH_APP_CLIENT_ID`.
+4. Fill the OAuth `[vars]` placeholders: `GOOGLE_CLIENT_ID`, `GOOGLE_REDIRECT_URI`, `GH_APP_CLIENT_ID`, and **`CLIENT_REGISTRY`** (Round-2: a non-secret JSON array of the out-of-band confidential clients, e.g. `[{"clientId":"atlas-daemon","redirectUris":["https://<daemon-cb>"],"clientName":"Atlas Daemon"}]` — these clients are seeded into OAUTH_KV at startup since there is NO anonymous registration endpoint).
 5. Verify NO secret value appears in any `[vars]`/KV/Vault/Codex/`audit_log`: `npx wrangler secrets-store secret list <atlas-store-id>` shows the five; `grep -rn` across tracked files shows no token-shaped value.
 6. Run the LIVE round-trips (build-plan M0): sign in at the deployed `/login` with the owner token (the consent surface now requires an owner session), then Google authorize → exchange returns a `refresh_token`; `grant_type=refresh_token` returns a fresh access token WITHOUT re-consent; the GitHub App JWT mints an opaque `ghs_` installation token. Un-skip the `describe.skip("LIVE …")` in `oauth.test.ts` or run the documented manual curl.
    Resume signal: **`secrets-store-ready`**.
@@ -203,11 +229,11 @@ None. No new security-relevant surface beyond the plan's `<threat_model>` was in
 
 ## Self-Check: PASSED
 
-- All created files exist on disk: `oauth/google.ts`, `oauth/github.ts`, `auth/consent.ts`, `auth/session.ts`, `auth/headers.ts`, `auth/api-handler.ts`, `env.ts`, `test/oauth.test.ts`, `test/apply-migrations.ts`.
-- All four task/remediation commits present in git history (`5be890d`, `e3d6c49`, `0731359`, `4ce8aff`) + the first-pass metadata (`e2765e4`).
-- Verification gates green AFTER hardening: `pnpm -r typecheck` exits 0; `pnpm --filter @atlas/atlas test` → 28 passed / 2 skipped in workerd (TZ=UTC); the full repo `pnpm test` → 74 passed / 2 skipped (no cross-package regression).
-- `grep -q OAuthProvider index.ts` ✓; `grep -q scheduled && grep -q AtlasCoordinator index.ts` ✓ (Wave-3 preserved); `grep -q secrets_store_secrets && grep -q NOOP wrangler.jsonc` ✓ (3-way handoff); `grep -q access_type && grep -q S256 google.ts` ✓; `grep -q disallowPublicClientRegistration index.ts` ✓; `grep -c consumers wrangler.jsonc` == 0 (Pillar 1; Steward sole atlas-wire consumer).
-- All 4 security findings closed, each with a proving test (see "Security hardening (post-review)").
+- All created files exist on disk: `oauth/google.ts`, `oauth/github.ts`, `auth/consent.ts`, `auth/session.ts`, `auth/headers.ts`, `auth/scopes.ts`, `auth/clients.ts`, `auth/api-handler.ts`, `env.ts`, `test/oauth.test.ts`, `test/apply-migrations.ts`.
+- All task/remediation commits present in git history (`5be890d`, `e3d6c49`, `0731359`, `4ce8aff`, `d445b27`) + the metadata commits (`e2765e4`, `c7c4baa`).
+- Verification gates green AFTER Round-2: `pnpm -r typecheck` exits 0; `pnpm --filter @atlas/atlas test` → 33 passed / 2 skipped in workerd (TZ=UTC); the full repo `pnpm test` → 79 passed / 2 skipped (no cross-package regression).
+- `grep -q OAuthProvider index.ts` ✓; `grep -q scheduled && grep -q AtlasCoordinator index.ts` ✓ (Wave-3 preserved); `grep -q secrets_store_secrets && grep -q NOOP wrangler.jsonc` ✓ (3-way handoff); `grep -q access_type && grep -q S256 google.ts` ✓; scope floor ENFORCED (`SCOPES_SUPPORTED` single source; `clientRegistrationEndpoint` absent); `grep -c '"consumers"' wrangler.jsonc` == 0 (Pillar 1; Steward sole atlas-wire consumer).
+- All 4 Round-1 + 5 Round-2 findings closed, each with a proving test; the P1 URL-scope-floor test was confirmed to FAIL pre-fix and PASS post-fix.
 
 ---
 *Phase: 00-spine*
