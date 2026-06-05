@@ -1,0 +1,13 @@
+{
+  "name": "atlas-daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Atlas LOCAL macOS launchd daemon — the OUTBOUND-only Obsidian bridge drainer (NOT a Worker; outside apps/). Echo + Quill capture land in Phase 3.",
+  "main": "src/drain.ts",
+  "scripts": {
+    "start": "node --experimental-strip-types src/drain.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  }
+}

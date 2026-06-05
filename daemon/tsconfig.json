@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    // The daemon is a standalone Node package OUTSIDE the workspace globs (it is NOT a
+    // Worker — CLAUDE.md repo-layout note). It does NOT depend on @cloudflare/workers-types.
+    // @types/node is intentionally NOT installed in this repo's toolchain (prior waves),
+    // so the minimal Node surface the daemon uses (process, https, global fetch, timers)
+    // is declared as ambient types in src/node-ambient.d.ts. This keeps the daemon
+    // typechecking AS A PROJECT (tsc -p) with no single-file fallback and no extra install.
+    "types": [],
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

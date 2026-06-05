@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.atlas.bridge — the Atlas OUTBOUND-only Obsidian bridge drainer (SPINE-05).
+
+  This launchd LaunchAgent runs the daemon at login and keeps it alive. The daemon
+  authenticates OUTBOUND and PULLS work from the cloud bridge (/bridge/poll + /bridge/ack);
+  the laptop has ZERO inbound port. This plist therefore declares NO inbound-listener key
+  of any kind — launchd does NOT open any port on the daemon's behalf.
+
+  SECRETS are NOT in this file (Pillar: secrets only via bindings / git-ignored local env).
+  ATLAS_BRIDGE_TOKEN, ATLAS_BRIDGE_URL, and OBSIDIAN_API_KEY come from the daemon's
+  environment — set them in a git-ignored local config the owner sources, or via launchctl
+  setenv, at the owner gate (Task 4). The placeholders below are PATHS, not secrets.
+
+  Install (owner gate, Task 4):
+    cp daemon/com.atlas.bridge.plist ~/Library/LaunchAgents/com.atlas.bridge.plist
+    launchctl load ~/Library/LaunchAgents/com.atlas.bridge.plist
+  (Obsidian + the Local REST API plugin v3.0+ must be running for writes to land.)
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.atlas.bridge</string>
+
+  <!-- Run Node against the daemon entrypoint. The owner edits these paths to match
+       their install location (the Node binary + the cloned repo's daemon/src/drain.ts).
+       Node 22 strips TS types at runtime via --experimental-strip-types. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>--experimental-strip-types</string>
+    <string>/Users/USERNAME/Atlas/daemon/src/drain.ts</string>
+  </array>
+
+  <!-- Start at login and restart if it exits (a dead daemon = a stale fleet-critical
+       dashboard; D4). NO inbound listener key anywhere in this plist. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- The autostart guard the entrypoint checks (so an imported module never runs the loop). -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ATLAS_DAEMON_AUTOSTART</key>
+    <string>1</string>
+  </dict>
+
+  <!-- Logs to a local file (NOT a tracked path). Never logs a secret value. -->
+  <key>StandardOutPath</key>
+  <string>/tmp/atlas-bridge.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/atlas-bridge.err.log</string>
+</dict>
+</plist>
