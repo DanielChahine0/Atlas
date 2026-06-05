@@ -5,7 +5,7 @@
  * Uses HMAC-SHA-256 under a fresh random key so neither the token VALUE nor its LENGTH
  * leaks through response timing (length-independent constant-time compare).
  *
- * Security invariant: the token is NEVER logged (grep: console.log is absent here).
+ * Security invariant: the token is NEVER written to any log, audit row, or output stream.
  * crypto.timingSafeEqual is NOT available in Workers — this HMAC approach is the
  * canonical constant-time equality primitive for Cloudflare Workers.
  */
