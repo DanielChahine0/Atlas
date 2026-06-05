@@ -24,10 +24,13 @@
  */
 
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
+import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 import { send } from "@atlas/wire";
 import type { AtlasEnv } from "./env.js";
 import { consentHandler } from "./auth/consent.js";
 import { AtlasApiHandler } from "./auth/api-handler.js";
+import { SCOPES_SUPPORTED } from "./auth/scopes.js";
+import { ensureSeededClients, type ClientSeedEnv } from "./auth/clients.js";
 
 // Re-export the AtlasCoordinator DO from the MAIN entry so the
 // `new_sqlite_classes: ["AtlasCoordinator"]` migration in wrangler.jsonc resolves.
@@ -100,44 +103,60 @@ const dispatcher = {
  *   - `apiRoute: ['/mcp/', '/api/']`  — authenticated routes (token validated before apiHandler).
  *   - `apiHandler: AtlasApiHandler`   — reads ctx.props { ownerId, scopes } (door-level least
  *                                       privilege; full per-tool 403 lands in mcp-google at 00-08).
- *   - `defaultHandler: consentHandler`— the `/authorize` consent surface (lists requested scopes,
- *                                       issues codes via completeAuthorization).
- *   - `scopesSupported`               — the 9-scope least-privilege allow-list (the FLOOR; the
- *                                       provider advertises only these in RFC-8414 metadata).
+ *   - `defaultHandler: consentHandler`— the `/authorize` consent surface; it ENFORCES the scope
+ *                                       allow-list (the provider does not) and issues codes.
+ *   - `scopesSupported: SCOPES_SUPPORTED` — advertised in RFC-8414 metadata ONLY. The provider
+ *                                       does NOT reject/clamp a requested `?scope=` (0.7.2). The
+ *                                       FLOOR is ENFORCED in auth/consent.ts against this SAME
+ *                                       array (single source of truth — they cannot drift).
  *   - `accessTokenTTL: 3600`          — 1-hour access tokens.
+ *
+ * NOTE (Round-2 hardening): no `clientRegistrationEndpoint` is configured. Anonymous RFC-7591
+ * Dynamic Client Registration (even of a CONFIDENTIAL client with an attacker redirect_uri) is a
+ * phishing vector, and `disallowPublicClientRegistration` blocks only PUBLIC clients. Per plan
+ * decision D4 (confidential clients via the Workers OAuth Provider, registered out-of-band) the
+ * daemon + each MCP client are seeded out-of-band — see auth/clients.ts `ensureSeededClients`,
+ * invoked at startup. With the endpoint omitted, the provider returns 404 for `/oauth/register`,
+ * so NO unauthenticated party can register any client.
  */
-const provider = new OAuthProvider<Env>({
+// The provider options as a NAMED const so the out-of-band client seeder (auth/clients.ts) can
+// reuse the EXACT same object via getOAuthApi(options, env) — same KV + crypto config.
+const providerOptions: OAuthProviderOptions<Env> = {
   apiRoute: ["/mcp/", "/api/"],
   apiHandler: AtlasApiHandler,
   defaultHandler: consentHandler,
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/oauth/token",
-  clientRegistrationEndpoint: "/oauth/register",
-  // The least-privilege scope allow-list. gmail.modify (NOT the full mail.google.com/),
-  // calendar.events (NOT the full calendar scope) — the per-agent floor (docs/11 §3).
-  scopesSupported: [
-    "gmail.modify",
-    "calendar.events",
-    "calendar.readonly",
-    "drive.file",
-    "drive.readonly",
-    "spreadsheets",
-    "github.read",
-    "github.write",
-    "vault.write",
-  ],
+  // clientRegistrationEndpoint deliberately OMITTED (Round-2): no anonymous DCR. Clients are
+  // seeded out-of-band (D4) via auth/clients.ts.
+  scopesSupported: SCOPES_SUPPORTED as string[],
   accessTokenTTL: 3600,
-  // Post-review hardening: forbid anonymous RFC-7591 Dynamic Client Registration so an attacker
-  // can't mint attacker-controlled clients at /oauth/register. Atlas's clients (the local daemon,
-  // each MCP client) are confidential and registered out-of-band.
+  // Belt-and-suspenders: even if an endpoint were re-added, never allow public clients.
   disallowPublicClientRegistration: true,
-});
+};
+
+const provider = new OAuthProvider<Env>(providerOptions);
+
+/** Seed out-of-band clients ONCE per isolate (idempotent; no-op if CLIENT_REGISTRY is unset). */
+let clientSeedStarted = false;
 
 /**
  * The composed Atlas default export: the OAuthProvider owns `fetch`; the Wave-3 dispatcher owns
  * `scheduled`. `satisfies ExportedHandler<Env>` (never the `: ExportedHandler<Env>` annotation).
  */
 export default {
-  fetch: (request: Request, env: Env, ctx: ExecutionContext) => provider.fetch(request, env, ctx),
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => {
+    // Out-of-band client seeding (D4) — fire once per isolate, off the request critical path.
+    if (!clientSeedStarted) {
+      clientSeedStarted = true;
+      ctx.waitUntil(
+        ensureSeededClients(env as ClientSeedEnv, providerOptions).catch(() => {
+          // Seeding failure is non-fatal: an unseeded client simply can't authorize (fail-safe).
+          clientSeedStarted = false; // allow a retry on the next request
+        }),
+      );
+    }
+    return provider.fetch(request, env, ctx);
+  },
   scheduled: dispatcher.scheduled,
 } satisfies ExportedHandler<Env>;

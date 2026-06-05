@@ -14,9 +14,13 @@
  *                    loads + deletes that record (single-use), verifies the CSRF token + same
  *                    origin, and completes authorization with the SERVER-SIDE authReq.
  *
- * This is the front door to the owner's entire digital life — the four hardenings (owner-session
- * gate, server-side consent record, CSRF + same-origin, security headers) close an auth-bypass,
- * a scope-inflation, a CSRF, and a clickjacking finding respectively.
+ * This is the front door to the owner's entire digital life. Round-1 hardenings: owner-session
+ * gate, server-side consent record, CSRF + same-origin, security headers. Round-2 (adversarial
+ * review) hardenings IN THIS FILE: the scope FLOOR is now ENFORCED here (the provider does not
+ * reject an over-broad `?scope=`) — REJECTED with 400 `invalid_scope` on both the authorize GET
+ * and again before `completeAuthorization`; `parseAuthRequest`/`lookupClient` are wrapped in
+ * try/catch → generic 400 (no internal/client-enumeration leak); and EVERY response (incl. the
+ * 404 fall-through) routes through the hardened-header helper.
  *
  * SECURITY: no secret/token value is ever rendered or logged. The page shows only scope
  * identifiers (public capability labels) + the client name. The daemon/MCP RUNTIME token path
@@ -26,6 +30,7 @@
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import type { AtlasEnv } from "../env.js";
 import { authHtmlResponse, authResponse } from "./headers.js";
+import { disallowedScopes } from "./scopes.js";
 import {
   SESSION_COOKIE,
   issueSession,
@@ -130,7 +135,7 @@ export const consentHandler = {
         const ownerToken = await env.OWNER_AUTH_TOKEN?.get();
         // Fail-closed if the owner token is not yet provisioned (Gate C).
         if (!ownerToken) return authResponse("Owner auth not configured", { status: 503 });
-        if (typeof submitted !== "string" || !timingSafeEqual(submitted, ownerToken)) {
+        if (typeof submitted !== "string" || !(await timingSafeEqual(submitted, ownerToken))) {
           // No Set-Cookie on failure.
           return authResponse("Invalid token", { status: 401 });
         }
@@ -152,10 +157,26 @@ export const consentHandler = {
         if (!session) {
           return authResponse(null, { status: 302, headers: { location: "/login" } });
         }
-        // Parse the inbound OAuth request server-side and look up the client metadata.
-        const authReq = await env.OAUTH_PROVIDER.parseAuthRequest(request);
-        const clientInfo = await env.OAUTH_PROVIDER.lookupClient(authReq.clientId);
-        const clientName = clientInfo?.clientName ?? authReq.clientId;
+        // Parse the inbound OAuth request server-side and look up the client metadata. Wrap in
+        // try/catch so a provider-internal error returns a GENERIC 400 (no internal/client
+        // enumeration leak) WITH the hardened headers — never an unstyled provider exception.
+        let authReq: AuthRequest;
+        let clientName: string;
+        try {
+          authReq = await env.OAUTH_PROVIDER.parseAuthRequest(request);
+          const clientInfo = await env.OAUTH_PROVIDER.lookupClient(authReq.clientId);
+          clientName = clientInfo?.clientName ?? authReq.clientId;
+        } catch {
+          return authResponse("Bad Request: invalid authorization request", { status: 400 });
+        }
+
+        // ENFORCE the scope FLOOR (Round-2): the provider reads `?scope=` verbatim and never
+        // rejects an over-broad scope — so a request for e.g. the full mail.google.com/ or
+        // vault.write must be REJECTED here (not silently downscoped), so it is visible/auditable.
+        const overBroad = disallowedScopes(authReq.scope);
+        if (overBroad.length > 0) {
+          return authResponse(`invalid_scope: ${overBroad.map(esc).join(", ")}`, { status: 400 });
+        }
 
         // Store the CANONICAL authReq + a single-use CSRF token server-side under an opaque id.
         // The browser only ever sees the opaque consent id — scope can't be inflated from the form.
@@ -191,7 +212,7 @@ export const consentHandler = {
         const record = JSON.parse(raw) as ConsentRecord;
 
         // CSRF: constant-time-compare the submitted token against the bound one.
-        if (!timingSafeEqual(csrf, record.csrf)) {
+        if (!(await timingSafeEqual(csrf, record.csrf))) {
           return authResponse("Forbidden: CSRF", { status: 403 });
         }
 
@@ -204,6 +225,15 @@ export const consentHandler = {
         // form. `props` is the identity the apiHandler reads from `ctx.props` for door-level
         // least privilege (full per-tool 403 enforcement lands in mcp-google at 00-08).
         const authReq = record.authReq;
+
+        // Re-ENFORCE the scope FLOOR before issuing the grant (defense-in-depth: the allow-list is
+        // the single source of truth at the moment of grant, independent of when the record was
+        // written). REJECT — never downscope — so an over-broad request stays visible/auditable.
+        const overBroad = disallowedScopes(authReq.scope);
+        if (overBroad.length > 0) {
+          return authResponse(`invalid_scope: ${overBroad.map(esc).join(", ")}`, { status: 400 });
+        }
+
         const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
           request: authReq,
           userId: OWNER_ID,
@@ -217,7 +247,9 @@ export const consentHandler = {
       return authResponse("Method Not Allowed", { status: 405 });
     }
 
-    return new Response("Not found", { status: 404 });
+    // Every other path returns through the hardened-header helper (Round-2 P3): the bare 404 must
+    // also carry frame-ancestors/X-Frame-Options/Cache-Control:no-store/Referrer-Policy.
+    return authResponse("Not found", { status: 404 });
   },
 };
 

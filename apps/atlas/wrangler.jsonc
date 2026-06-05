@@ -124,7 +124,13 @@
     // token / private KEY are in secrets_store_secrets above, NEVER here.
     "GOOGLE_CLIENT_ID": "<set-after-gcp-oauth-client>",
     "GOOGLE_REDIRECT_URI": "<deployed-atlas-authorize-callback>",
-    "GH_APP_CLIENT_ID": "<set-after-github-app>"
+    "GH_APP_CLIENT_ID": "<set-after-github-app>",
+    // Round-2 hardening: the out-of-band OAuth client registry (NON-secret) — a JSON array of
+    // { clientId, redirectUris, clientName } seeded into OAUTH_KV at startup (auth/clients.ts).
+    // The provider exposes NO anonymous registration endpoint, so an attacker can't self-register
+    // a confidential client with their own redirect_uri. Declared-and-deferred: the owner fills
+    // this with the daemon + each MCP client's id + redirect URIs at Gate C. Empty = seeding no-op.
+    "CLIENT_REGISTRY": "[]"
   },
 
   "observability": { "enabled": true },

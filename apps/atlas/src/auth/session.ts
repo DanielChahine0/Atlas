@@ -48,19 +48,29 @@ function b64urlDecode(s: string): Uint8Array {
 }
 
 /**
- * Constant-time compare of two strings. Returns false on length mismatch (after a fixed-cost
- * pass) and never short-circuits on the first differing byte — defeats timing oracles on the
- * owner token and the CSRF/session signature comparison.
+ * Length-independent constant-time compare (Round-2 hardening). A naive `max(lenA, lenB)` loop
+ * leaks the longer input's length via its iteration count. Instead we HMAC-SHA-256 BOTH inputs
+ * under a fresh ephemeral random key and compare the fixed 32-byte digests — the comparison cost
+ * is identical regardless of input length OR content, and an attacker can't precompute a digest
+ * (the key is random per call). Applied to the OWNER_AUTH_TOKEN compare, the session-signature
+ * compare, and the CSRF compare.
  */
-export function timingSafeEqual(a: string, b: string): boolean {
-  const ab = encoder.encode(a);
-  const bb = encoder.encode(b);
-  // Compare against a fixed-length buffer so the loop cost does not reveal the length.
-  const len = Math.max(ab.length, bb.length);
-  let diff = ab.length ^ bb.length;
-  for (let i = 0; i < len; i++) {
-    diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0);
-  }
+export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const ephemeral = new Uint8Array(32);
+  crypto.getRandomValues(ephemeral);
+  const key = await crypto.subtle.importKey("raw", ephemeral, { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  const [da, db] = await Promise.all([
+    crypto.subtle.sign("HMAC", key, encoder.encode(a)),
+    crypto.subtle.sign("HMAC", key, encoder.encode(b)),
+  ]);
+  const va = new Uint8Array(da);
+  const vb = new Uint8Array(db);
+  // Both digests are exactly 32 bytes — fixed-length, content+length-independent compare.
+  // (`?? 0` keeps strict noUncheckedIndexedAccess happy without changing the fixed-cost loop.)
+  let diff = va.length ^ vb.length;
+  for (let i = 0; i < va.length; i++) diff |= (va[i] ?? 0) ^ (vb[i] ?? 0);
   return diff === 0;
 }
 
@@ -142,7 +152,7 @@ export async function verifySession(
     return null; // fail-closed if the signing key is unprovisioned
   }
   const expected = await hmacSign(key, encoded);
-  if (!timingSafeEqual(sig, expected)) return null;
+  if (!(await timingSafeEqual(sig, expected))) return null;
   try {
     const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(encoded))) as SessionPayload;
     if (typeof payload.exp !== "number" || payload.exp < Math.floor(Date.now() / 1000)) return null;

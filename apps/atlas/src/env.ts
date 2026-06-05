@@ -48,4 +48,11 @@ export interface AtlasEnv extends SharedEnv {
    * deferred: provisioned at the owner checkpoint (Gate C), NOT now.
    */
   SESSION_SIGNING_KEY?: SecretsStoreSecret;
+  /**
+   * Out-of-band OAuth client registry — a NON-secret [vars] JSON array of
+   * { clientId, redirectUris, clientName }, seeded into OAUTH_KV at startup (auth/clients.ts).
+   * Round-2 hardening: the provider exposes no anonymous registration endpoint, so clients are
+   * seeded here instead. Declared-and-deferred (Gate C); "[]" = no-op.
+   */
+  CLIENT_REGISTRY?: string;
 }

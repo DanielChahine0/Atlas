@@ -582,6 +582,197 @@ describe("Finding 4 — clickjacking + cache headers on the auth surface", () =>
   });
 });
 
+// ── Round-2 hardening (adversarial review) ────────────────────────────────────────────────────
+
+/**
+ * A consent env whose mocked `parseAuthRequest` FAITHFULLY echoes the request URL's `?scope=` —
+ * this drives scope from the URL exactly as the real provider does, so the scope-floor enforcement
+ * is tested against the REAL vector (not a constant-scope mock). Used by the P1 test below.
+ */
+function consentEnvUrlScope(): AtlasEnv {
+  const completeAuthorization = vi.fn(async (opts: { scope: string[] }) => ({
+    redirectTo: `https://atlas.example/cb?granted=${encodeURIComponent(opts.scope.join(","))}`,
+  }));
+  return {
+    ...(env as unknown as AtlasEnv),
+    OAUTH_KV: kv.OAUTH_KV,
+    OWNER_AUTH_TOKEN: secretStub(OWNER_TOKEN),
+    SESSION_SIGNING_KEY: secretStub("session-signing-key-value"),
+    OAUTH_PROVIDER: {
+      parseAuthRequest: vi.fn(async (req: Request) => {
+        const u = new URL(req.url);
+        const scope = (u.searchParams.get("scope") ?? "").split(" ").filter(Boolean);
+        return {
+          responseType: "code",
+          clientId: u.searchParams.get("client_id") ?? "daemon-client",
+          redirectUri: "https://atlas.example/cb",
+          scope,
+          state: "xyz",
+          codeChallenge: "chal",
+          codeChallengeMethod: "S256",
+        } satisfies AuthRequest;
+      }),
+      lookupClient: vi.fn(async () => ({ clientId: "daemon-client", clientName: "Atlas Daemon" })),
+      completeAuthorization,
+    } as unknown as AtlasEnv["OAUTH_PROVIDER"],
+  } as AtlasEnv;
+}
+
+describe("Round-2 P1 — scope FLOOR is ENFORCED in code (the real URL ?scope= vector)", () => {
+  it("an out-of-allow-list ?scope= (full mail.google.com/) is REJECTED with 400 — NOT granted", async () => {
+    const e = consentEnvUrlScope();
+    const cookie = await ownerCookieHeader(e);
+    // The over-broad scope CLAUDE.md says is NEVER granted, driven straight from the URL.
+    const overBroad = "https://mail.google.com/";
+    const res = await consentHandler.fetch(
+      new Request(
+        `https://atlas.example/authorize?response_type=code&client_id=daemon-client&scope=${encodeURIComponent(overBroad)}`,
+        { headers: { cookie } },
+      ),
+      e,
+      makeCtx(),
+    );
+    // ENFORCED: rejected at authorize time (this assertion FAILS against pre-fix consent.ts,
+    // which rendered a consent page for the over-broad scope and would have granted it).
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("invalid_scope");
+    // completeAuthorization was never reached.
+    expect((e.OAUTH_PROVIDER.completeAuthorization as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
+  it("vault.write alone is out-of-floor for an authorize request → 400", async () => {
+    const e = consentEnvUrlScope();
+    const cookie = await ownerCookieHeader(e);
+    // vault.write IS in scopesSupported, so prove a DIFFERENT out-of-list token is rejected,
+    // and that an IN-list request still renders consent (control).
+    const res = await consentHandler.fetch(
+      new Request(
+        `https://atlas.example/authorize?response_type=code&client_id=daemon-client&scope=${encodeURIComponent("https://www.googleapis.com/auth/calendar")}`,
+        { headers: { cookie } },
+      ),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("invalid_scope");
+  });
+
+  it("an IN-floor ?scope= renders the consent page (control — floor allows the allow-list)", async () => {
+    const e = consentEnvUrlScope();
+    const cookie = await ownerCookieHeader(e);
+    const res = await consentHandler.fetch(
+      new Request(
+        "https://atlas.example/authorize?response_type=code&client_id=daemon-client&scope=gmail.modify%20calendar.events",
+        { headers: { cookie } },
+      ),
+      e,
+      makeCtx(),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("gmail.modify");
+  });
+});
+
+describe("Round-2 P4 — hardened headers on EVERY auth-surface response type", () => {
+  // Build one request per response type the consent surface can return, then assert the hardened
+  // header set on each. This would have caught the Round-1 bare 404.
+  async function responsesByType(): Promise<Record<string, Response>> {
+    const e = consentEnv();
+    const cookie = await ownerCookieHeader(e);
+
+    // Mint a real consent record so the redirect (302) path can complete.
+    const getRes = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize?response_type=code&client_id=daemon-client", {
+        headers: { cookie },
+      }),
+      e,
+      makeCtx(),
+    );
+    const html = await getRes.text();
+    const consentId = /name="consent_id" value="([^"]+)"/.exec(html)?.[1] ?? "";
+    const csrf = /name="csrf" value="([^"]+)"/.exec(html)?.[1] ?? "";
+    const redirect302 = await consentHandler.fetch(
+      new Request("https://atlas.example/authorize", {
+        method: "POST",
+        body: new URLSearchParams({ decision: "approve", consent_id: consentId, csrf }),
+        headers: { cookie, ...SAME_ORIGIN_HEADERS },
+      }),
+      e,
+      makeCtx(),
+    );
+
+    return {
+      "consent GET (200)": getRes,
+      "login GET (200)": await consentHandler.fetch(new Request("https://atlas.example/login"), e, makeCtx()),
+      "redirect (302)": redirect302,
+      "bad request (400)": await consentHandler.fetch(
+        new Request("https://atlas.example/authorize", {
+          method: "POST",
+          body: new URLSearchParams({ decision: "approve", consent_id: "missing", csrf: "x" }),
+          headers: { cookie, ...SAME_ORIGIN_HEADERS },
+        }),
+        e,
+        makeCtx(),
+      ),
+      "unauthorized (401)": await consentHandler.fetch(
+        new Request("https://atlas.example/authorize", {
+          method: "POST",
+          body: new URLSearchParams({ decision: "approve", consent_id: "x", csrf: "y" }),
+          headers: SAME_ORIGIN_HEADERS,
+        }),
+        e,
+        makeCtx(),
+      ),
+      "forbidden (403)": await consentHandler.fetch(
+        new Request("https://atlas.example/login", {
+          method: "POST",
+          body: new URLSearchParams({ token: "x" }),
+          headers: { "sec-fetch-site": "cross-site", origin: "https://evil.example" },
+        }),
+        e,
+        makeCtx(),
+      ),
+      "not found (404)": await consentHandler.fetch(new Request("https://atlas.example/nope"), e, makeCtx()),
+      "method not allowed (405)": await consentHandler.fetch(
+        new Request("https://atlas.example/authorize", { method: "DELETE", headers: { cookie } }),
+        e,
+        makeCtx(),
+      ),
+    };
+  }
+
+  it("each response type carries CSP frame-ancestors 'none' + X-Frame-Options DENY + no-store + no-referrer", async () => {
+    const responses = await responsesByType();
+    for (const [label, res] of Object.entries(responses)) {
+      expect(res.headers.get("content-security-policy"), label).toContain("frame-ancestors 'none'");
+      expect(res.headers.get("x-frame-options"), label).toBe("DENY");
+      expect(res.headers.get("cache-control"), label).toBe("no-store");
+      expect(res.headers.get("referrer-policy"), label).toBe("no-referrer");
+    }
+  });
+});
+
+describe("Round-2 P2 — no anonymous client registration endpoint", () => {
+  it("POST /oauth/register is not exposed (the provider has no registration endpoint)", async () => {
+    // Drive the COMPOSED worker (the provider owns fetch). With clientRegistrationEndpoint omitted,
+    // the provider does not implement /oauth/register — an anonymous DCR attempt gets no 2xx.
+    const worker = (await import("../src/index.js")).default;
+    const res = await worker.fetch!(
+      new Request("https://atlas.example/oauth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ redirect_uris: ["https://evil.example/cb"], token_endpoint_auth_method: "client_secret_basic" }),
+      }),
+      env as unknown as AtlasEnv,
+      makeCtx(),
+    );
+    // No client was minted — the endpoint is closed (404 fall-through, never a 201 Created).
+    expect(res.status).not.toBe(201);
+    expect(res.status).not.toBe(200);
+    expect([404, 400, 405]).toContain(res.status);
+  });
+});
+
 // ── LIVE round-trip (gated on the owner-provisioning checkpoints, Tasks 4-6) ──────────────────
 // Un-skip ONLY after: (a) the GCP OAuth client + consent screen exist, (b) the GitHub App + key
 // exist, (c) the Secrets Store is seeded and the wrangler secrets_store_secrets store_id is real.
