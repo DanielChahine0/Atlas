@@ -49,8 +49,8 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 **Plans**: 8 plans
 
 **Wave 1** *(foundation — parallel, no file overlap)*
-- [ ] 01-01-PLAN.md — Expand mcp-google with Herald/Forge/Sundial/Compass scope-floored tools (gmail.compose/readonly, calendar.events/readonly) + redaction egress
-- [ ] 01-02-PLAN.md — D1 `tasks`/`subtasks` migration (`idx_tasks_dedupe`) + `@atlas/tasks` data-access (dedupe/merge)
+- [x] 01-01-PLAN.md — Expand mcp-google with Herald/Forge/Sundial/Compass scope-floored tools (gmail.compose/readonly, calendar.events/readonly) + redaction egress
+- [x] 01-02-PLAN.md — D1 `tasks`/`subtasks` migration (`idx_tasks_dedupe`) + `@atlas/tasks` data-access (dedupe/merge)
 
 **Wave 2** *(the five agents — parallel, each owns its own apps/ dir; blocked on Wave 1)*
 - [ ] 01-03-PLAN.md — Filer: Gmail labeler (sweep + FilerCursor DO + push/renewal), labels-only, idempotent on AI/Reviewed, never surfaces 2FA/phishing
@@ -126,7 +126,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
-| 1. Core Loop / Morning Pipeline | 0/TBD | Not started | - |
+| 1. Core Loop / Morning Pipeline | 2/8 | In Progress|  |
 | 2. Weekly Value | 0/TBD | Not started | - |
 | 3. Capture (Local) | 0/TBD | Not started | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
