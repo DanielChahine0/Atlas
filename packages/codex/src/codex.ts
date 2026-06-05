@@ -181,24 +181,56 @@ function parseChildren(lines: string[]): unknown {
   return isList ? parseList(lines, base) : parseMap(lines, base);
 }
 
-/** Parse a YAML list of (possibly multi-key) items at the given indent. */
+/**
+ * Parse a YAML list of (possibly multi-key) items at the given indent.
+ *
+ * Each item's lines are gathered as a group: the `- …` marker line plus its continuation
+ * lines (indented deeper than the marker). The marker line contributes its content from
+ * column 2 (after `- `). Continuation lines are NOT assumed to be exactly 2 columns in
+ * (W17) — a `- ` marker followed by 3- or 4-space-indented keys is valid YAML and used to
+ * silently drop owner facts. We instead measure the ACTUAL minimum indent over this item's
+ * continuation lines and strip that many columns, so the first continuation key lands at
+ * column 0 (matching the marker line's content) for parseListItem/parseMap.
+ */
 function parseList(lines: string[], base: number): unknown[] {
   const items: unknown[] = [];
-  let cur: string[] | null = null;
-  const push = () => {
-    if (cur) items.push(parseListItem(cur));
-    cur = null;
+  // Group lines into items: each group is the marker line + its continuation lines (still
+  // base-relative, untrimmed) so we can compute the real continuation indent per item.
+  let group: string[] | null = null;
+  const groups: string[][] = [];
+  const flush = () => {
+    if (group) groups.push(group);
+    group = null;
   };
   for (const l of lines) {
     const body = l.slice(base);
     if (body.startsWith("- ")) {
-      push();
-      cur = [body.slice(2)];
-    } else if (cur) {
-      cur.push(body.replace(/^\s\s/, ""));
+      flush();
+      group = [body];
+    } else if (group) {
+      group.push(body);
     }
   }
-  push();
+  flush();
+
+  for (const g of groups) {
+    const marker = g[0]!; // begins "- "
+    const continuation = g.slice(1);
+    // The marker's content begins after "- " (column 2), but the author may pad with extra
+    // spaces (`-  key:` → content column 3). The item's interior indent is the column of
+    // that first content char; continuation keys must align to it. We DON'T assume column 2
+    // (W17): take the actual content column, and reconcile with the continuation min-indent
+    // so a 3- or 4-space continuation still lands at column 0 for parseListItem/parseMap.
+    const afterDash = marker.slice(1); // drop the "-"; keep the spaces the author wrote
+    const markerContentIndent = 1 + (afterDash.length - afterDash.trimStart().length); // ≥2
+    const nonBlankCont = continuation.filter((c) => c.trim() !== "");
+    const strip =
+      nonBlankCont.length > 0
+        ? Math.min(markerContentIndent, minIndent(nonBlankCont))
+        : markerContentIndent;
+    const itemLines = [marker.slice(strip), ...continuation.map((c) => c.slice(strip))];
+    items.push(parseListItem(itemLines));
+  }
   return items;
 }
 
@@ -241,7 +273,9 @@ function parseScalar(raw: string): unknown {
   if (v.startsWith("[") && v.endsWith("]")) {
     const inner = v.slice(1, -1).trim();
     if (inner === "") return [];
-    return inner.split(",").map((s) => parseScalar(s.trim()));
+    // Quote-aware split (I29): a comma INSIDE a '…' or "…" element does NOT separate
+    // elements, so `["Next.js, the App Router", React]` stays two elements, not three.
+    return splitFlowElements(inner).map((s) => parseScalar(s.trim()));
   }
   if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
     return v.slice(1, -1);
@@ -250,6 +284,34 @@ function parseScalar(raw: string): unknown {
   if (v === "false") return false;
   if (v !== "" && !Number.isNaN(Number(v)) && /^-?\d+(\.\d+)?$/.test(v)) return Number(v);
   return v;
+}
+
+/**
+ * Split a YAML flow-list interior on top-level commas, respecting single/double quotes
+ * (I29). A comma inside a quoted element is part of that element. Quoting is tracked with a
+ * single active-quote char; the matching closing quote of the same kind ends it (we do not
+ * model YAML's escape rules — the Codex is a small owner-authored file, not arbitrary YAML).
+ */
+function splitFlowElements(inner: string): string[] {
+  const out: string[] = [];
+  let buf = "";
+  let quote: '"' | "'" | null = null;
+  for (const ch of inner) {
+    if (quote) {
+      buf += ch;
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      buf += ch;
+    } else if (ch === ",") {
+      out.push(buf);
+      buf = "";
+    } else {
+      buf += ch;
+    }
+  }
+  out.push(buf);
+  return out;
 }
 
 function indentOf(line: string): number {

@@ -143,6 +143,75 @@ describe("Codex cache-as-system-block (Anthropic prompt caching at 0.1x)", () =>
   });
 });
 
+describe("Codex YAML — list-item continuation indent is not assumed 2-space (W17)", () => {
+  it("parses all fields of a list item whose continuation keys are indented 3 spaces (no silent drop)", () => {
+    // `- ` marker, then continuation keys indented THREE spaces (not the conventional 2).
+    const text = `education:
+  -  school: University of Toronto
+     degree: BSc
+     field: Computer Science
+     gpa: "3.8/4.0"
+`;
+    const codex = parseCodex(text);
+    expect(codex.education.length).toBe(1);
+    const item = codex.education[0] as Record<string, unknown>;
+    // Every continuation field survives (the bug dropped degree/field/gpa).
+    expect(item.school).toBe("University of Toronto");
+    expect(item.degree).toBe("BSc");
+    expect(item.field).toBe("Computer Science");
+    expect(item.gpa).toBe("3.8/4.0");
+  });
+
+  it("parses all fields when continuation keys are indented 4 spaces", () => {
+    const text = `work_experience:
+  - title: Software Engineer Intern
+    company: Shopify
+    location: Remote
+`;
+    const codex = parseCodex(text);
+    expect(codex.work.length).toBe(1);
+    const item = codex.work[0] as Record<string, unknown>;
+    expect(item.title).toBe("Software Engineer Intern");
+    expect(item.company).toBe("Shopify");
+    expect(item.location).toBe("Remote");
+  });
+
+  it("preserves a nested block under a list-item continuation key", () => {
+    const text = `work_experience:
+  - title: Engineer
+    bullets:
+      - "Shipped a Workers pipeline."
+      - "Cut latency 40%."
+`;
+    const codex = parseCodex(text);
+    const item = codex.work[0] as Record<string, unknown>;
+    expect(item.title).toBe("Engineer");
+    expect(item.bullets).toEqual(["Shipped a Workers pipeline.", "Cut latency 40%."]);
+  });
+});
+
+describe("Codex YAML — flow-list scalar is quote-aware (I29)", () => {
+  it("keeps a quoted flow-list element containing a comma as ONE element", () => {
+    const text = `skills:
+  frameworks: ["Next.js, the App Router", React, Cloudflare Workers]
+`;
+    const codex = parseCodex(text);
+    expect(codex.skills.frameworks).toEqual([
+      "Next.js, the App Router",
+      "React",
+      "Cloudflare Workers",
+    ]);
+  });
+
+  it("handles single-quoted elements with commas too", () => {
+    const text = `skills:
+  tools: ['Vite, Vitest', git, 'jq, yq']
+`;
+    const codex = parseCodex(text);
+    expect(codex.skills.tools).toEqual(["Vite, Vitest", "git", "jq, yq"]);
+  });
+});
+
 describe("Codex carries ZERO credentials (T-00-72 — facts, never secrets)", () => {
   it("the parsed Codex has no key matching /token|secret|password|api[_-]?key/i", () => {
     const codex = parseCodex(CODEX_FIXTURE);
