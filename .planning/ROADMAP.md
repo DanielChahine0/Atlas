@@ -53,11 +53,11 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 01-02-PLAN.md — D1 `tasks`/`subtasks` migration (`idx_tasks_dedupe`) + `@atlas/tasks` data-access (dedupe/merge)
 
 **Wave 2** *(the five agents — parallel, each owns its own apps/ dir; blocked on Wave 1)*
-- [ ] 01-03-PLAN.md — Filer: Gmail labeler (sweep + FilerCursor DO + push/renewal), labels-only, idempotent on AI/Reviewed, never surfaces 2FA/phishing
-- [ ] 01-04-PLAN.md — Herald: daily draft digest (five sections, no Friday case), output-side redaction guardrail (leak → block draft + P2)
-- [ ] 01-05-PLAN.md — Forge: task/subtask extractor → D1 (dedupe/merge in DO lock), security-skip, per-task replay-safe events
-- [ ] 01-06-PLAN.md — Sundial: task → calendar deadline blocks (reconcile by atlasTaskId, no delete, no dup on re-run)
-- [ ] 01-07-PLAN.md — Compass: daily planner (free/busy bin-pack, overcommit→Couldn't-fit+P3), Opus effort=medium KV-overridable, calendar read-only
+- [x] 01-03-PLAN.md — Filer: Gmail labeler (sweep + FilerCursor DO + push/renewal), labels-only, idempotent on AI/Reviewed, never surfaces 2FA/phishing
+- [x] 01-04-PLAN.md — Herald: daily draft digest (five sections, no Friday case), output-side redaction guardrail (leak → block draft + P2)
+- [x] 01-05-PLAN.md — Forge: task/subtask extractor → D1 (dedupe/merge in DO lock), security-skip, per-task replay-safe events
+- [x] 01-06-PLAN.md — Sundial: task → calendar deadline blocks (reconcile by atlasTaskId, no delete, no dup on re-run)
+- [x] 01-07-PLAN.md — Compass: daily planner (free/busy bin-pack, overcommit→Couldn't-fit+P3), Opus effort=medium KV-overridable, calendar read-only
 
 **Wave 3** *(integration — blocked on Wave 2 completion)*
 - [ ] 01-08-PLAN.md — MorningChain Workflow + 07:45 dispatcher + invokeAgent transport + halt→Flagger P2 + go-live checklist (D1-03/D1-04/D1-06)
@@ -126,7 +126,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
-| 1. Core Loop / Morning Pipeline | 2/8 | In Progress|  |
+| 1. Core Loop / Morning Pipeline | 7/8 | In Progress|  |
 | 2. Weekly Value | 0/TBD | Not started | - |
 | 3. Capture (Local) | 0/TBD | Not started | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
