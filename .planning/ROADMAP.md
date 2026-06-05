@@ -82,7 +82,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 **Plans**: 7 plans
 
 **Wave 1** *(foundation — the incident-bus hard edge; runs alone, touches every wrangler)*
-- [ ] 02-01-PLAN.md — `atlas-incidents` queue topology (D2-04) + `RawIncident` schema + `flag()` rework (D2-05) + ALL ~15 caller migrations + `0004` D1 migration (events/windows/jobs/flags); 315 tests stay green
+- [x] 02-01-PLAN.md — `atlas-incidents` queue topology (D2-04) + `RawIncident` schema + `flag()` rework (D2-05) + ALL ~15 caller migrations + `0004` D1 migration (events/windows/jobs/flags); 315 tests stay green
 
 **Wave 2** *(the agents + retrofit — parallel, each owns its own dir; blocked on 02-01)*
 - [ ] 02-02-PLAN.md — Flagger: `atlas-incidents` sole consumer → score/dedupe/route → `op:upsert` flag to `atlas-wire`; FlaggerState DO single-alarm heartbeat scheduler; ntfy push (P1/P2); token-gated `/ack` route
@@ -149,7 +149,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 |-------|----------------|--------|-----------|
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
-| 2. Weekly Value | 0/7 | Planned | - |
+| 2. Weekly Value | 1/7 | In Progress|  |
 | 3. Capture (Local) | 0/TBD | Not started | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
