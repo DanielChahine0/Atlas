@@ -282,6 +282,11 @@ export function buildScanSummaryEvent(date: string, total: number, tasks: number
 /**
  * Build a funnel increment Wire event for a (thread, stage) pair.
  * idempotencyKey: headhunter:funnel:<threadId>:<stage>
+ *
+ * M5 fix: include payload.counter = "funnel:<stage>" so Steward increments the
+ * per-stage counter (funnel:oa, funnel:interview, …) instead of collapsing all
+ * stages onto the single "pipeline" counter (apply.ts derives counter ?? entity).
+ * The stage + thread_id tags are preserved for observability.
  */
 export function buildFunnelEvent(threadId: string, stage: string): WireEvent {
   return {
@@ -289,7 +294,7 @@ export function buildFunnelEvent(threadId: string, stage: string): WireEvent {
     type: "funnel.increment",
     entity: "pipeline",
     op: "increment",
-    payload: { stage, thread_id: threadId },
+    payload: { stage, thread_id: threadId, counter: `funnel:${stage}` },
     idempotencyKey: `headhunter:funnel:${threadId}:${stage}`,
   };
 }
