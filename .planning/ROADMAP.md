@@ -85,7 +85,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 02-01-PLAN.md — `atlas-incidents` queue topology (D2-04) + `RawIncident` schema + `flag()` rework (D2-05) + ALL ~15 caller migrations + `0004` D1 migration (events/windows/jobs/flags); 315 tests stay green
 
 **Wave 2** *(the agents + retrofit — parallel, each owns its own dir; blocked on 02-01)*
-- [ ] 02-02-PLAN.md — Flagger: `atlas-incidents` sole consumer → score/dedupe/route → `op:upsert` flag to `atlas-wire`; FlaggerState DO single-alarm heartbeat scheduler; ntfy push (P1/P2); token-gated `/ack` route
+- [x] 02-02-PLAN.md — Flagger: `atlas-incidents` sole consumer → score/dedupe/route → `op:upsert` flag to `atlas-wire`; FlaggerState DO single-alarm heartbeat scheduler; ntfy push (P1/P2); token-gated `/ack` route
 - [ ] 02-03-PLAN.md — flagger-watchdog (separate cron Worker, self-P1 on Flagger silence — GATING kill test) + heartbeat retrofit into Filer/Forge/Sundial/Compass
 - [ ] 02-04-PLAN.md — Scout: Friday events digest (RSS/HTML/Gmail, no Browser Rendering) + Codex/KV relevance + D1 `events` + idempotent Steward upserts; never follows email links
 - [ ] 02-05-PLAN.md — Headhunter: hiring-window state machine (D1 + HeadhunterState DO) + apply-by tasks via Forge (urgency bypasses fit floor; low-confidence → P3) + single-emitter funnel (GATING re-scan idempotency)
@@ -149,7 +149,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 |-------|----------------|--------|-----------|
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
-| 2. Weekly Value | 1/7 | In Progress|  |
+| 2. Weekly Value | 2/7 | In Progress|  |
 | 3. Capture (Local) | 0/TBD | Not started | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
