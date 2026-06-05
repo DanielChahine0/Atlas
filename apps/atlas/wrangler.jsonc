@@ -67,13 +67,50 @@
     { "binding": "NOOP", "service": "atlas", "entrypoint": "NoopAgent" }
   ],
 
+  // The three OAuth provider secrets the SPINE-04 code reads via `await env.X.get()`
+  // (oauth/google.ts + oauth/github.ts) — bound from the single per-account Cloudflare
+  // Secrets Store. This is the W4 leg of the GLOBAL-4 cross-wave handoff: 00-01 wrote the
+  // base config in W1, 00-03 added the `services` NOOP binding in W3, and THIS plan (00-06)
+  // adds `secrets_store_secrets` in W4. Strictly increasing waves keep this shared file
+  // race-free, and the binding lands in the SAME wave as the code that reads it.
+  //
+  // NEVER a secret VALUE here — only a TYPE/binding reference (binding name + store id +
+  // the seeded secret name). The `store_id` is a placeholder until the owner creates the
+  // store (Plan 00-06 Task-6 gate: `wrangler secrets-store store create atlas --remote`
+  // prints the real `<atlas-store-id>`; fill it in then). Reads are async: `await env.X.get()`.
+  // `--remote` secrets aren't readable in `wrangler dev` — make non-remote dev copies.
+  "secrets_store_secrets": [
+    {
+      "binding": "GOOGLE_CLIENT_SECRET",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "google-oauth-client-secret"
+    },
+    {
+      "binding": "GOOGLE_REFRESH_TOKEN",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "google-refresh-token"
+    },
+    {
+      "binding": "GH_APP_PRIVATE_KEY",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "github-app-private-key"
+    }
+  ],
+
   // PLAINTEXT non-secrets ONLY. NEVER secrets, NEVER counters. Real credentials
   // are bound separately via Secrets Store / `wrangler secret put` in Plan 06/07.
   "vars": {
     "AIG_ACCOUNT_ID": "<set-before-phase-1>",
     "AIG_GATEWAY_ID": "atlas-reasoning",
     "MODEL_ATLAS": "claude-opus-4-8",
-    "MODEL_DEFAULT": "claude-sonnet-4-6"
+    "MODEL_DEFAULT": "claude-sonnet-4-6",
+    // OAuth NON-secret identifiers (SPINE-04). The Google client id + redirect URI and the
+    // GitHub App client id (the JWT `iss`) are PUBLIC identifiers, not secrets — they belong
+    // in [vars]. Seeded by the owner gates (Plan 00-06 Tasks 4-5). The client SECRET / refresh
+    // token / private KEY are in secrets_store_secrets above, NEVER here.
+    "GOOGLE_CLIENT_ID": "<set-after-gcp-oauth-client>",
+    "GOOGLE_REDIRECT_URI": "<deployed-atlas-authorize-callback>",
+    "GH_APP_CLIENT_ID": "<set-after-github-app>"
   },
 
   "observability": { "enabled": true },
