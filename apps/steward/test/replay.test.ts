@@ -52,4 +52,32 @@ describe("replay — SPINE-02 / Pillar 5 (meta.changes===0)", () => {
     expect(await steward.apply(evt)).toEqual({ applied: false });
     expect((await steward.counter("tasks_replayed")).value).toBe(1);
   });
+
+  // CLAUDE.md Definition-of-Done replay test for the op:"upsert"/entity:"flag" shape that
+  // Flagger (02-02) emits and the funnel upserts (02-05) ride. An upsert is a stable-row,
+  // last-writer-wins view (NOT a counter), so its replay-safety lives entirely in the ledger:
+  // the FIRST apply inserts the idempotency key (applied:true); the SECOND apply finds the key
+  // already present, so the ledger INSERT OR IGNORE reports meta.changes===0 and apply()
+  // returns {applied:false} — the vault_outbox INSERT OR IGNORE (PK idem) writes nothing new
+  // either. A replayed flag-upsert is therefore a complete no-op at every table (Pillar 5).
+  it("replaying an op:upsert/entity:flag event is a no-op (applied:false, no double-write)", async () => {
+    const steward = STEWARD_LOCK.getByName("vault");
+    const flagEvt: WireEvent = {
+      agent: "Flagger",
+      type: "flag.upserted",
+      entity: "flag",
+      op: "upsert",
+      // The canonical flag-upsert payload: a stable row keyed by the flag id. note/field route
+      // the op-mapping upsert to /vault/Flags/<id>.md (last-writer-wins).
+      payload: { note: "Flags/flg-2026-05-31-abc", field: "status", id: "flg-2026-05-31-abc", status: "open" },
+      // The structured flag idempotency key shape: flg:<date>:<agent>:<hash>.
+      idempotencyKey: "flg:2026-05-31:Sundial:abc",
+    };
+
+    // First apply lands the row; the replay is a guaranteed no-op (key already in the ledger).
+    expect(await steward.apply(flagEvt)).toEqual({ applied: true });
+    expect(await steward.apply(flagEvt)).toEqual({ applied: false }); // replay → skipped
+    // A third replay (any age) is STILL a no-op — the ledger has no TTL (D-08).
+    expect(await steward.apply(flagEvt)).toEqual({ applied: false });
+  });
 });
