@@ -36,6 +36,19 @@ export interface AtlasEnv extends Omit<SharedEnv, "INCIDENTS"> {
   SUNDIAL?: Service;
   COMPASS?: Service;
 
+  // ── Phase 2 (D2-11): the standalone-cron agent service bindings ──────────────────────
+  // Wired so the scheduled() dispatcher's 4 NEW standalone cron cases (Headhunter
+  // deadlines-light + full, Friday Scout+Herald, Friday 16:30 weekly-review build) can RPC
+  // the agents directly — NOT via the MorningChain Workflow (D2-11: standalone crons, never
+  // new Workflow steps). Typed loosely as Service so each agent's RPC method
+  // (weekly/full/deadlines/weeklyReviewBuild) is callable without coupling Atlas to each
+  // agent's full type. Optional so a Phase-0/1-shaped env (these agents not deployed yet)
+  // still satisfies AtlasEnv in unit tests. HERALD is declared above (it is ALSO a morning-
+  // chain binding); the Friday-16:00 case reuses it. STEWARD is the 16:30-build target.
+  SCOUT?: Service;
+  HEADHUNTER?: Service;
+  STEWARD?: Service;
+
   /** The MorningChain Workflow binding (atlas-morning-chain). Optional for Phase-0 tests. */
   MORNING_CHAIN?: Workflow;
 

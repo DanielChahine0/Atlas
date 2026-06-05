@@ -205,3 +205,148 @@ describe("Atlas dispatcher — morning-chain create() error discrimination (NEW-
     errSpy.mockRestore();
   });
 });
+
+// Phase 2 (D2-11) — the 4 NEW STANDALONE cron cases the dispatcher gains: Headhunter
+// deadlines-light (09:00 ET daily), Headhunter full (Mon 09:00 ET), Friday Scout+Herald
+// (16:00 ET, fanned via Promise.allSettled), and the Friday 16:30 ET weekly-review build.
+// These are STANDALONE cron cases — NOT new MorningChain Workflow steps (the morning chain
+// is untouched). Each owner-local time carries DUAL cron forms (EDT now / EST after the Nov
+// DST boundary — Cron Triggers are UTC-only, no DST, D1); BOTH forms route to the SAME
+// handler, asserted below. The Friday fan-in uses Promise.allSettled (NOT Promise.all) so a
+// Scout failure never discards Herald's completed work (T-02-cron2).
+//
+// Cron forms (June 2026 = EDT/UTC-4):
+//   Headhunter daily-light 09:00 ET → EDT "0 13 * * *"  / EST "0 14 * * *"
+//   Headhunter full Mon 09:00 ET    → EDT "0 13 * * 1"  / EST "0 14 * * 1"
+//   Friday Scout+Herald 16:00 ET    → EDT "0 20 * * 5"  / EST "0 21 * * 5"
+//   Friday 16:30 build              → EDT "30 20 * * 5" / EST "30 21 * * 5"
+describe("Atlas dispatcher — Phase-2 standalone cron cases (D2-11)", () => {
+  function makeWaitUntilCtx(waited: Promise<unknown>[]): ExecutionContext {
+    return {
+      waitUntil(p: Promise<unknown>) { waited.push(p); },
+      passThroughOnException() {},
+      props: {},
+    } as unknown as ExecutionContext;
+  }
+
+  /** A fresh env whose four Phase-2 agent bindings record the calls each received. */
+  function makePhase2Env() {
+    const calls = {
+      headhunterDeadlines: [] as Array<{ date?: string }>,
+      headhunterFull: [] as Array<{ date?: string }>,
+      scoutWeekly: [] as Array<{ date?: string }>,
+      heraldWeekly: [] as Array<{ date?: string }>,
+      stewardBuild: [] as Array<{ date?: string }>,
+    };
+    const incidents: unknown[] = [];
+    const env = {
+      WIRE: { send: vi.fn(async () => {}) },
+      INCIDENTS: { send: vi.fn(async (inc: unknown) => { incidents.push(inc); }) },
+      HEADHUNTER: {
+        deadlines: vi.fn(async (p: { date?: string }) => { calls.headhunterDeadlines.push(p); }),
+        full: vi.fn(async (p: { date?: string }) => { calls.headhunterFull.push(p); }),
+      },
+      SCOUT: { weekly: vi.fn(async (p: { date?: string }) => { calls.scoutWeekly.push(p); }) },
+      HERALD: { weekly: vi.fn(async (p: { date?: string }) => { calls.heraldWeekly.push(p); }) },
+      STEWARD: { weeklyReviewBuild: vi.fn(async (p: { date?: string }) => { calls.stewardBuild.push(p); }) },
+    } as unknown as Env;
+    return { env, calls, incidents };
+  }
+
+  // Headhunter deadlines-light (09:00 ET daily) — both DST forms map to the same handler.
+  for (const cron of ["0 13 * * *", "0 14 * * *"]) {
+    it(`routes "${cron}" → HEADHUNTER.deadlines({date}) (and NOTHING else)`, async () => {
+      const { env, calls } = makePhase2Env();
+      const waited: Promise<unknown>[] = [];
+      await worker.scheduled!(makeController(cron), env, makeWaitUntilCtx(waited));
+      await Promise.all(waited);
+      expect(calls.headhunterDeadlines).toHaveLength(1);
+      expect(calls.headhunterDeadlines[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      // Standalone — it does NOT also fire full / scout / herald / steward.
+      expect(calls.headhunterFull).toHaveLength(0);
+      expect(calls.scoutWeekly).toHaveLength(0);
+      expect(calls.heraldWeekly).toHaveLength(0);
+      expect(calls.stewardBuild).toHaveLength(0);
+    });
+  }
+
+  // Headhunter full (Mon 09:00 ET) — both DST forms map to the same handler.
+  for (const cron of ["0 13 * * 1", "0 14 * * 1"]) {
+    it(`routes "${cron}" → HEADHUNTER.full({date}) (and NOTHING else)`, async () => {
+      const { env, calls } = makePhase2Env();
+      const waited: Promise<unknown>[] = [];
+      await worker.scheduled!(makeController(cron), env, makeWaitUntilCtx(waited));
+      await Promise.all(waited);
+      expect(calls.headhunterFull).toHaveLength(1);
+      expect(calls.headhunterFull[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(calls.headhunterDeadlines).toHaveLength(0);
+      expect(calls.scoutWeekly).toHaveLength(0);
+      expect(calls.heraldWeekly).toHaveLength(0);
+    });
+  }
+
+  // Friday 16:00 ET — Scout + Herald fanned via Promise.allSettled. Both DST forms map.
+  for (const cron of ["0 20 * * 5", "0 21 * * 5"]) {
+    it(`routes "${cron}" → BOTH SCOUT.weekly + HERALD.weekly (fan-in)`, async () => {
+      const { env, calls } = makePhase2Env();
+      const waited: Promise<unknown>[] = [];
+      await worker.scheduled!(makeController(cron), env, makeWaitUntilCtx(waited));
+      await Promise.all(waited);
+      expect(calls.scoutWeekly).toHaveLength(1);
+      expect(calls.heraldWeekly).toHaveLength(1);
+      expect(calls.scoutWeekly[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(calls.heraldWeekly[0]!.date).toBe(calls.scoutWeekly[0]!.date);
+      // Standalone — it does NOT also fire the Headhunter or Steward slots.
+      expect(calls.headhunterDeadlines).toHaveLength(0);
+      expect(calls.stewardBuild).toHaveLength(0);
+    });
+  }
+
+  it("Friday 16:00 uses allSettled — if SCOUT.weekly REJECTS, HERALD.weekly STILL runs (T-02-cron2)", async () => {
+    const { env, calls, incidents } = makePhase2Env();
+    // Make Scout reject; Herald must STILL be invoked (allSettled, not all).
+    (env.SCOUT as unknown as { weekly: ReturnType<typeof vi.fn> }).weekly = vi.fn(async () => {
+      throw new Error("scout boom");
+    });
+    const waited: Promise<unknown>[] = [];
+    await worker.scheduled!(makeController("0 20 * * 5"), env, makeWaitUntilCtx(waited));
+    // The waitUntil promise must RESOLVE even though Scout threw (allSettled swallows).
+    await expect(Promise.all(waited)).resolves.toBeDefined();
+    // Herald's leg ran despite Scout's failure — the whole point of allSettled.
+    expect(calls.heraldWeekly).toHaveLength(1);
+    // Scout's failure was surfaced as a P2 incident (best-effort flag), not silently dropped.
+    const scoutFlag = (incidents as Array<{ severity_hint?: string; source_agent?: string }>).find(
+      (i) => i.severity_hint === "P2" && i.source_agent === "Atlas",
+    );
+    expect(scoutFlag).toBeTruthy();
+  });
+
+  // Friday 16:30 ET — the weekly-review build (Steward). Both DST forms map.
+  for (const cron of ["30 20 * * 5", "30 21 * * 5"]) {
+    it(`routes "${cron}" → STEWARD.weeklyReviewBuild({date}) (and NOTHING else)`, async () => {
+      const { env, calls } = makePhase2Env();
+      const waited: Promise<unknown>[] = [];
+      await worker.scheduled!(makeController(cron), env, makeWaitUntilCtx(waited));
+      await Promise.all(waited);
+      expect(calls.stewardBuild).toHaveLength(1);
+      expect(calls.stewardBuild[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(calls.scoutWeekly).toHaveLength(0);
+      expect(calls.heraldWeekly).toHaveLength(0);
+      expect(calls.headhunterDeadlines).toHaveLength(0);
+    });
+  }
+
+  it("a Headhunter.deadlines REJECTION surfaces a P2 and never throws out of scheduled()", async () => {
+    const { env, incidents } = makePhase2Env();
+    (env.HEADHUNTER as unknown as { deadlines: ReturnType<typeof vi.fn> }).deadlines = vi.fn(
+      async () => { throw new Error("headhunter down"); },
+    );
+    const waited: Promise<unknown>[] = [];
+    await worker.scheduled!(makeController("0 13 * * *"), env, makeWaitUntilCtx(waited));
+    await expect(Promise.all(waited)).resolves.toBeDefined();
+    const hhFlag = (incidents as Array<{ severity_hint?: string; source_agent?: string }>).find(
+      (i) => i.severity_hint === "P2" && i.source_agent === "Atlas",
+    );
+    expect(hhFlag).toBeTruthy();
+  });
+});
