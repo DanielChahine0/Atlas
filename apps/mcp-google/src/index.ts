@@ -83,6 +83,10 @@ function forbiddenResult() {
   };
 }
 
+/** A neutral, secret-free message surfaced when a leak was detected and blocked. */
+export const SECRET_BLOCKED_TEXT =
+  "Sensitive content (e.g. a verification code or login link) was detected and redacted before egress (P1 block).";
+
 /**
  * The single egress point for EVERY tool-output body. Runs the body through the
  * `@atlas/security` redactor so 2FA codes / reset links / login URLs are stripped
@@ -90,29 +94,45 @@ function forbiddenResult() {
  * present, the caller is given an env to raise a P1 (block + flag); the redacted
  * text is returned either way (fail-safe: the secret never escapes).
  *
+ * When a leak is detected (the documented "P1 block"), the result is returned with
+ * `isError: true` and a NEUTRAL, secret-free message PREPENDED so the block is
+ * OBSERVABLE to the client (I28) instead of looking like a normal tool result. The
+ * redacted content is still returned (never the secret) so a caller can see what was
+ * stripped. The best-effort `flag()` emit is preserved.
+ *
  * This is the function the CI backstop (test/redact.test.ts) drives directly, and
  * the function EVERY registered tool funnels its output through.
  */
 export async function safeToolOutput(
   body: string,
   env?: Env,
-): Promise<{ content: { type: "text"; text: string }[] }> {
+): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
   const leaked = containsSecret(body);
   const clean = redact(body);
-  if (leaked && env) {
-    // A caught attempt to surface a secret is a P1 (block + flag). We never include
-    // the offending body in the flag detail — only the fact + the source tool.
-    try {
-      await flag(
-        env,
-        "P1",
-        "secret-exposure-blocked",
-        "a Type/Security body was redacted server-side before egress",
-        { sourceAgent: "Filer" },
-      );
-    } catch {
-      // Flag emission is best-effort; the redaction itself is the load-bearing guard.
+  if (leaked) {
+    if (env) {
+      // A caught attempt to surface a secret is a P1 (block + flag). We never include
+      // the offending body in the flag detail — only the fact + the source tool.
+      try {
+        await flag(
+          env,
+          "P1",
+          "secret-exposure-blocked",
+          "a Type/Security body was redacted server-side before egress",
+          { sourceAgent: "Filer" },
+        );
+      } catch {
+        // Flag emission is best-effort; the redaction itself is the load-bearing guard.
+      }
     }
+    // I28: make the P1 block OBSERVABLE — isError:true + neutral message, redacted content kept.
+    return {
+      isError: true,
+      content: [
+        { type: "text", text: SECRET_BLOCKED_TEXT },
+        { type: "text", text: clean },
+      ],
+    };
   }
   return { content: [{ type: "text", text: clean }] };
 }
