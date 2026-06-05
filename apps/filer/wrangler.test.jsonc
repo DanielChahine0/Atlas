@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. Mirrors the production
+  // apps/filer/wrangler.jsonc but uses local-only D1/KV (no remote IDs). The replay test
+  // applies an event through @atlas/steward-core against this D1; the FilerCursor DO is
+  // bound for the cursor path.
+  "name": "filer-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "FILER_CURSOR", "class_name": "FilerCursor" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FilerCursor"] }],
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }]
+}
