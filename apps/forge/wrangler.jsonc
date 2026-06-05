@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "forge",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // ForgeLock — the per-run dedupe/idempotency lock DO (the dedupe+write critical section
+  // runs inside ctx.blockConcurrencyWhile). new_sqlite_classes (Free-plan SQLite DO).
+  "durable_objects": {
+    "bindings": [{ "name": "FORGE_LOCK", "class_name": "ForgeLock" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ForgeLock"] }],
+
+  // Pillar 1: Forge is a Wire PRODUCER only — it emits one event per task (keyed on task id).
+  // NO queues.consumers block; Steward is the SOLE consumer of atlas-wire.
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+
+  // D1 system-of-record — Forge writes the tasks/subtasks store via @atlas/tasks.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // Read-mostly config/flags (forge.model override). Never secrets, never task state.
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // Workers AI gateway routing — Forge extraction resolves to Sonnet via claudeFor.
+  "ai": { "binding": "AI" },
+
+  // Forge has NO cron of its own — it runs as the `forge-morning` MorningChain step (08:15).
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons.
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}
