@@ -27,6 +27,7 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 import { send } from "@atlas/wire";
 import type { AtlasEnv } from "./env.js";
+import type { AtlasCoordinator } from "./coordinator.js";
 import { consentHandler } from "./auth/consent.js";
 import { AtlasApiHandler } from "./auth/api-handler.js";
 import { SCOPES_SUPPORTED } from "./auth/scopes.js";
@@ -68,6 +69,27 @@ function localDate(_env: Env): string {
  */
 const dispatcher = {
   async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // C5 (D-10 heartbeat supervision must be LIVE in production): the scheduled() dispatcher is
+    // the real runtime path that arms + feeds the self-monitor. EVERY cron tick (known or not) is
+    // a liveness signal, so this runs OUTSIDE the cron switch below:
+    //   (1) startHeartbeat() — idempotent arm (no-op if the alarm is already set; seeds lastBeat
+    //       on a fresh DO so the first alarm() never false-fires a P1, C6).
+    //   (2) beat()           — record the pulse the alarm() staleness check watches for.
+    // Atlas stays a Wire PRODUCER only: this is a self-RPC to its OWN coordinator DO
+    // (env.ATLAS.getByName("root") — one name = one instance), NOT a queue consumer. Best-effort:
+    // a heartbeat-arm failure must never block the SPINE-01 dispatch leg below.
+    try {
+      // The shared Env types ATLAS as the generic (optional) DurableObjectNamespace; narrow to
+      // the typed <AtlasCoordinator> form HERE (not in AtlasEnv — an optional `<undefined>`
+      // namespace can't be refined via interface extension) so the heartbeat RPC is type-safe.
+      const atlas = env.ATLAS as unknown as DurableObjectNamespace<AtlasCoordinator>;
+      const coordinator = atlas.getByName("root");
+      await coordinator.startHeartbeat();
+      await coordinator.beat();
+    } catch {
+      // Supervision arm/feed is best-effort; never let it regress the dispatch leg.
+    }
+
     switch (controller.cron) {
       // 07:45 ET Filer-sweep slot, EST form. The EDT form ("45 11 * * *") is documented in
       // docs/03-scheduling.md (00-01). Phase 0 only needs this dispatcher BRANCH to exist; the

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
+import { env as testEnv, runInDurableObject } from "cloudflare:test";
 import { WireEvent } from "@atlas/wire";
 import worker, { type Env } from "../src/index.js";
+import type { AtlasCoordinator } from "../src/coordinator.js";
 
 // SPINE-01 / Wire-contract test (CLAUDE.md Definition of Done #1).
 //
@@ -87,5 +89,35 @@ describe("Atlas scheduled() dispatcher — SPINE-01", () => {
 
     expect(tick).not.toHaveBeenCalled();
     expect(wireSend).not.toHaveBeenCalled();
+  });
+
+  // C5 (D-10 heartbeat supervision must be LIVE): a scheduled() tick is the real runtime path
+  // that arms + feeds the self-monitor on the AtlasCoordinator (env.ATLAS.getByName("root")).
+  // Drive scheduled() against the REAL bindings (testEnv has ATLAS) and assert the supervisor is
+  // now live: the alarm is armed and lastBeat advanced. Use an UNKNOWN cron so the arm/feed
+  // (which runs OUTSIDE the cron switch) is exercised WITHOUT needing the NOOP service RPC.
+  it("arms the alarm and feeds lastBeat on the coordinator DO (supervisor is live)", async () => {
+    const ATLAS = (testEnv as unknown as { ATLAS: DurableObjectNamespace<AtlasCoordinator> }).ATLAS;
+    const stub = ATLAS.getByName("root");
+
+    // Pre-state: a fresh per-test DO has no alarm and no beat yet.
+    const before = await runInDurableObject(stub, async (_instance, state) => ({
+      alarm: await state.storage.getAlarm(),
+      lastBeat: await state.storage.get<number>("lastBeat"),
+    }));
+    expect(before.alarm).toBeNull();
+    expect(before.lastBeat).toBeUndefined();
+
+    const t0 = Date.now();
+    // Fire a tick through the REAL worker default export with the REAL env (has ATLAS).
+    await worker.scheduled!(makeController("0 0 * * *"), testEnv as unknown as Env, makeCtx());
+
+    // Post-state: the supervisor is armed (alarm set) and fed (lastBeat advanced to ~now).
+    const after = await runInDurableObject(stub, async (_instance, state) => ({
+      alarm: await state.storage.getAlarm(),
+      lastBeat: await state.storage.get<number>("lastBeat"),
+    }));
+    expect(after.alarm).not.toBeNull();
+    expect(after.lastBeat).toBeGreaterThanOrEqual(t0);
   });
 });
