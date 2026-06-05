@@ -1,5 +1,5 @@
 ---
-status: issues_found
+status: remediated
 phase: 00-spine
 depth: deep
 method: fan-out subsystem review (5 reviewers) — independent agents, code-grounded
@@ -9,7 +9,19 @@ findings:
   warning: 12
   info: 11
   total: 30
+resolution:
+  resolved: 23
+  deferred: 7
+  note: All MUST-FIX (7 critical + high-value warnings/info) fixed across commits 9dfad5d…e80a2f5 with proving tests; full suite 185 passing. The 7 DEFER items remain tracked below.
 ---
+
+> **RESOLUTION (remediated):** All MUST-FIX findings fixed in 12 atomic `fix(00-review):` commits
+> (`9dfad5d` C1/C2/W9/I20 · `b50fc42` W8 · `6cc60f0` W14 · `08263b6` W15 · `290daf5` C3/C4/W10/I22 ·
+> `c9ce50c` I28 · `2c97999` full-width-leak follow-up · `1cffcde` C5 · `0b52551` C6/C7 · `23a2d2d` W11 ·
+> `faf0693` W17/I29 · `e80a2f5` W18/W19/I30), each with a proving test; full `pnpm test` = 185 passed / 2 skipped.
+> An independent 16-class redaction re-probe confirmed no leak / no false-positive. **Deferred (tracked, not fixed):**
+> W12 (flag-id midnight), W13 (OAuth-helper dedup refactor), I21 (run_log superset — Phase-0-by-design),
+> I23 (localDate param), I25 (startHeartbeat atomicity — benign), I26 (JWT iss/GHES), I27 (poll validation — partly covered by W14).
 
 # Phase 00 (Spine) — Code Review
 
