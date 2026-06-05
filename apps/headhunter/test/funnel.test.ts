@@ -168,6 +168,37 @@ describe("Headhunter Wire event contract", () => {
     expect(funnelEvent!.entity).toBe("pipeline");
   });
 
+  // M5 — per-stage funnel counter: payload.counter must be "funnel:<stage>"
+  // Without this, Steward maps all 5 stages onto the single "pipeline" counter
+  // (apply.ts derives counter ?? entity) → per-stage funnel counts unreconstructable.
+  it("M5: each funnel stage emits a distinct payload.counter = funnel:<stage>", async () => {
+    const { testEnv, wireEvents } = makeEnv();
+    const threads = [
+      { threadId: "t-oa", labels: ["Job/OA"] },
+      { threadId: "t-int", labels: ["Job/Interview"] },
+      { threadId: "t-off", labels: ["Job/Offer"] },
+      { threadId: "t-rej", labels: ["Job/Rejected"] },
+      { threadId: "t-app", labels: ["Job/Applied"] },
+    ];
+
+    await runFull(testEnv, BASE_DATE, [], threads);
+
+    const funnelEvents = wireEvents.filter((e) => e.type === "funnel.increment");
+    expect(funnelEvents).toHaveLength(5);
+
+    const expectedCounters = ["funnel:oa", "funnel:interview", "funnel:offer", "funnel:rejected", "funnel:applied"];
+    for (const expected of expectedCounters) {
+      const evt = funnelEvents.find((e) => e.payload?.counter === expected);
+      expect(evt, `expected event with payload.counter=${expected}`).toBeDefined();
+    }
+
+    // Each event still has stage + thread_id in payload
+    for (const evt of funnelEvents) {
+      expect(evt.payload?.stage, "stage must be in payload").toBeTruthy();
+      expect(evt.payload?.thread_id, "thread_id must be in payload").toBeTruthy();
+    }
+  });
+
   it("scan summary has op:upsert idempotencyKey:headhunter:scan:<date>", async () => {
     const { testEnv, wireEvents } = makeEnv();
 
