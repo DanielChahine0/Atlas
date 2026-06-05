@@ -76,7 +76,16 @@
     { "binding": "HERALD", "service": "herald" },
     { "binding": "FORGE", "service": "forge" },
     { "binding": "SUNDIAL", "service": "sundial" },
-    { "binding": "COMPASS", "service": "compass" }
+    { "binding": "COMPASS", "service": "compass" },
+    // Phase 2 (D2-11): the standalone-cron agent service bindings. The 4 NEW scheduled()
+    // cron cases RPC these directly (NOT via the MorningChain Workflow). SCOUT + HEADHUNTER
+    // are new agents (Plans 02-04/05); STEWARD points at the sole-Vault-writer Worker so the
+    // Fri-16:30 case can RPC its weeklyReviewBuild() method (this plan, 02-07). HERALD already
+    // has a binding above (the Fri-16:00 case reuses it for weekly()). Atlas stays a Wire
+    // producer only — these are private Worker-to-Worker RPCs, never a queue consumer.
+    { "binding": "SCOUT", "service": "scout" },
+    { "binding": "HEADHUNTER", "service": "headhunter" },
+    { "binding": "STEWARD", "service": "steward" }
   ],
 
   // Phase 1 (CORE-01): the MorningChain Workflow binding. ONE 07:45 cron creates a
@@ -90,12 +99,34 @@
     }
   ],
 
-  // The ONE morning-chain cron (CORE-01). Cron Triggers are UTC-only / no DST (D1):
-  // 07:45 ET = "45 11 * * 1-5" (EDT) / "45 12 * * 1-5" (EST). Weekdays only (Mon-Fri).
-  // Hand-edit at each DST boundary (CLAUDE.md /cron-utc). This is the ONLY cron that
-  // kicks the Workflow; the per-stage 08:00/08:15/08:20/08:30 times are step.sleepUntil
-  // budget gates INSIDE the Workflow, never separate crons.
-  "triggers": { "crons": ["45 11 * * 1-5"] },
+  // Cron Triggers are UTC-only / no DST (D1). Each owner-local ET time has TWO UTC forms —
+  // EDT (UTC-4, active ~Mar–Nov) and EST (UTC-5, active ~Nov–Mar). Only the CURRENTLY-active
+  // form is listed here (June 2026 = EDT); listing both would DOUBLE-FIRE (the off-season form
+  // runs an hour off). The scheduled() switch (src/index.ts) carries BOTH forms as dual cases,
+  // so the Nov DST boundary hand-edit (CLAUDE.md /cron-utc) only swaps the lines below —
+  // never the switch. The EST line to swap to is annotated on each cron.
+  //
+  // Cron-cap note (RESEARCH A1, owner-approved "crons fit", 2026-06-05): the historical
+  // 3-cron-per-Worker Free cap was removed Oct 2023 (only an account-level total cap remains).
+  // `wrangler deploy --dry-run` with this 5-cron list returned exit 0 / no trigger-limit error;
+  // account total after Phase 2 = 6 crons across 2 Workers (atlas 5 + flagger-watchdog 1).
+  "triggers": {
+    "crons": [
+      // 07:45 ET MorningChain, Mon–Fri (CORE-01). ONE cron kicks the Workflow; the per-stage
+      // 08:00/08:15/08:20/08:30 times are step.sleepUntil budget gates INSIDE it, not crons.
+      // EDT "45 11 * * 1-5" → EST "45 12 * * 1-5".
+      "45 11 * * 1-5",
+      // 09:00 ET Headhunter deadlines-light, daily. EDT "0 13 * * *" → EST "0 14 * * *".
+      "0 13 * * *",
+      // Mon 09:00 ET Headhunter full scan. EDT "0 13 * * 1" → EST "0 14 * * 1".
+      "0 13 * * 1",
+      // Fri 16:00 ET Scout weekly + Herald weekly (allSettled fan-in).
+      // EDT "0 20 * * 5" → EST "0 21 * * 5".
+      "0 20 * * 5",
+      // Fri 16:30 ET weekly-review Vault build (Steward). EDT "30 20 * * 5" → EST "30 21 * * 5".
+      "30 20 * * 5"
+    ]
+  },
 
   // The three OAuth provider secrets the SPINE-04 code reads via `await env.X.get()`
   // (oauth/google.ts + oauth/github.ts) — bound from the single per-account Cloudflare

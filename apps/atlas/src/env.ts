@@ -31,7 +31,11 @@ export interface AtlasEnv extends Omit<SharedEnv, "INCIDENTS"> {
   // callable without coupling Atlas to each agent's full type. Optional so a Phase-0-shaped
   // env (no agents deployed yet) still satisfies AtlasEnv in unit tests.
   FILER?: Service;
-  HERALD?: Service;
+  // HERALD is BOTH a morning-chain binding (invokeAgent calls daily() via an untyped cast)
+  // AND a Phase-2 Friday-16:00 binding (the dispatcher calls weekly() directly, typed below).
+  // Its type carries the weekly() RPC so the direct call typechecks; the cast path that
+  // invokeAgent uses for daily() is unaffected (it casts to a generic record).
+  HERALD?: { weekly(params?: { date?: string }): Promise<unknown> };
   FORGE?: Service;
   SUNDIAL?: Service;
   COMPASS?: Service;
@@ -40,14 +44,20 @@ export interface AtlasEnv extends Omit<SharedEnv, "INCIDENTS"> {
   // Wired so the scheduled() dispatcher's 4 NEW standalone cron cases (Headhunter
   // deadlines-light + full, Friday Scout+Herald, Friday 16:30 weekly-review build) can RPC
   // the agents directly — NOT via the MorningChain Workflow (D2-11: standalone crons, never
-  // new Workflow steps). Typed loosely as Service so each agent's RPC method
-  // (weekly/full/deadlines/weeklyReviewBuild) is callable without coupling Atlas to each
-  // agent's full type. Optional so a Phase-0/1-shaped env (these agents not deployed yet)
-  // still satisfies AtlasEnv in unit tests. HERALD is declared above (it is ALSO a morning-
-  // chain binding); the Friday-16:00 case reuses it. STEWARD is the 16:30-build target.
-  SCOUT?: Service;
-  HEADHUNTER?: Service;
-  STEWARD?: Service;
+  // new Workflow steps). Typed with the MINIMAL RPC method surface each leg calls (the same
+  // plain-object-type pattern Headhunter uses for its FORGE binding) so `env.X.method({date})`
+  // typechecks without coupling Atlas to each agent's full WorkerEntrypoint type. The
+  // `{ date?: string }` param matches every agent's weekly()/full()/deadlines() signature
+  // (Plans 02-04/05/06); the return is the agent's own result, which each fire-and-forget leg
+  // ignores. Optional so a Phase-0/1-shaped env (these agents not deployed yet) still
+  // satisfies AtlasEnv in unit tests; the dispatcher uses `!` since a configured cron implies
+  // its binding, and a missing binding throws (surfaced loudly) rather than silently skipping.
+  SCOUT?: { weekly(params?: { date?: string }): Promise<unknown> };
+  HEADHUNTER?: {
+    full(params?: { date?: string }): Promise<unknown>;
+    deadlines(params?: { date?: string }): Promise<unknown>;
+  };
+  STEWARD?: { weeklyReviewBuild(params?: { date?: string }): Promise<unknown> };
 
   /** The MorningChain Workflow binding (atlas-morning-chain). Optional for Phase-0 tests. */
   MORNING_CHAIN?: Workflow;

@@ -173,6 +173,106 @@ const dispatcher = {
         });
         break;
       }
+
+      // ─── Phase 2 (D2-11): four STANDALONE cron cases ──────────────────────────────────
+      // These are NOT MorningChain Workflow steps — they are independent crons that RPC a
+      // single agent over its service binding (Headhunter / Scout / Herald / Steward). The
+      // morning chain above is untouched. Cron Triggers are UTC-only with NO DST (D1), so
+      // every owner-local time carries BOTH cron forms as dual cases that fall through to the
+      // SAME handler: the EDT form (UTC-4, active ~Mar–Nov) is what wrangler.jsonc fires NOW;
+      // the EST form (UTC-5, active ~Nov–Mar) is the line the owner swaps in at the Nov DST
+      // boundary. Keeping both as cases means a future DST hand-edit only touches
+      // wrangler.jsonc's crons — the switch already routes either form. Each leg runs under
+      // _ctx.waitUntil (off the tick's critical path) and wraps its RPC in a best-effort
+      // catch→flag(P2) so a single agent failure is SURFACED (never silently dropped) but
+      // never throws out of scheduled().
+
+      // Headhunter deadlines-light — 09:00 ET daily. EDT "0 13 * * *" / EST "0 14 * * *".
+      case "0 13 * * *":
+      case "0 14 * * *": {
+        const date = localDate(env);
+        _ctx.waitUntil(
+          env
+            .HEADHUNTER!.deadlines({ date })
+            .catch(async (err: unknown) => {
+              await flag(env, "P2", "headhunter.deadlines.failed", String(err), {
+                sourceAgent: "Atlas",
+                kind: "chain_halted",
+              }).catch(() => {});
+            }),
+        );
+        break;
+      }
+
+      // Headhunter full scan — Mon 09:00 ET only. EDT "0 13 * * 1" / EST "0 14 * * 1".
+      case "0 13 * * 1":
+      case "0 14 * * 1": {
+        const date = localDate(env);
+        _ctx.waitUntil(
+          env
+            .HEADHUNTER!.full({ date })
+            .catch(async (err: unknown) => {
+              await flag(env, "P2", "headhunter.full.failed", String(err), {
+                sourceAgent: "Atlas",
+                kind: "chain_halted",
+              }).catch(() => {});
+            }),
+        );
+        break;
+      }
+
+      // Friday 16:00 ET — Scout weekly + Herald weekly. EDT "0 20 * * 5" / EST "0 21 * * 5".
+      // Promise.allSettled (NOT Promise.all): a Scout failure must NOT discard Herald's
+      // completed week-in-review (T-02-cron2). Each leg has its OWN catch→flag(P2)→return
+      // null, so allSettled always resolves and the 16:30 build later runs on whatever
+      // partial summary landed. Both legs are awaited concurrently.
+      case "0 20 * * 5":
+      case "0 21 * * 5": {
+        const date = localDate(env);
+        _ctx.waitUntil(
+          Promise.allSettled([
+            env
+              .SCOUT!.weekly({ date })
+              .catch(async (err: unknown) => {
+                await flag(env, "P2", "scout.weekly.failed", String(err), {
+                  sourceAgent: "Atlas",
+                  kind: "chain_halted",
+                }).catch(() => {});
+                return null;
+              }),
+            env
+              .HERALD!.weekly({ date })
+              .catch(async (err: unknown) => {
+                await flag(env, "P2", "herald.weekly.failed", String(err), {
+                  sourceAgent: "Atlas",
+                  kind: "chain_halted",
+                }).catch(() => {});
+                return null;
+              }),
+          ]),
+        );
+        break;
+      }
+
+      // Friday 16:30 ET — the weekly-review Vault build (Steward compiles the week's Scout
+      // events + Herald week-in-review + funnel/flag state into ONE replaced weekly note).
+      // EDT "30 20 * * 5" / EST "30 21 * * 5". Steward stays the SOLE atlas-wire consumer
+      // (Pillar 1) — this is a service-binding RPC to a WorkerEntrypoint method, NOT a queue.
+      case "30 20 * * 5":
+      case "30 21 * * 5": {
+        const date = localDate(env);
+        _ctx.waitUntil(
+          env
+            .STEWARD!.weeklyReviewBuild({ date })
+            .catch(async (err: unknown) => {
+              await flag(env, "P2", "weekly-review-build.failed", String(err), {
+                sourceAgent: "Atlas",
+                kind: "chain_halted",
+              }).catch(() => {});
+            }),
+        );
+        break;
+      }
     }
   },
 } satisfies Pick<ExportedHandler<Env>, "scheduled">;
