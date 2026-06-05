@@ -12,8 +12,8 @@ export type Severity = "P1" | "P2" | "P3" | "P4";
  * types from the CLAUDE.md "Canonical conventions" table.
  *
  * NOT every binding is on every Worker. `WIRE`/`DB`/`CONFIG`/`AI` are common; `STEWARD_LOCK`
- * is Steward-only; `OAUTH_KV`/`ATLAS`/`MORNING_CHAIN_DO` are Atlas-only. The per-Worker-optional
- * bindings are marked `?` so each Worker can extend/narrow this interface without conflict.
+ * is Steward-only; `OAUTH_KV`/`ATLAS` are Atlas-only. The per-Worker-optional bindings are
+ * marked `?` so each Worker can extend/narrow this interface without conflict.
  *
  * Secrets are TYPE declarations referencing bindings only — NO secret VALUE ever appears here
  * (CLAUDE.md security invariant; T-00-24). Secret reads are async: `await env.X.get()`.
@@ -43,7 +43,6 @@ export interface Env {
   STEWARD_LOCK?: DurableObjectNamespace;
   // Atlas-only: env.ATLAS.getByName("root").
   ATLAS?: DurableObjectNamespace;
-  MORNING_CHAIN_DO?: DurableObjectNamespace;
 
   // ── AI-Gateway / Claude TYPE surface (resolves the 00-07 Env gap — 00-07's modelFor
   //    factory imports these without extending a Wave-2-owned file). ────────────────────

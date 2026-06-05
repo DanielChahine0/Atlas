@@ -74,6 +74,65 @@ describe("MorningChain — halt-downstream on a Forge failure", () => {
     expect((flag.payload as { detail: string }).detail).toContain("forge-morning");
   });
 
+  it("the chain.halted flag id (idempotencyKey) is STABLE across differing error messages (NEW-AW2)", async () => {
+    // The flag id must derive from STABLE inputs (date + stepName) ONLY — never err.message. Two
+    // runs that fail at the SAME step with DIFFERENT messages (e.g. a retry surfacing a new
+    // transient cause) must mint the SAME id, so a replayed/re-fired halt upserts ONE board row
+    // rather than a duplicate. We capture the flag id under two distinct messages and compare.
+    async function haltIdFor(message: string): Promise<{ id: string; detail: string; action: string }> {
+      const invoked: string[] = [];
+      const sent: unknown[] = [];
+      const env = {
+        WIRE: { send: vi.fn(async (e: unknown) => { sent.push(e); }) },
+        FILER: { sweep: async () => ({ ok: true }) },
+        HERALD: { daily: async () => ({ ok: true }) },
+        // Forge fails with the supplied (volatile) message.
+        FORGE: { morning: async () => { invoked.push("forge"); throw new Error(message); } },
+        SUNDIAL: { sync: async () => ({ ok: true }) },
+        COMPASS: { plan: async () => ({ ok: true }) },
+      } as unknown as Env;
+      await expect(runMorningChain(env, makeEvent() as never, makeStep() as never)).rejects.toThrow();
+      const flag = sent.map((e) => WireEvent.parse(e)).find((e) => e.type === "flag")!;
+      return {
+        id: flag.idempotencyKey,
+        detail: (flag.payload as { detail: string }).detail,
+        action: (flag.payload as { suggested_action: string }).suggested_action,
+      };
+    }
+
+    const a = await haltIdFor("forge boom: rate limited (429)");
+    const b = await haltIdFor("forge boom: gateway 502 totally different text");
+
+    // Same date + same step ⇒ SAME id (idempotencyKey), regardless of the differing messages.
+    expect(a.id).toBe(b.id);
+    // The volatile message is NOT in the keyed `detail` (it would perturb the id otherwise)…
+    expect(a.detail).not.toContain("rate limited");
+    expect(b.detail).not.toContain("502");
+    // …but IS carried in the non-keyed suggested_action (observability without breaking the key).
+    expect(a.action).toContain("rate limited");
+    expect(b.action).toContain("502");
+  });
+
+  it("an emit failure is best-effort and still RETHROWS the original step error (NEW-AW2)", async () => {
+    // emitHalt is best-effort: if the Flagger/Wire emit itself throws, it must NEVER mask the real
+    // step cause — runMorningChain must still reject with the ORIGINAL error so the instance
+    // terminates errored with the true reason. We make WIRE.send throw to force the emit to fail.
+    const invoked: string[] = [];
+    const env = {
+      WIRE: { send: vi.fn(async () => { throw new Error("wire is down — emit failed"); }) },
+      FILER: { sweep: async () => ({ ok: true }) },
+      HERALD: { daily: async () => ({ ok: true }) },
+      FORGE: { morning: async () => { invoked.push("forge"); throw new Error("forge boom (real cause)"); } },
+      SUNDIAL: { sync: async () => ({ ok: true }) },
+      COMPASS: { plan: async () => ({ ok: true }) },
+    } as unknown as Env;
+
+    // Rejects with the ORIGINAL forge cause, NOT the wire/emit failure.
+    await expect(runMorningChain(env, makeEvent() as never, makeStep() as never)).rejects.toThrow(/forge boom \(real cause\)/);
+    // Downstream never ran.
+    expect(invoked).toEqual(["forge"]);
+  });
+
   it("a re-fire (same date) is a no-op at the dispatcher: create() is idempotent on id", async () => {
     // The dispatcher always calls create({id: morning-<date>}); a second create with the same
     // id is a no-op in the Workflow runtime. We assert the dispatcher passes the SAME id on a

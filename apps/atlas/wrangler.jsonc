@@ -8,12 +8,11 @@
   "compatibility_flags": ["nodejs_compat"],
 
   // Atlas's AtlasCoordinator DO, addressed as env.ATLAS.getByName("root").
-  // MORNING_CHAIN_DO is a second binding to the SAME class (Atlas coordinates
-  // the Phase-1 morning chain). The DO + heartbeat land in Wave 2 (Plan 02).
+  // The DO + heartbeat land in Wave 2 (Plan 02). The Phase-1 morning chain is
+  // driven by the separate MORNING_CHAIN Workflow binding (below), NOT a DO.
   "durable_objects": {
     "bindings": [
-      { "name": "ATLAS", "class_name": "AtlasCoordinator" },
-      { "name": "MORNING_CHAIN_DO", "class_name": "AtlasCoordinator" }
+      { "name": "ATLAS", "class_name": "AtlasCoordinator" }
     ]
   },
   // SQLite-backed DOs (Free-tier eligible) — NEVER legacy `new_classes`.

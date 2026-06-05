@@ -88,7 +88,10 @@ export async function runMorningChain(
 
   for (const s of STEPS) {
     // Per-step budget gate (DST-safe owner-local wall-clock; NOT a UTC cron). The first step
-    // (filer-sweep) has no gate — it runs at chain start.
+    // (filer-sweep) has no gate — it runs at chain start. A past gate (sleepUntil to a past
+    // instant — e.g. a cron that fired late, or this step's wall-clock target has already
+    // passed) resolves IMMEDIATELY BY DESIGN: the chain fails forward (proceed now), it NEVER
+    // waits to the next day to "catch" a missed target time (WR-04).
     if (s.gate) {
       await step.sleepUntil(`budget-${s.codename}`, localTime(date, s.gate, tz));
     }
@@ -109,7 +112,17 @@ export async function runMorningChain(
       // Sundial/Compass after a failed Forge never run on stale data. Emit EXACTLY ONE
       // chain.halted P2 toward Flagger, then rethrow so the instance errors (its terminal state
       // is observable in `wrangler workflows instances describe`).
-      await emitHalt(env, date, s.name, err);
+      //
+      // The emission is MEMOIZED in its own `step.do(`halt-<step>`, …)` so it fires EXACTLY ONCE
+      // per instance even across Workflow replays (the catch block re-executes on every replay;
+      // an un-memoized emit would re-send → a duplicate board row). emitHalt is best-effort: it
+      // swallows its OWN failure internally so it can never mask the real cause — we ALWAYS
+      // rethrow the original `err` so the instance terminates errored with the true reason.
+      const message = err instanceof Error ? err.message : String(err);
+      await step.do(`halt-${s.name}`, async () => {
+        await emitHalt(env, date, s.name, message);
+        return null;
+      });
       throw err;
     }
   }
@@ -117,23 +130,39 @@ export async function runMorningChain(
 
 /**
  * Emit the single chain.halted P2 incident. The flag() helper derives a STRUCTURED, stable
- * idempotency key from (severity, title, detail) so a replayed halt re-upserts ONE board row
- * (never a duplicate). The detail names the halted step + a neutral error summary (never a secret).
+ * idempotency key from (severity, title, detail). To honour the "exactly ONE chain.halted P2"
+ * guarantee, the KEYED inputs (title + detail) MUST be a pure function of (date, stepName) — the
+ * resulting flag id is the stable `morning-halt:<date>:<step>` identity. The VOLATILE error
+ * `message` (which can differ across retries) is carried in the NON-keyed `suggestedAction` field
+ * ONLY, so it never perturbs the id (a different message would otherwise mint a second board row).
+ *
+ * Best-effort: a failure in the emit itself is swallowed here so it can NEVER mask the original
+ * step error — the caller ALWAYS rethrows the original `err` after this returns.
  */
 export async function emitHalt(
   env: AtlasEnv,
   date: string,
   stepName: string,
-  err: unknown,
+  message: string,
 ): Promise<void> {
-  const message = err instanceof Error ? err.message : String(err);
-  await flag(
-    env,
-    "P2",
-    "chain.halted",
-    `MorningChain ${date} halted at ${stepName}: ${message}. Downstream steps did not run (no planning on stale data); upstream side effects stand.`,
-    { sourceAgent: "Atlas", suggestedAction: `Investigate ${stepName}; re-fire morning-${date} once fixed (a re-fire is a no-op for completed steps).` },
-  );
+  try {
+    await flag(
+      env,
+      "P2",
+      "chain.halted",
+      // STABLE detail — a pure function of (date, stepName); NO volatile err.message here, so the
+      // flag id is stable across retries (one board row per halted step per day).
+      `MorningChain ${date} halted at ${stepName}. Downstream steps did not run (no planning on stale data); upstream side effects stand.`,
+      {
+        sourceAgent: "Atlas",
+        // The volatile error summary lives ONLY in the non-keyed suggestedAction (never a secret).
+        suggestedAction: `Investigate ${stepName} (error: ${message}); re-fire morning-${date} once fixed (a re-fire is a no-op for completed steps).`,
+      },
+    );
+  } catch {
+    // The emit is best-effort: never let a Flagger/Wire failure mask the real step error. The
+    // caller rethrows the original cause; the instance still terminates errored.
+  }
 }
 
 export class MorningChain extends WorkflowEntrypoint<AtlasEnv, MorningChainParams> {

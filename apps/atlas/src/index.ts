@@ -26,6 +26,7 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 import { send } from "@atlas/wire";
+import { flag } from "@atlas/shared";
 import type { AtlasEnv } from "./env.js";
 import type { AtlasCoordinator } from "./coordinator.js";
 import { consentHandler } from "./auth/consent.js";
@@ -63,6 +64,20 @@ type Env = AtlasEnv;
  */
 function localDate(_env: Env): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
+}
+
+/**
+ * Discriminate a Workflow create() failure: is it the BENIGN "an instance with this id already
+ * exists" collision (a same-day re-fire — the desired idempotency no-op), or a REAL error
+ * (rate-limit / 5xx / transient) that means the chain never started? The Workflows runtime
+ * surfaces the duplicate-id case as an error whose message contains "already exists" (Cloudflare
+ * documents createBatch as idempotent on existing ids; single-create throws this collision). We
+ * match the message tolerantly (case-insensitive) so only the collision is swallowed; everything
+ * else is surfaced (console.error + P2). False-negative bias is intentional: if in doubt, SURFACE.
+ */
+function isInstanceExistsError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /already exists|instance.*exists|duplicate/i.test(message);
 }
 
 /**
@@ -107,9 +122,30 @@ const dispatcher = {
           _ctx.waitUntil(
             chain
               .create({ id: `morning-${date}`, params: { date, tz: "America/Toronto" } })
-              .catch(() => {
-                // An id collision (re-fire) or transient create error is non-fatal — the
-                // existing instance owns the run; the next idempotent cron catches up.
+              .catch(async (err: unknown) => {
+                // DISCRIMINATE (NEW-AW3): a same-day re-fire collides on the instance id
+                // morning-<date> — that's the BENIGN idempotency no-op (the existing instance
+                // owns the run), swallow it silently. ANY OTHER create error (rate-limit / 5xx /
+                // transient) is NOT benign: missed crons are never auto-replayed, so swallowing it
+                // would let the WHOLE morning pipeline silently never start. Surface it —
+                // console.error for logs + a P2 toward Flagger — so a silent whole-day skip becomes
+                // observable. The P2 id is stable (date-keyed) so a repeated failure upserts ONE row.
+                if (isInstanceExistsError(err)) return;
+                const message = err instanceof Error ? err.message : String(err);
+                console.error(`MorningChain create failed for morning-${date}: ${message}`);
+                await flag(
+                  env,
+                  "P2",
+                  "morning-chain.create-failed",
+                  `MorningChain instance morning-${date} failed to start. The morning pipeline did NOT run (missed crons are not auto-replayed).`,
+                  {
+                    sourceAgent: "Atlas",
+                    suggestedAction: `Investigate the Workflow create failure (error: ${message}); manually create morning-${date} to recover today's chain.`,
+                  },
+                ).catch(() => {
+                  // Best-effort: a Flagger/Wire failure must never throw out of waitUntil. The
+                  // console.error above still records the create failure.
+                });
               }),
           );
         }

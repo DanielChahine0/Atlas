@@ -13,8 +13,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
     "bindings": [
-      { "name": "ATLAS", "class_name": "AtlasCoordinator" },
-      { "name": "MORNING_CHAIN_DO", "class_name": "AtlasCoordinator" }
+      { "name": "ATLAS", "class_name": "AtlasCoordinator" }
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AtlasCoordinator"] }],

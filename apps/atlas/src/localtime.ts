@@ -20,7 +20,13 @@ function offsetMinutes(dateYMD: string, tz: string): number {
   }).formatToParts(at);
   const name = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+00:00";
   const m = name.match(/GMT([+-])(\d{2}):(\d{2})/);
-  if (!m) return 0;
+  if (!m) {
+    // 0 is the CORRECT offset if a runtime reports a bare "GMT" for UTC, so we keep returning 0 —
+    // but make the unparsed token observable (a non-GMT±HH:MM longOffset form here would silently
+    // mis-gate every budget step at UTC otherwise). IN-02.
+    console.warn(`offsetMinutes: unparsed timeZoneName "${name}" for tz="${tz}" — defaulting offset to 0 (UTC).`);
+    return 0;
+  }
   const sign = m[1] === "-" ? -1 : 1;
   return sign * (Number(m[2]) * 60 + Number(m[3]));
 }

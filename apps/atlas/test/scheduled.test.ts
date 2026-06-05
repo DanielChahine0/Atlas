@@ -121,3 +121,87 @@ describe("Atlas scheduled() dispatcher — SPINE-01", () => {
     expect(after.lastBeat).toBeGreaterThanOrEqual(t0);
   });
 });
+
+// NEW-AW3 — the morning-chain create() must DISCRIMINATE its failure modes. A same-day re-fire
+// collides on the instance id (benign idempotency no-op → swallow silently); ANY OTHER create
+// error (rate-limit / 5xx / transient) means the whole morning pipeline never started and MUST be
+// surfaced (console.error + a P2 toward Flagger), because missed crons are not auto-replayed.
+const MORNING_CRON = "45 11 * * 1-5"; // EDT form of the 07:45-ET morning-chain slot
+
+describe("Atlas dispatcher — morning-chain create() error discrimination (NEW-AW3)", () => {
+  function makeWaitUntilCtx(waited: Promise<unknown>[]): ExecutionContext {
+    return {
+      waitUntil(p: Promise<unknown>) { waited.push(p); },
+      passThroughOnException() {},
+      props: {},
+    } as unknown as ExecutionContext;
+  }
+
+  it("SWALLOWS a benign id-already-exists collision: no console.error, no P2 flag", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sent: unknown[] = [];
+    const waited: Promise<unknown>[] = [];
+    const env = {
+      WIRE: { send: vi.fn(async (e: unknown) => { sent.push(e); }) },
+      MORNING_CHAIN: {
+        async create() { throw new Error("instance with id morning-2026-06-05 already exists"); },
+      },
+    } as unknown as Env;
+
+    await worker.scheduled!(makeController(MORNING_CRON), env, makeWaitUntilCtx(waited));
+    await Promise.all(waited);
+
+    // A re-fire collision is the desired no-op: nothing surfaced.
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(sent.map((e) => WireEvent.parse(e)).filter((e) => e.type === "flag")).toHaveLength(0);
+    errSpy.mockRestore();
+  });
+
+  it("SURFACES a non-collision create error: console.error + exactly one P2 flag (date-stable id)", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sent: unknown[] = [];
+    const waited: Promise<unknown>[] = [];
+    const env = {
+      WIRE: { send: vi.fn(async (e: unknown) => { sent.push(e); }) },
+      MORNING_CHAIN: {
+        async create() { throw new Error("rate limited (429) — gateway unavailable"); },
+      },
+    } as unknown as Env;
+
+    await worker.scheduled!(makeController(MORNING_CRON), env, makeWaitUntilCtx(waited));
+    await Promise.all(waited);
+
+    // The whole-day skip is now observable in logs…
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(errSpy.mock.calls[0]![0]).toContain("MorningChain create failed");
+
+    // …and exactly one P2 flag was emitted toward Flagger with a stable (date-derived) id.
+    const flags = sent.map((e) => WireEvent.parse(e)).filter((e) => e.type === "flag");
+    expect(flags).toHaveLength(1);
+    const flag = flags[0]!;
+    expect(flag.op).toBe("upsert");
+    expect((flag.payload as { severity: string }).severity).toBe("P2");
+    expect((flag.payload as { title: string }).title).toBe("morning-chain.create-failed");
+    // Stable, date-keyed flag id (a repeated failure upserts ONE row; never a random UUID).
+    expect(flag.idempotencyKey).toMatch(/^flg:\d{4}-\d{2}-\d{2}:Atlas:[a-z0-9]+$/);
+    errSpy.mockRestore();
+  });
+
+  it("a non-collision create error never throws out of scheduled() (best-effort flag)", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const waited: Promise<unknown>[] = [];
+    // Even if the Flagger emit ALSO fails, the waitUntil promise must resolve (never reject).
+    const env = {
+      WIRE: { send: vi.fn(async () => { throw new Error("wire down"); }) },
+      MORNING_CHAIN: {
+        async create() { throw new Error("transient 503"); },
+      },
+    } as unknown as Env;
+
+    await worker.scheduled!(makeController(MORNING_CRON), env, makeWaitUntilCtx(waited));
+    // The create-failure handler swallows the secondary flag failure → waitUntil resolves cleanly.
+    await expect(Promise.all(waited)).resolves.toBeDefined();
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    errSpy.mockRestore();
+  });
+});
