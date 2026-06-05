@@ -45,4 +45,24 @@ describe("Sundial Wire-contract", () => {
     ];
     expect(upcoming7d(tasks, "2026-06-05")).toBe(1); // only "a" is within 7d
   });
+
+  // IN-06 — the window is lower-bounded at today: already-OVERDUE deadlines do NOT count under
+  // an "upcoming-7d" name (today..+7d only, not "anything not past the horizon").
+  it("upcoming7d EXCLUDES already-overdue deadlines (lower bound = today)", () => {
+    const tasks: TaskRow[] = [
+      { id: "past", due: "2026-06-01", status: "open" } as TaskRow, // overdue → excluded
+      { id: "today", due: "2026-06-05", status: "open" } as TaskRow, // today → included
+      { id: "soon", due: "2026-06-07", status: "open" } as TaskRow, // within 7d → included
+      { id: "far", due: "2026-06-20", status: "open" } as TaskRow, // beyond → excluded
+    ];
+    expect(upcoming7d(tasks, "2026-06-05")).toBe(2); // "today" + "soon"
+  });
+
+  // NEW-SC4-anchor — the window anchors at owner-local (America/Toronto) midnight, not bare
+  // UTC midnight. An all-day deadline equal to today's owner-local date still counts (it must
+  // not be excluded by a UTC-vs-local off-by-a-few-hours anchor).
+  it("upcoming7d anchors at owner-local midnight (today's all-day deadline counts)", () => {
+    const tasks: TaskRow[] = [{ id: "today", due: "2026-06-05", status: "open" } as TaskRow];
+    expect(upcoming7d(tasks, "2026-06-05")).toBe(1);
+  });
 });

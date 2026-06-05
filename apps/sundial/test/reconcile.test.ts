@@ -67,6 +67,31 @@ describe("Sundial block mapping", () => {
     expect(block.extendedProperties.private.agent).toBe("sundial");
     expect(block.extendedProperties.private.contentHash).toBe(contentHashOf(t));
   });
+
+  // IN-04 — reminders fire BEFORE the deadline (lead times), not AT it (minutes:0).
+  it("an all-day block reminds 1 day before (overrides [1440], integer in [0,40320])", () => {
+    const block = taskToBlock(task({ id: "rd", due: "2026-06-06" }));
+    expect(block.reminders.useDefault).toBe(false);
+    expect(block.reminders.overrides.map((o) => o.minutes)).toEqual([1440]);
+    for (const o of block.reminders.overrides) {
+      expect(o.method).toBe("popup");
+      expect(Number.isInteger(o.minutes)).toBe(true);
+      expect(o.minutes).toBeGreaterThanOrEqual(0);
+      expect(o.minutes).toBeLessThanOrEqual(40320);
+    }
+  });
+
+  it("a timed block reminds 1 day + 1 hour before (overrides [1440, 60], none at minutes:0)", () => {
+    const block = taskToBlock(task({ id: "rt", due: "2026-06-06T17:00:00-04:00" }));
+    expect(block.reminders.useDefault).toBe(false);
+    expect(block.reminders.overrides.map((o) => o.minutes)).toEqual([1440, 60]);
+    // None of the lead times is 0 (would fire AT the deadline).
+    expect(block.reminders.overrides.some((o) => o.minutes === 0)).toBe(false);
+    for (const o of block.reminders.overrides) {
+      expect(Number.isInteger(o.minutes)).toBe(true);
+      expect(o.minutes).toBeLessThanOrEqual(40320);
+    }
+  });
 });
 
 describe("Sundial reconcile (create/patch/skip — no delete)", () => {
@@ -103,15 +128,57 @@ describe("Sundial reconcile (create/patch/skip — no delete)", () => {
     expect(state.patches).toBe(1);
   });
 
-  it("a duplicate atlasTaskId → keep earliest + propose-removal (gated, NOT delete) + P2", async () => {
+  it("a duplicate atlasTaskId for an OPEN task → keep earliest + propose-removal (gated, NOT delete) + P2", async () => {
     const existing: ExistingEvent[] = [
       { eventId: "dupA", extendedProperties: { private: { atlasTaskId: "dup1", contentHash: "h" } } },
       { eventId: "dupB", extendedProperties: { private: { atlasTaskId: "dup1", contentHash: "h" } } },
     ];
     const { tools } = makeTools(existing);
-    const result = await reconcile(env2, [], tools);
+    // The task is still OPEN, so exactly one of its two blocks is kept and the other is proposed
+    // for removal. (If the task were an orphan, BOTH blocks would be proposed for removal by the
+    // orphan sweep — covered by the orphan tests below.)
+    const result = await reconcile(env2, [task({ id: "dup1", due: "2026-06-06" })], tools);
     expect(result.proposedRemovals).toBe(1);
     expect(result.decisions.some((d) => d.action === "propose-removal")).toBe(true);
     // propose-removal is a GATED proposal, never an autonomous delete.
+  });
+
+  // NEW-SC3 — an ORPHAN (a Sundial-owned block whose atlasTaskId has no matching open task,
+  // because the task was done/cancelled) → a GATED proposed removal, NOT a delete, and ZERO
+  // calendar create/patch writes for that orphan.
+  it("an orphan block (no matching open task) → propose-removal (gated, NOT delete), no writes", async () => {
+    const existing: ExistingEvent[] = [
+      { eventId: "orphanEv", extendedProperties: { private: { atlasTaskId: "gone1", contentHash: "h" } } },
+    ];
+    const { tools, state } = makeTools(existing);
+    // No incoming open tasks reference "gone1".
+    const result = await reconcile(env2, [task({ id: "still-open", due: "2026-06-06" })], tools);
+
+    // The orphan is proposed for removal (gated), and the still-open task is created.
+    expect(result.proposedRemovals).toBeGreaterThan(0);
+    const orphanDecision = result.decisions.find(
+      (d) => d.action === "propose-removal" && d.atlasTaskId === "gone1",
+    );
+    expect(orphanDecision).toBeDefined();
+    expect(orphanDecision?.eventId).toBe("orphanEv");
+
+    // ZERO calendar writes for the orphan: only the still-open task was created, the orphan
+    // never produced a create or a patch (Sundial has no delete verb — gated proposal only).
+    expect(state.creates).toBe(1); // the still-open task
+    expect(state.patches).toBe(0);
+    for (const d of result.decisions) expect(d.action).not.toMatch(/delete/i);
+  });
+
+  it("a done-task orphan with NO open tasks at all → propose-removal only, zero writes", async () => {
+    const existing: ExistingEvent[] = [
+      { eventId: "lone", extendedProperties: { private: { atlasTaskId: "done1", contentHash: "h" } } },
+    ];
+    const { tools, state } = makeTools(existing);
+    const result = await reconcile(env2, [], tools);
+    expect(result.proposedRemovals).toBe(1);
+    expect(result.created).toBe(0);
+    expect(result.updated).toBe(0);
+    expect(state.creates).toBe(0);
+    expect(state.patches).toBe(0);
   });
 });

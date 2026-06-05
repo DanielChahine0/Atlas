@@ -85,13 +85,26 @@ export async function reconcile(
     decisions: [],
   };
 
-  // (2) Duplicate handling: keep earliest, propose removal of the rest (GATED, never delete).
+  // The set of atlasTaskIds for the incoming OPEN tasks (the only ids Sundial should keep a
+  // block for). Any Sundial-owned event whose atlasTaskId is NOT here is an orphan (its task
+  // was done/cancelled/deleted) → a GATED proposed removal in step (4).
+  const openTaskIds = new Set(tasks.map((t) => t.id));
+
+  // (2) Duplicate handling for an OPEN task: keep earliest, propose removal of the rest (GATED,
+  // never delete). For an ORPHAN (no matching open task) ALL its blocks — including the earliest —
+  // are proposed for removal by the orphan sweep in (4); gating duplicate handling on the task
+  // still being open avoids a misleading "keeping the earliest" proposal and a double flag.
+  // Track which event ids were already proposed-for-removal here so the orphan sweep in (4)
+  // never double-counts a duplicate it already consumed.
+  const proposedEventIds = new Set<string>();
   for (const [taskId, events] of byTaskId) {
-    if (events.length > 1) {
+    if (events.length > 1 && openTaskIds.has(taskId)) {
       // Keep events[0] (earliest by list order), propose-removal for the rest.
       for (let i = 1; i < events.length; i++) {
-        result.decisions.push({ action: "propose-removal", atlasTaskId: taskId, eventId: events[i]!.eventId });
+        const ev = events[i]!;
+        result.decisions.push({ action: "propose-removal", atlasTaskId: taskId, eventId: ev.eventId });
         result.proposedRemovals++;
+        proposedEventIds.add(ev.eventId);
       }
       await flag(
         env,
@@ -124,6 +137,29 @@ export async function reconcile(
       result.skipped++;
       result.decisions.push({ action: "skip", atlasTaskId: task.id });
     }
+  }
+
+  // (4) Orphan handling: a Sundial-owned event whose atlasTaskId is NOT in the open-task set
+  // (the task was completed/cancelled/deleted, so Forge no longer surfaces it) → a GATED
+  // proposed removal (docs/agents/sundial.md "Orphans → a gated proposed removal"). NEVER an
+  // autonomous delete — Sundial has no delete verb; this only records the proposal for the
+  // owner-confirm gate (Pillar 2, suggest-don't-destroy). Duplicates already proposed in (2)
+  // are skipped via proposedEventIds so they are not counted twice.
+  for (const [taskId, events] of byTaskId) {
+    if (openTaskIds.has(taskId)) continue; // still an open task → keep its block
+    for (const ev of events) {
+      if (proposedEventIds.has(ev.eventId)) continue; // already a duplicate proposal
+      result.decisions.push({ action: "propose-removal", atlasTaskId: taskId, eventId: ev.eventId });
+      result.proposedRemovals++;
+      proposedEventIds.add(ev.eventId);
+    }
+    await flag(
+      env,
+      "P2",
+      "sundial found an orphaned calendar block",
+      `Block(s) for atlasTaskId ${taskId} have no matching open task (done/cancelled); proposing a GATED removal (owner confirm — never an autonomous delete).`,
+      { sourceAgent: "Sundial" },
+    );
   }
 
   return result;

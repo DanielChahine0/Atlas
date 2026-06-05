@@ -67,22 +67,24 @@ export function taskToBlock(task: TaskRow): CalendarBlock {
     syncedDue: due,
     contentHash: contentHashOf(task),
   };
-  // Default reminders: a single popup at the due time (idempotent override set).
-  const reminders = {
-    useDefault: false as const,
-    overrides: [{ method: "popup" as const, minutes: 0 }],
-  };
+  // Lead-time reminders fire BEFORE the deadline (not AT it). Google override minutes must be
+  // an integer in [0, 40320]. We always emit the FULL override array (useDefault:false) so a
+  // create OR a drift-patch idempotently re-asserts the complete set (never appends).
+  // NOTE: contentHashOf does NOT include reminders, so this only takes effect on new blocks or
+  // blocks already drifting for another reason — existing live blocks are not backfilled.
+  const popupAt = (minutes: number) => ({ method: "popup" as const, minutes });
 
   if (isDateOnly(due)) {
+    // All-day / date-only block → remind 1 day before (1440 min).
     return {
       summary: `⏰ ${task.title}`,
       start: { date: due },
       end: { date: exclusiveEndDate(due) }, // end EXCLUSIVE
       extendedProperties: { private: stamp },
-      reminders,
+      reminders: { useDefault: false as const, overrides: [popupAt(1440)] },
     };
   }
-  // Datetime due → a 15-minute timed marker ending AT due.
+  // Datetime due → a 15-minute timed marker ending AT due; remind 1 day + 1 hour before.
   const end = new Date(due);
   const start = new Date(end.getTime() - 15 * 60_000);
   return {
@@ -90,6 +92,6 @@ export function taskToBlock(task: TaskRow): CalendarBlock {
     start: { dateTime: start.toISOString() },
     end: { dateTime: end.toISOString() },
     extendedProperties: { private: stamp },
-    reminders,
+    reminders: { useDefault: false as const, overrides: [popupAt(1440), popupAt(60)] },
   };
 }
