@@ -20,6 +20,7 @@ import {
   upsertWindow,
   upsertJob,
   decideWindow,
+  buildScanSummaryEvent,
   type WindowRow,
   type JobRow,
 } from "../src/windows.js";
@@ -152,7 +153,6 @@ describe("Headhunter window idempotency (GATING)", () => {
 
 describe("Headhunter Wire scan summary contract", () => {
   it("scan summary idempotencyKey matches headhunter:scan:<date>", () => {
-    const { buildScanSummaryEvent } = require("../src/windows.js");
     const evt = buildScanSummaryEvent(BASE_DATE, 3, 1);
     expect(evt.idempotencyKey).toBe(`headhunter:scan:${BASE_DATE}`);
     expect(evt.op).toBe("upsert");

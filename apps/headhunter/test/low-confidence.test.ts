@@ -16,7 +16,7 @@ import { describe, it, expect, vi } from "vitest";
 import { env } from "cloudflare:test";
 import type { RawIncident } from "@atlas/shared";
 import type { WireEvent } from "@atlas/wire";
-import { decideWindow, type WindowRow } from "../src/windows.js";
+import { decideWindow, shouldFlagLowConfidence, type WindowRow } from "../src/windows.js";
 import type { Env } from "../src/index.js";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -122,7 +122,6 @@ describe("Headhunter low-confidence window routing (D2-14)", () => {
   });
 
   it("shouldFlagLowConfidence returns true for confidence < 0.4 AND source historical", () => {
-    const { shouldFlagLowConfidence } = require("../src/windows.js");
     expect(shouldFlagLowConfidence({ confidence: 0.3, source: "historical" })).toBe(true);
     expect(shouldFlagLowConfidence({ confidence: 0.3, source: "board:levels.fyi" })).toBe(false);
     expect(shouldFlagLowConfidence({ confidence: 0.5, source: "historical" })).toBe(false);
