@@ -220,6 +220,62 @@ describe("C4 — login/auth URL bypass classes (was: only reset|verify|confirm)"
 });
 
 // ---------------------------------------------------------------------------
+// CLASS NEW-MH2 — FRAGMENT-delivered tokens + OPAQUE-PATH magic links
+// The query-marker rule only sees `?`/`&`; a token in the URL FRAGMENT (after `#`) or as a bare
+// high-entropy PATH segment with no keyword path bypassed BOTH redact() AND containsSecret().
+// Each case below is a canonical bypass from the finding — assert it is redacted AND flagged.
+// Benign anchor/slug controls guard against over-redaction.
+// ---------------------------------------------------------------------------
+describe("NEW-MH2 — fragment tokens + opaque-path magic links", () => {
+  it("redacts an OAuth implicit-flow token in the URL FRAGMENT (`#access_token=`)", () => {
+    assertRedacted(
+      "Signed in: https://app.example.com/#access_token=eyJhbGciOiJIabc123",
+      "access_token=eyJhbGciOiJIabc123",
+    );
+  });
+
+  it("redacts an `#otp=123456` delivered in the fragment", () => {
+    assertRedacted(
+      "Here: https://example.com/#otp=123456",
+      "otp=123456",
+    );
+  });
+
+  it("redacts an `#id_token=` after another fragment param (`&id_token=`)", () => {
+    assertRedacted(
+      "Callback https://app.example.com/cb#state=x&id_token=ey.zz to finish",
+      "id_token=ey.zz",
+    );
+  });
+
+  it("redacts a path-only magic link with a high-entropy token segment (`/m/AbC123dEf456`)", () => {
+    assertRedacted(
+      "Open https://example.com/m/AbC123dEf456 to continue",
+      "AbC123dEf456",
+    );
+  });
+
+  // --- over-redaction guards: ordinary fragments/slugs must remain intact ---
+  it("does NOT redact a benign anchor fragment (`#section-2`)", () => {
+    assertClean("https://docs.example.com/guide#section-2");
+  });
+
+  it("does NOT redact a benign keyword-free fragment (`#overview`)", () => {
+    assertClean("https://example.com/#overview");
+  });
+
+  it("does NOT redact an opaque token under a NON-magic path prefix (`/items/`)", () => {
+    // The opaque-path rule anchors ONLY on magic/login-ish prefixes (`/m/`, `/magic/`, …);
+    // a high-entropy segment under `/items/` is left intact (conservative, no over-redaction).
+    assertClean("https://example.com/items/AbC123dEf456");
+  });
+
+  it("does NOT redact a SHORT `/m/` segment that is not a token (`/m/cart`)", () => {
+    assertClean("https://shop.example.com/m/cart");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // CLASS W10 — phrase coverage: OTP / one-time passcode / security code / double-spaced reset
 // ---------------------------------------------------------------------------
 describe("W10 — phrase bypass classes", () => {

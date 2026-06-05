@@ -8,11 +8,21 @@
  * regardless of scope (HERE), the Herald digest-builder guardrail catches a leak
  * (Phase 1), and a CI unit test backstops it (test/redact.test.ts).
  *
+ * NOTE (Pillar 1): this Worker intentionally NEVER touches `atlas-wire` — its
+ * `wrangler.jsonc` declares NO `queues` block, so `env.WIRE` is undefined here. It
+ * therefore CANNOT emit a Wire incident (a Wire P1 would require a producer binding
+ * that would weaken the single-writer pillar). A detected egress leak is BLOCKED (the
+ * redacted body + `isError: true` are returned to the caller) and logged via
+ * `console.warn` for observability; raising the documented P1 incident is the
+ * downstream caller's job (it maps `containsSecret` → a Flagger emit from a Worker that
+ * IS a Wire producer). Do NOT add a `queues.producers` block to this Worker.
+ *
  * Two security floors, enforced by CONSTRUCTION (not by prose):
  *   1. REDACTION — every tool-output body is run through `@atlas/security` `redact()`
  *      BEFORE it leaves the server, so a 2FA code / reset link / login URL never
- *      reaches the caller, regardless of the requested scope. A caught attempt to
- *      surface a secret is a P1 incident (the caller maps `containsSecret` → flag).
+ *      reaches the caller, regardless of the requested scope. A detected leak is
+ *      blocked at egress (`isError: true` + redacted body) and logged; the caller
+ *      raises the P1 (it maps `containsSecret` → flag from a Wire producer).
  *   2. LEAST-PRIVILEGE SCOPE — every tool invocation reads the inbound granted scopes
  *      via the agents-SDK `getMcpAuthContext()` (the OAuthProvider attaches them as
  *      `ctx.props.scopes`) and returns a 403-equivalent MCP error if the tool's
@@ -29,7 +39,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpHandler } from "agents/mcp";
 import { redact, containsSecret } from "@atlas/security";
-import { flag } from "@atlas/shared";
 import type { Env as SharedEnv } from "@atlas/shared";
 import {
   GMAIL_MODIFY_SCOPE,
@@ -85,42 +94,36 @@ export const SECRET_BLOCKED_TEXT =
 /**
  * The single egress point for EVERY tool-output body. Runs the body through the
  * `@atlas/security` redactor so 2FA codes / reset links / login URLs are stripped
- * before the result leaves the server — regardless of scope. If a secret was
- * present, the caller is given an env to raise a P1 (block + flag); the redacted
- * text is returned either way (fail-safe: the secret never escapes).
+ * before the result leaves the server — regardless of scope. The redacted text is
+ * returned either way (fail-safe: the secret never escapes).
  *
- * When a leak is detected (the documented "P1 block"), the result is returned with
- * `isError: true` and a NEUTRAL, secret-free message PREPENDED so the block is
- * OBSERVABLE to the client (I28) instead of looking like a normal tool result. The
- * redacted content is still returned (never the secret) so a caller can see what was
- * stripped. The best-effort `flag()` emit is preserved.
+ * When a leak is detected, the result is returned with `isError: true` and a NEUTRAL,
+ * secret-free message PREPENDED so the block is OBSERVABLE to the client (I28) instead
+ * of looking like a normal tool result. The redacted content is still returned (never
+ * the secret) so a caller can see what was stripped.
+ *
+ * This Worker has NO Wire producer binding (Pillar 1 — see file header), so it does
+ * NOT emit a Flagger incident here: `env.WIRE` is undefined and a `flag()` call would
+ * throw and be swallowed, making the "P1 from mcp-google" promise dead code. Instead a
+ * detected leak is logged via `console.warn` (structured, secret-free) so it is
+ * observable in Worker logs; the downstream caller — a Worker that IS a Wire producer —
+ * maps the `isError: true` block to the documented P1 Flagger emit. The `env` param is
+ * retained for signature stability and any future non-Wire use; it is not used to flag.
  *
  * This is the function the CI backstop (test/redact.test.ts) drives directly, and
  * the function EVERY registered tool funnels its output through.
  */
 export async function safeToolOutput(
   body: string,
-  env?: Env,
+  _env?: Env,
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
   const leaked = containsSecret(body);
   const clean = redact(body);
   if (leaked) {
-    if (env) {
-      // A caught attempt to surface a secret is a P1 (block + flag). We never include
-      // the offending body in the flag detail — only the fact + the source tool.
-      try {
-        await flag(
-          env,
-          "P1",
-          "secret-exposure-blocked",
-          "a Type/Security body was redacted server-side before egress",
-          { sourceAgent: "Filer" },
-        );
-      } catch {
-        // Flag emission is best-effort; the redaction itself is the load-bearing guard.
-      }
-    }
-    // I28: make the P1 block OBSERVABLE — isError:true + neutral message, redacted content kept.
+    // Observability without the Wire: a structured, SECRET-FREE marker in Worker logs.
+    // We never log the offending body — only the fact that a leak was blocked at egress.
+    console.warn("[mcp-google] secret-exposure blocked on tool egress");
+    // I28: make the block OBSERVABLE — isError:true + neutral message, redacted content kept.
     return {
       isError: true,
       content: [

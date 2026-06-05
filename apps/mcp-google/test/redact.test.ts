@@ -16,12 +16,14 @@ import type { Env } from "../src/index.js";
 // every registered tool funnels its output through — directly with synthetic fixtures.
 // No real secret VALUE appears anywhere.
 
-/** A minimal env: the redaction is the load-bearing guard; the flag emit is best-effort. */
-const noopEnv = {
-  // flag() would call send() on WIRE; we leave WIRE undefined so a leak detection's
-  // best-effort flag emit is swallowed by safeToolOutput's try/catch (the redaction
-  // still happens — that is what we assert).
-} as unknown as Env;
+/**
+ * A minimal env: the redaction is the load-bearing guard. mcp-google intentionally has NO Wire
+ * producer binding (Pillar 1), so safeToolOutput never emits a Flagger incident here — a detected
+ * leak is BLOCKED at egress (redacted body + isError:true) and logged via console.warn; the
+ * downstream caller (a Wire producer) raises the P1. We pass a WIRE-less env to prove the egress
+ * strip needs nothing from the Wire.
+ */
+const noopEnv = {} as unknown as Env;
 
 /** Join the text parts of a tool result. */
 function textOf(out: { content: { type: "text"; text: string }[] }): string {
@@ -128,6 +130,33 @@ describe("mcp-google redaction backstop (SPINE-04)", () => {
     const out = await safeToolOutput(body, noopEnv);
     expect(textOf(out)).not.toContain("https://login.example.com/confirm?session=deadbeef");
     expect(out.isError).toBe(true);
+  });
+
+  // ---- NEW-MH2: FRAGMENT-delivered tokens + OPAQUE-PATH magic links on egress ----
+  it("NEW-MH2: strips an OAuth `#access_token=` fragment token on egress", async () => {
+    const body = "Signed in: https://app.example.com/#access_token=eyJhbGciOiJIabc123";
+    const out = await safeToolOutput(body, noopEnv);
+    expect(textOf(out)).not.toContain("access_token=eyJhbGciOiJIabc123");
+    expect(out.isError).toBe(true);
+  });
+
+  it("NEW-MH2: strips an `#otp=123456` fragment token on egress", async () => {
+    const out = await safeToolOutput("Here: https://example.com/#otp=123456", noopEnv);
+    expect(textOf(out)).not.toContain("otp=123456");
+    expect(textOf(out)).not.toContain("123456");
+    expect(out.isError).toBe(true);
+  });
+
+  it("NEW-MH2: strips a path-only magic link `/m/AbC123dEf456` on egress", async () => {
+    const out = await safeToolOutput("Open https://example.com/m/AbC123dEf456 now", noopEnv);
+    expect(textOf(out)).not.toContain("AbC123dEf456");
+    expect(out.isError).toBe(true);
+  });
+
+  it("NEW-MH2: does NOT over-redact a benign anchor fragment on egress (no isError)", async () => {
+    const out = await safeToolOutput("See https://docs.example.com/guide#section-2 for details", noopEnv);
+    expect(textOf(out)).toContain("https://docs.example.com/guide#section-2");
+    expect(out.isError).toBeUndefined();
   });
 
   it("does NOT redact a benign body, returns no isError (no over-redaction)", async () => {

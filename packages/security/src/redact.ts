@@ -18,6 +18,13 @@
  * two phrase patterns) and leaked: 7/8-digit and spaced/dashed codes, full-width-digit codes,
  * login/signin/magic-link/SSO URLs, and the `OTP`/`one-time passcode`/`security code` phrases.
  *
+ * Hardened again (NEW-MH2) against URL bypasses where the sensitive token rides in the URL
+ * FRAGMENT (after `#`, e.g. an OAuth implicit-flow `#access_token=…` or `#otp=…`) — which the
+ * query-marker rule (`[?&]…=`) never sees — or as an opaque high-entropy PATH segment under a
+ * magic/login-ish prefix with no keyword path (`/m/AbC123dEf456`). Both are anchored on the token
+ * keyword / magic prefix so ordinary anchor fragments (`#section-2`) and word slugs are not
+ * over-redacted.
+ *
  * THREE classes of digit pattern, deliberately split to balance fail-safe redaction against
  * over-redaction (T-00-26 / I24):
  *   - FULL-WIDTH origin (ALWAYS-ON, no cue): a run of 6–8 FULL-WIDTH digits (U+FF10–U+FF19) in
@@ -81,6 +88,20 @@ const BASE_PATTERNS: readonly RegExp[] = [
   /https?:\/\/\S*\/(?:login|signin|sign-in|auth|sso|magic)\S*/i,
   // ANY URL carrying a token/otp/code/ticket query marker (magic-link / SSO ticket).
   /https?:\/\/\S*[?&](?:token|otp|code|ticket)=\S*/i,
+  // FRAGMENT-delivered token (NEW-MH2): an OAuth implicit-flow / magic-link token in the URL
+  // FRAGMENT (after `#`) bypasses the query-marker rule above (which only sees `?`/`&`). Anchor
+  // on `#…<keyword>=` so an ordinary anchor fragment (`#section-2`) is NOT over-redacted — only a
+  // fragment carrying a sensitive token KEY is masked. Covers `#access_token=`, `#id_token=`,
+  // `#token=`, `#otp=`, `#code=`, `#ticket=`, and the same keys after a `&` inside the fragment.
+  /https?:\/\/\S*#\S*(?:access_token|id_token|token|otp|code|ticket)=\S*/i,
+  // OPAQUE-PATH magic/login link (NEW-MH2): a token delivered as a high-entropy PATH segment with
+  // NO query/fragment marker and NO keyword path (e.g. `https://example.com/m/AbC123dEf456`). We
+  // anchor CONSERVATIVELY on a short magic/login-ish path prefix (`/m/`, `/l/`, `/magic/`,
+  // `/login/`, `/auth/`, `/verify/`, `/confirm/`, `/invite/`) IMMEDIATELY followed by an opaque
+  // token: ≥12 chars of URL-safe token alphabet that contains BOTH a letter and a digit (a
+  // high-entropy signal), so a short/word segment like `/m/cart` is NOT redacted by THIS rule,
+  // and an opaque token under a non-magic prefix (`/items/AbC123dEf456`) is left intact.
+  /https?:\/\/\S*\/(?:m|l|magic|login|auth|verify|confirm|invite)\/(?=[\w-]{12,})(?=[\w-]*[A-Za-z])(?=[\w-]*\d)[\w-]+/i,
 
   // --- Formatted codes (ALWAYS-ON): grouped digit runs that read as a code. ---
   // 3-3, 3-4, or 3-5 with a single space or dash separator: `482 913`, `482-9137`, `123 45678`.
