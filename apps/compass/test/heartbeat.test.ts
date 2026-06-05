@@ -53,7 +53,7 @@ function makeEnv(opts: { incidentsPresent?: boolean } = {}): {
 describe("Compass heartbeat", () => {
   it("emits kind:heartbeat incident to INCIDENTS after a successful plan() run", async () => {
     const { testEnv, incidents } = makeEnv();
-    const compass = new Compass(testEnv, {} as DurableObjectState);
+    const compass = new Compass({} as ExecutionContext, testEnv);
     // Inject empty tasks + events (no model needed for zero-task plan)
     const emptyCalendar: BusyInterval[] = [];
     await compass.plan({ date: "2026-06-05", tasks: [], calendar: emptyCalendar });
@@ -69,7 +69,7 @@ describe("Compass heartbeat", () => {
 
   it("emits exactly ONE heartbeat per successful plan() run", async () => {
     const { testEnv, incidents } = makeEnv();
-    const compass = new Compass(testEnv, {} as DurableObjectState);
+    const compass = new Compass({} as ExecutionContext, testEnv);
     await compass.plan({ date: "2026-06-05", tasks: [], calendar: [] });
 
     const heartbeats = incidents.filter((i) => i.kind === "heartbeat");
@@ -78,7 +78,7 @@ describe("Compass heartbeat", () => {
 
   it("run still succeeds when INCIDENTS binding is absent (optional-chaining)", async () => {
     const { testEnv } = makeEnv({ incidentsPresent: false });
-    const compass = new Compass(testEnv, {} as DurableObjectState);
+    const compass = new Compass({} as ExecutionContext, testEnv);
     // Should not throw even without INCIDENTS binding
     const result = await compass.plan({ date: "2026-06-05", tasks: [], calendar: [] });
     expect(result).toBeDefined();

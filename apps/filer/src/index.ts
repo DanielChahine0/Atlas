@@ -130,19 +130,30 @@ export class Filer extends WorkerEntrypoint<Env> {
    * The `filer-sweep` Workflow-step RPC target. Runs the sweep (the live Gmail tools are
    * wired in the Workflow step / a live build; tests inject `tools`), then emits the
    * canonical `filer:sweep:<date>` event to Steward. Returns the summary for the next step.
+   * Emits a kind:heartbeat incident on every successful run (D2-07).
    */
   async sweep(params?: { date?: string; tools?: GmailTools }): Promise<SweepSummary> {
     const date = params?.date ?? localDate(this.env);
+    let summary: SweepSummary;
     if (!params?.tools) {
       // No live Gmail tools wired yet (the live binding lands with the Workflow step /
       // owner-provisioned OAuth). Emit a zero-summary so the chain step is still
       // observable and replay-safe; never fabricate label writes.
-      const empty: SweepSummary = { labeled: 0, uncertain: 0, phishing: 0 };
-      await send(this.env, buildSweepEvent(date, empty));
-      return empty;
+      summary = { labeled: 0, uncertain: 0, phishing: 0 };
+      await send(this.env, buildSweepEvent(date, summary));
+    } else {
+      summary = await runSweep(params.tools);
+      await send(this.env, buildSweepEvent(date, summary));
     }
-    const summary = await runSweep(params.tools);
-    await send(this.env, buildSweepEvent(date, summary));
+    // Heartbeat: inform FlaggerState's alarm scheduler this slot ran successfully (D2-07).
+    // Optional-chaining: a Worker without the INCIDENTS binding still runs.
+    await this.env.INCIDENTS?.send({
+      source_agent: "Filer",
+      kind: "heartbeat",
+      severity_hint: "P4",
+      title: `Filer heartbeat ${date}`,
+      run_id: date,
+    });
     return summary;
   }
 }

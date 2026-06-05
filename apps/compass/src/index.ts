@@ -140,6 +140,7 @@ export class Compass extends WorkerEntrypoint<Env> {
    * (read-only) and produces the day plan. Tests inject tasks/events; the live model +
    * calendar read wire in with OAuth. Degrade-don't-skip: if Sundial is unfinished, plan
    * against the last-known calendar (the caller passes whatever events it has).
+   * Emits a kind:heartbeat incident on every successful run (D2-07).
    */
   async plan(params?: {
     date?: string;
@@ -148,11 +149,21 @@ export class Compass extends WorkerEntrypoint<Env> {
     gridParams?: GridParams;
   }): Promise<PlanResult> {
     const date = params?.date ?? localDate(this.env);
-    return await runPlan(this.env, date, "morning", {
+    const result = await runPlan(this.env, date, "morning", {
       tasks: params?.tasks,
       events: params?.calendar,
       gridParams: params?.gridParams,
     });
+    // Heartbeat: inform FlaggerState's alarm scheduler this slot ran successfully (D2-07).
+    // Optional-chaining: a Worker without the INCIDENTS binding still runs.
+    await this.env.INCIDENTS?.send({
+      source_agent: "Compass",
+      kind: "heartbeat",
+      severity_hint: "P4",
+      title: `Compass heartbeat ${date}`,
+      run_id: date,
+    });
+    return result;
   }
 }
 

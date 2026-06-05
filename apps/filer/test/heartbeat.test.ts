@@ -60,7 +60,7 @@ function makeEnv(opts: { incidentsPresent?: boolean } = {}): {
 describe("Filer heartbeat", () => {
   it("emits kind:heartbeat incident to INCIDENTS after a successful sweep", async () => {
     const { env, incidents } = makeEnv();
-    const filer = new Filer(env as unknown as Env, {} as DurableObjectState);
+    const filer = new Filer({} as ExecutionContext, env as unknown as Env);
     await filer.sweep({ date: "2026-06-05", tools: makeTools() });
 
     const hb = incidents.find((i) => i.kind === "heartbeat");
@@ -74,7 +74,7 @@ describe("Filer heartbeat", () => {
 
   it("emits exactly ONE heartbeat per successful sweep", async () => {
     const { env, incidents } = makeEnv();
-    const filer = new Filer(env as unknown as Env, {} as DurableObjectState);
+    const filer = new Filer({} as ExecutionContext, env as unknown as Env);
     await filer.sweep({ date: "2026-06-05", tools: makeTools() });
 
     const heartbeats = incidents.filter((i) => i.kind === "heartbeat");
@@ -83,7 +83,7 @@ describe("Filer heartbeat", () => {
 
   it("run still succeeds when INCIDENTS binding is absent (optional-chaining)", async () => {
     const { env } = makeEnv({ incidentsPresent: false });
-    const filer = new Filer(env as unknown as Env, {} as DurableObjectState);
+    const filer = new Filer({} as ExecutionContext, env as unknown as Env);
     // Should not throw even without INCIDENTS binding
     const result = await filer.sweep({ date: "2026-06-05", tools: makeTools() });
     expect(result).toBeDefined();

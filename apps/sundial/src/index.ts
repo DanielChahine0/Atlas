@@ -149,6 +149,7 @@ export class Sundial extends WorkerEntrypoint<Env> {
    * The `sundial-sync` Workflow-step RPC target. Reads deadline tasks from D1 and reconciles
    * them onto the calendar (own blocks only, no delete). Tests inject `tools` (+ optional
    * tasks); the live calendar tools wire in with OAuth.
+   * Emits a kind:heartbeat incident on every successful run (D2-07).
    */
   async sync(params?: {
     date?: string;
@@ -156,21 +157,32 @@ export class Sundial extends WorkerEntrypoint<Env> {
     tasks?: TaskRow[];
   }): Promise<ReconcileResult> {
     const date = params?.date ?? localDate(this.env);
+    let result: ReconcileResult;
     if (!params?.tools) {
       // No live calendar tools wired yet. Emit a zero-summary so the chain step is
       // observable + replay-safe; never fabricate calendar writes.
-      const empty: ReconcileResult = {
+      result = {
         created: 0,
         updated: 0,
         skipped: 0,
         proposedRemovals: 0,
         decisions: [],
       };
-      await send(this.env, buildSyncEvent(date, empty, 0));
-      return empty;
+      await send(this.env, buildSyncEvent(date, result, 0));
+    } else {
+      const db = (this.env as unknown as { DB: D1Database }).DB;
+      result = await runSync(this.env, db, date, params.tools, params.tasks);
     }
-    const db = (this.env as unknown as { DB: D1Database }).DB;
-    return await runSync(this.env, db, date, params.tools, params.tasks);
+    // Heartbeat: inform FlaggerState's alarm scheduler this slot ran successfully (D2-07).
+    // Optional-chaining: a Worker without the INCIDENTS binding still runs.
+    await this.env.INCIDENTS?.send({
+      source_agent: "Sundial",
+      kind: "heartbeat",
+      severity_hint: "P4",
+      title: `Sundial heartbeat ${date}`,
+      run_id: date,
+    });
+    return result;
   }
 }
 

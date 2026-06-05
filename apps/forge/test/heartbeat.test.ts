@@ -54,7 +54,7 @@ function makeEnv(opts: { incidentsPresent?: boolean } = {}): {
 describe("Forge heartbeat", () => {
   it("emits kind:heartbeat incident to INCIDENTS after a successful morning() run", async () => {
     const { testEnv, incidents } = makeEnv();
-    const forge = new Forge(testEnv, {} as DurableObjectState);
+    const forge = new Forge({} as ExecutionContext, testEnv);
     // No extractor/candidates → early-return empty result (still a successful run)
     await forge.morning({ date: "2026-06-05" });
 
@@ -69,7 +69,7 @@ describe("Forge heartbeat", () => {
 
   it("emits exactly ONE heartbeat per successful morning() run", async () => {
     const { testEnv, incidents } = makeEnv();
-    const forge = new Forge(testEnv, {} as DurableObjectState);
+    const forge = new Forge({} as ExecutionContext, testEnv);
     await forge.morning({ date: "2026-06-05" });
 
     const heartbeats = incidents.filter((i) => i.kind === "heartbeat");
@@ -78,7 +78,7 @@ describe("Forge heartbeat", () => {
 
   it("run still succeeds when INCIDENTS binding is absent (optional-chaining)", async () => {
     const { testEnv } = makeEnv({ incidentsPresent: false });
-    const forge = new Forge(testEnv, {} as DurableObjectState);
+    const forge = new Forge({} as ExecutionContext, testEnv);
     // Should not throw even without INCIDENTS binding
     const result = await forge.morning({ date: "2026-06-05" });
     expect(result).toBeDefined();

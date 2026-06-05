@@ -52,7 +52,7 @@ function makeEnv(opts: { incidentsPresent?: boolean } = {}): {
 describe("Sundial heartbeat", () => {
   it("emits kind:heartbeat incident to INCIDENTS after a successful sync() run", async () => {
     const { testEnv, incidents } = makeEnv();
-    const sundial = new Sundial(testEnv, {} as DurableObjectState);
+    const sundial = new Sundial({} as ExecutionContext, testEnv);
     // No tools → zero-summary path (still a successful run)
     await sundial.sync({ date: "2026-06-05" });
 
@@ -67,7 +67,7 @@ describe("Sundial heartbeat", () => {
 
   it("emits exactly ONE heartbeat per successful sync() run", async () => {
     const { testEnv, incidents } = makeEnv();
-    const sundial = new Sundial(testEnv, {} as DurableObjectState);
+    const sundial = new Sundial({} as ExecutionContext, testEnv);
     await sundial.sync({ date: "2026-06-05" });
 
     const heartbeats = incidents.filter((i) => i.kind === "heartbeat");
@@ -76,7 +76,7 @@ describe("Sundial heartbeat", () => {
 
   it("run still succeeds when INCIDENTS binding is absent (optional-chaining)", async () => {
     const { testEnv } = makeEnv({ incidentsPresent: false });
-    const sundial = new Sundial(testEnv, {} as DurableObjectState);
+    const sundial = new Sundial({} as ExecutionContext, testEnv);
     // Should not throw even without INCIDENTS binding
     const result = await sundial.sync({ date: "2026-06-05" });
     expect(result).toBeDefined();

@@ -244,6 +244,7 @@ export class Forge extends WorkerEntrypoint<Env> {
    * re-fetch full bodies), extracts deadline-safe tasks into D1, and emits per-task events.
    * Tests inject `extractor` + `candidates`; the live model + Gmail-ref read wire in with the
    * Workflow step. Do NOT mutate event.payload — state is returned forward.
+   * Emits a kind:heartbeat incident on every successful run (D2-07).
    */
   async morning(params?: {
     date?: string;
@@ -253,30 +254,42 @@ export class Forge extends WorkerEntrypoint<Env> {
     const today = params?.date ?? localDate(this.env);
     const candidates = params?.candidates ?? [];
     const extractor = params?.extractor;
+    let result: MorningResult;
     if (!extractor || candidates.length === 0) {
       // No live model/candidates yet (wired with OAuth + the chain). Return an empty result;
       // never fabricate tasks.
-      return { inserted: 0, merged: 0, skipped: 0, phishing: 0, taskIds: [] };
+      result = { inserted: 0, merged: 0, skipped: 0, phishing: 0, taskIds: [] };
+    } else {
+      const db = (this.env as unknown as { DB: D1Database }).DB;
+      // CR-01: actually ENGAGE the ForgeLock DO around the dedupe+write critical section.
+      // FORGE_LOCK is optional-typed (absent in some test/dev wiring); when present, address it
+      // by run date so all of a date's task writes serialize through one instance, and run the
+      // upsert batch inside its blockConcurrencyWhile. When absent, fall back to the identity
+      // runner (the Wire send() calls already sit OUTSIDE the locked section — the for-loop in
+      // runMorning runs after runUnderLock returns — so this does not widen the lock).
+      const lock = this.env.FORGE_LOCK;
+      const runUnderLock = lock
+        ? <T>(fn: () => Promise<T>) => lock.getByName(today).withLock(fn)
+        : undefined;
+      result = await runMorning(
+        this.env,
+        db,
+        today,
+        candidates,
+        extractor,
+        runUnderLock ?? ((fn) => fn()),
+      );
     }
-    const db = (this.env as unknown as { DB: D1Database }).DB;
-    // CR-01: actually ENGAGE the ForgeLock DO around the dedupe+write critical section.
-    // FORGE_LOCK is optional-typed (absent in some test/dev wiring); when present, address it
-    // by run date so all of a date's task writes serialize through one instance, and run the
-    // upsert batch inside its blockConcurrencyWhile. When absent, fall back to the identity
-    // runner (the Wire send() calls already sit OUTSIDE the locked section — the for-loop in
-    // runMorning runs after runUnderLock returns — so this does not widen the lock).
-    const lock = this.env.FORGE_LOCK;
-    const runUnderLock = lock
-      ? <T>(fn: () => Promise<T>) => lock.getByName(today).withLock(fn)
-      : undefined;
-    return await runMorning(
-      this.env,
-      db,
-      today,
-      candidates,
-      extractor,
-      runUnderLock ?? ((fn) => fn()),
-    );
+    // Heartbeat: inform FlaggerState's alarm scheduler this slot ran successfully (D2-07).
+    // Optional-chaining: a Worker without the INCIDENTS binding still runs.
+    await this.env.INCIDENTS?.send({
+      source_agent: "Forge",
+      kind: "heartbeat",
+      severity_hint: "P4",
+      title: `Forge heartbeat ${today}`,
+      run_id: today,
+    });
+    return result;
   }
 }
 
