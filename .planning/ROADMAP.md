@@ -13,7 +13,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 
 ## Phases
 
-- [ ] **Phase 0: Spine** - Infrastructure substrate (Atlas, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth); zero user-visible features. _[MVP]_
+- [x] **Phase 0: Spine** - Infrastructure substrate (Atlas, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth); zero user-visible features. _[MVP]_ (completed 2026-06-05)
 - [ ] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_
 - [ ] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog).
 - [ ] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first.
@@ -105,7 +105,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Spine | 6/8 | In Progress|  |
+| 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 0/TBD | Not started | - |
 | 2. Weekly Value | 0/TBD | Not started | - |
 | 3. Capture (Local) | 0/TBD | Not started | - |

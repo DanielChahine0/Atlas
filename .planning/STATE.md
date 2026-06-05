@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 00-04-PLAN.md (steward crux)
-last_updated: "2026-06-05T00:03:50.619Z"
+stopped_at: "00-08 PAUSED at the blocking owner gate (Task 4): Obsidian plugin + ATLAS_BRIDGE_TOKEN + launchd + lsof/end-to-end. Tasks 1-3 (3 MCP Workers + daemon + tests) committed."
+last_updated: "2026-06-05T01:16:04.585Z"
 last_activity: 2026-06-05
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 8
-  completed_plans: 6
-  percent: 0
+  completed_plans: 8
+  percent: 17
 ---
 
 # Project State
@@ -31,7 +31,7 @@ Status: Ready to execute
 Last activity: 2026-06-05
 Next action: execute Plan 00-04 (`/gsd:execute-phase 0`)
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [████████░░] 75%
 | Phase 00 P04 | 30 | 3 tasks | 13 files |
 | Phase 00 P05 | 6 | 2 tasks | 8 files |
 | Phase 00 P07 | 7 | 2 tasks | 12 files |
+| Phase 00 P08 | 16 | 3 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,10 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase ?]: 00-07: @atlas/codex read-only by ABSENCE (exports only read/codexSystemBlock/parseCodex + types; no write/update/patch/put/post/delete/mutate export — T-00-71); read() takes an injected drive.readonly token + fetch, CONFIG KV holds only the Drive file id.
 - [Phase ?]: 00-07: @atlas/model claudeFor/modelFor route every Claude call through the AI Gateway Anthropic endpoint (gateway.ai.cloudflare.com/v1/{account}/{gateway}/anthropic) — the direct host never appears in src; tiering reads KV model:<codename> -> [vars] MODEL_<CODENAME> -> CLAUDE.md map (re-tunable without redeploy, only dateless 4.x ids); a non-2xx APIError calls flag(env,P3,...) emitting the canonical op:upsert/entity:flag event with a structured idempotencyKey (the flag id, no crypto.randomUUID).
 - [Phase ?]: 00-07: codexSystemBlock() returns the SDK TextBlockParam with cache_control {type:ephemeral, ttl:1h} (Anthropic prompt caching at 0.1x read); SPINE-03 complete (the Codex exists, read-only, with the seven §11 sections).
+- [Phase ?]: 00-08: confirmed agents@0.14.1 MCP surface by reading the installed .d.ts (createMcpHandler stateless; McpAgent<Env,State,Props> abstract server+init+static serve({binding}); getMcpAuthContext().props.scopes; MCP SDK 1.29.0 registerTool) BEFORE writing the classes — reading resolved declarations is the equivalent when Context7/cf-docs MCP is unreachable (00-03/04/06 method).
+- [Phase ?]: 00-08: mcp-google safeToolOutput() runs @atlas/security redact() on EVERY tool-output egress with NO scope parameter — a 2FA code/reset link/login URL is stripped server-side regardless of scope; gmail.modify floor via getMcpAuthContext().props.scopes (403, fail-closed); NO message/thread removal tool registered (unreachable by construction, Pillar 2). redact+scope tests green (SPINE-04 backstop).
+- [Phase ?]: 00-08: mcp-obsidian-bridge exposes ONLY /bridge/poll+/bridge/ack (else 404), both ATLAS_BRIDGE_TOKEN-gated (constant-time, fail-closed), draining vault_outbox; idempotent ack via UPDATE ... AND state!='done' (so meta.changes is the true no-op signal); op->REST is the single steward-core SAFE_METHODS (PATCH/POST, NO DELETE; now exported). daemon outbound-only: poll->PATCH 127.0.0.1:27124->ack, ack only after write (pending never lost), self-signed cert trusted for the localhost agent only, no inbound socket, plist no listener key. SPINE-05 transport built.
+- [Phase ?]: 00-08: mcp-github stateful GithubMcp McpAgent (new_sqlite_classes DO) behind OAuthProvider; GitHub App ghs_ installation token minted per-call server-side and NEVER returned to the client (T-00-32); GH_APP_PRIVATE_KEY secret binding; passWithNoTests (DO round-trip needs a live grant). PAUSED at the blocking owner gate (Task 4): Obsidian plugin v3.0+, ATLAS_BRIDGE_TOKEN seeding, launchd load, lsof no-inbound-port + live end-to-end; resume 'approved'.
 
 ### Pending Todos
 
@@ -98,6 +103,7 @@ None yet.
 - **R2 not enabled on the account** (outstanding owner action): `wrangler r2 bucket create atlas-blobs` fails with CF API err 10042 ("enable R2 through the Dashboard"). The `BLOBS` binding is declared-and-ready in `apps/atlas/wrangler.jsonc`. Owner: enable R2 in the Dashboard, then run `wrangler r2 bucket create atlas-blobs` + `wrangler r2 bucket lifecycle add atlas-blobs --name expire-raw-audio --prefix "audio/raw/" --expire-days 7` (the 7-day raw-audio expiry is mandatory per D-03). Non-blocking for Phase 0 (R2 first needed by Echo in Phase 3).
 - ~~Hard prerequisite: Workers Paid~~ — **resolved**: the spine provisioned & builds on the Workers **Free** plan (D-01/D-02). `wrangler whoami` + `wrangler queues list` confirmed Free-tier access.
 - **Owner-judgment calls** deliberately left open (not conflicts) — surface at the relevant phase: package manager (pnpm drafted), Worker granularity, `compatibility_date` pin (`2026-04-25`), heartbeat staleness threshold (5 min), DST operational burden, `invokeAgent` transport, Herald output surface, Compass `effort` level, the two manual measurement commitments (pre-launch baseline + ~1-min daily review).
+- 00-08 owner gate (Task 4, blocking-human): install Obsidian Local REST API v3.0+, mint ATLAS_BRIDGE_TOKEN into Secrets Store (mcp-obsidian-bridge) + the daemon local env, load com.atlas.bridge.plist via launchctl, prove no inbound Atlas port via lsof, run the live increment->Vault + replay-no-op smoke. Resume: 'approved'. Tasks 1-3 committed (553d6a3, aecd062, 57eeaee, 1304f13).
 
 ## Deferred Items
 
@@ -107,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-05T00:03:34.987Z
-Stopped at: Completed 00-04-PLAN.md (steward crux)
-Resume file: None
+Last session: 2026-06-05T01:15:55.785Z
+Stopped at: 00-08 PAUSED at the blocking owner gate (Task 4): Obsidian plugin + ATLAS_BRIDGE_TOKEN + launchd + lsof/end-to-end. Tasks 1-3 (3 MCP Workers + daemon + tests) committed.
+Resume file: .planning/phases/00-spine/00-08-SUMMARY.md
