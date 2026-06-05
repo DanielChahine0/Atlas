@@ -14,6 +14,7 @@ import { RawIncidentSchema } from "@atlas/shared";
 import type { RawIncident, FlagRecord } from "@atlas/shared";
 import type { Env as SharedEnv } from "@atlas/shared";
 import { send } from "@atlas/wire";
+import type { WireEvent } from "@atlas/wire";
 import { FlaggerState } from "./state.js";
 import { score } from "./score.js";
 import { pushFlag } from "./push.js";
@@ -21,9 +22,6 @@ import { timingSafeEqual } from "./auth.js";
 
 // Export FlaggerState class so vitest-pool-workers can discover it as a DO class.
 export { FlaggerState };
-
-// Re-export for test convenience
-export type { Env };
 
 /** Flagger's local Env — extends SharedEnv with required bindings. */
 export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
@@ -39,20 +37,27 @@ export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   ACK_TOKEN?: SecretsStoreSecret;
 }
 
-/** Build the canonical flag upsert Wire event for atlas-wire → Steward → Vault. */
-function buildFlagWireEvent(flag: FlagRecord) {
+/**
+ * Build the canonical flag upsert Wire event for atlas-wire → Steward → Vault.
+ *
+ * The §6.4 WireEvent contract types `payload` as `Record<string, unknown>` (the wire
+ * schema is `z.record(z.string(), z.unknown())` — intentionally NO index signature on the
+ * shared FlagRecord type). We cast the FlagRecord into the wire payload locally at the
+ * emit boundary; we do NOT weaken FlagRecord or the WireEvent contract.
+ */
+function buildFlagWireEvent(flag: FlagRecord): WireEvent {
   return {
-    agent: "Flagger" as const,
+    agent: "Flagger",
     type: "flag",
     entity: "flag",
-    op: "upsert" as const,
-    payload: flag,
+    op: "upsert",
+    payload: flag as unknown as Record<string, unknown>,
     idempotencyKey: flag.id,
   };
 }
 
 /** Build a P3 flag upsert Wire event for malformed incidents (sent directly to WIRE). */
-function buildMalformedFlagEvent(msgId: string, body: unknown): ReturnType<typeof buildFlagWireEvent> {
+function buildMalformedFlagEvent(msgId: string, body: unknown): WireEvent {
   const hash = simpleHash(String(msgId));
   const date = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
   const id = `flg:${date}:Flagger:${hash}`;
@@ -76,7 +81,11 @@ function simpleHash(s: string): string {
 }
 
 export default {
-  async queue(batch: MessageBatch<RawIncident>, env: Env): Promise<void> {
+  // The batch body is typed `unknown` (not `MessageBatch<RawIncident>`): a queued message
+  // is untrusted until RawIncidentSchema.safeParse narrows it at runtime, and typing it as
+  // RawIncident here is not assignable to ExportedHandlerQueueHandler's body parameter.
+  // safeParse below is the single source of truth for the incident shape.
+  async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
     // Update KV last_seen FIRST (best-effort — watchdog depends on this)
     await env.CONFIG.put("flagger:last_seen", String(Date.now())).catch(() => {});
 
@@ -87,7 +96,7 @@ export default {
 
         if (!parsed.success) {
           // Malformed: ack() immediately (never retry) + P3 flag sent directly to WIRE
-          await send(env as unknown as Parameters<typeof send>[0], buildMalformedFlagEvent(msg.id, msg.body));
+          await send(env, buildMalformedFlagEvent(msg.id, msg.body));
           msg.ack();
           continue;
         }
@@ -126,7 +135,7 @@ export default {
         }
 
         // Emit canonical flag upsert to atlas-wire → Steward → Vault
-        await send(env as unknown as Parameters<typeof send>[0], buildFlagWireEvent(flag));
+        await send(env, buildFlagWireEvent(flag));
         msg.ack();
       } catch (err) {
         console.error("flagger: incident processing failed", msg.id, err);

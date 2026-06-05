@@ -136,8 +136,10 @@ describe("Flagger queue() â€” routing (P1/P2 push; P3/P4 board-only; malformed â
   it("P1 incident: flag upsert sent to WIRE AND ntfy push called (push enabled + topic set)", async () => {
     const { env: e, wireEvents } = makeTestEnv({ pushEnabled: true, ntfyTopicSet: true });
 
-    // Spy on fetch (ntfy push uses fetch)
-    const fetchMock = vi.fn(async () => new Response("OK"));
+    // Spy on fetch (ntfy push uses fetch). Declare the URL param so mock.calls[i]
+    // is a typed [url, ...] tuple (an untyped `vi.fn(async () => ...)` types calls
+    // as an empty tuple, which is not index-safe under strict TS).
+    const fetchMock = vi.fn(async (_url: string | URL) => new Response("OK"));
     vi.stubGlobal("fetch", fetchMock);
 
     const { batch, ack, retry } = fakeBatch(p1Incident, { id: "p1-1" });
@@ -153,7 +155,7 @@ describe("Flagger queue() â€” routing (P1/P2 push; P3/P4 board-only; malformed â
     // ntfy push was called (fetch to ntfy.sh)
     expect(fetchMock).toHaveBeenCalledOnce();
     const fetchCall = fetchMock.mock.calls[0];
-    expect(fetchCall?.[0]).toContain("ntfy.sh");
+    expect(String(fetchCall?.[0])).toContain("ntfy.sh");
 
     // Message was ack'd (not retried)
     expect(ack).toHaveBeenCalledTimes(1);
