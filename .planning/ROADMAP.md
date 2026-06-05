@@ -15,7 +15,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 
 - [x] **Phase 0: Spine** - Infrastructure substrate (Atlas, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth); zero user-visible features. _[MVP]_ (code-complete 2026-06-05; owner go-live gates pending — see `.planning/STATE.md` → Blockers)
 - [x] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_ (code-complete + review-remediated 2026-06-05; owner go-live gates pending)
-- [ ] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog).
+- [x] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog). (completed 2026-06-05)
 - [ ] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first.
 - [ ] **Phase 4: Outward (Gated)** - Usher (gated registration), Envoy (gated public posts); confirmation-gate UX is the real work, gate hardest.
 - [ ] **Phase 5: Meta / Polish** - Switchboard (design-time capability router), Librarian (prompt library).
@@ -92,7 +92,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 02-06-PLAN.md — weekly-Herald mode (D2-10): Friday week-in-review draft (redaction-guarded, no send) + `herald:weekly` digest event + Herald heartbeat
 
 **Wave 3** *(integration — blocked on 02-04/05/06)*
-- [ ] 02-07-PLAN.md — Atlas cron wiring (4 standalone dual-EDT/EST cases, Friday `Promise.allSettled`) + Scout/Headhunter/Steward service bindings + `Steward.weeklyReviewBuild` (16:30) + cron-cap human-verify checkpoint
+- [x] 02-07-PLAN.md — Atlas cron wiring (4 standalone dual-EDT/EST cases, Friday `Promise.allSettled`) + Scout/Headhunter/Steward service bindings + `Steward.weeklyReviewBuild` (16:30) + cron-cap human-verify checkpoint
 
 **Cross-cutting constraints** (truths appearing in 2+ plans):
 - Steward stays the SOLE `atlas-wire` consumer (Pillar 1); Flagger consumes the NEW `atlas-incidents` queue and PRODUCES onto `atlas-wire`; the watchdog produces directly onto `atlas-wire` (producer, never consumer).
@@ -149,7 +149,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 |-------|----------------|--------|-----------|
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
-| 2. Weekly Value | 6/7 | In Progress|  |
+| 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 0/TBD | Not started | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
