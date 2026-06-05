@@ -1,0 +1,26 @@
+{
+  "name": "@atlas/mcp-google",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@atlas/security": "workspace:*",
+    "@atlas/shared": "workspace:*",
+    "@atlas/wire": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "agents": "^0.14.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.13",
+    "@cloudflare/workers-types": "^4.20260425.0",
+    "vitest": "^4.1.8"
+  }
+}

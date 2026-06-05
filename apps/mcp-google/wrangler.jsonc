@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mcp-google",
+  "main": "src/index.ts",
+  // D-09: match Atlas/Steward — >= 2026-04-07 floor; pair with nodejs_compat
+  // (REQUIRED by the agents SDK — omitting it is a runtime failure).
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The STATELESS Google MCP (createMcpHandler) — no Durable Object class, so
+  // there is intentionally NO durable_objects / migrations block (cf. the
+  // STATEFUL mcp-github which IS DO-backed).
+  //
+  // Pillar 1: mcp-google does NOT read the Wire and does NOT produce on the bus's
+  // write side — it never touches atlas-wire at all. Steward remains the SOLE reader
+  // of atlas-wire; this Worker declares no queues block, so the CI one-writer gate
+  // (which scans apps/*/wrangler.jsonc) counts ZERO bus readers here.
+
+  // OAUTH_KV — the inbound OAuthProvider grant store. The per-tool scope floor
+  // (gmail.modify, etc.) is enforced server-side by reading ctx.props.scopes from
+  // the validated grant the provider attaches; the provider needs a REAL KV.
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "970e569e796a4868ad82449885d0319f" }
+  ],
+
+  // Google API access secrets — read ONLY via the Secrets Store async binding
+  // (await env.X.get()). NEVER in [vars]/KV/Vault/Codex/audit_log/tracked files.
+  // store_id is the same per-account placeholder as apps/atlas/wrangler.jsonc —
+  // filled in when the owner creates the single Secrets Store (00-06 Gate C).
+  "secrets_store_secrets": [
+    {
+      "binding": "GOOGLE_CLIENT_SECRET",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "google-oauth-client-secret"
+    },
+    {
+      "binding": "GOOGLE_REFRESH_TOKEN",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "google-refresh-token"
+    }
+  ],
+
+  // PLAINTEXT non-secrets ONLY (the Google OAuth public client id is not a secret).
+  "vars": {
+    "GOOGLE_CLIENT_ID": "<set-after-gcp-oauth-client>"
+  },
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (convention — this Worker has no crons of its own).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}

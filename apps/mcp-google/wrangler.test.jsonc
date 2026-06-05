@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. Mirrors the
+  // production apps/mcp-google/wrangler.jsonc but uses a local-only KV (no remote
+  // id) so the pool stays fully local. No secrets_store_secrets here — the redact +
+  // scope tests stub the auth context and tool-output path directly.
+  "name": "mcp-google-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "test-oauth-kv" }]
+}
