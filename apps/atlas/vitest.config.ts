@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 
 // @cloudflare/vitest-pool-workers ^0.16 (vitest v4) uses the Vite-plugin API:
 // `cloudflareTest({...})` replaces the old `defineWorkersConfig`/`poolOptions.workers`
@@ -7,10 +7,24 @@ import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 // `workerd` (not Node mocks). The pool forces TZ=UTC — same as `wrangler dev` and
 // production — so derive owner-local dates via Intl. Per-test storage isolation is
 // the default in v4 (the old `isolatedStorage: true` flag is no longer a config key).
+//
+// The pool does NOT auto-apply D1 migrations. We read the shared repo-root migrations
+// here (Node side) and `provide` them; the setup file applies them to the fresh per-test
+// D1 in beforeAll (the 00-04 steward pattern). The OAuth no-secret-leak test queries
+// audit_log, so the schema must be present. Vitest evaluates this config with the project
+// dir (apps/atlas) as cwd, so "../../migrations" resolves the same path wrangler uses.
+const migrations = await readD1Migrations("../../migrations");
+
 export default defineConfig({
   test: {
-    // Wave 1 ships no tests yet (the Steward critical-section + replay/serialize
-    // suites land in Plan 04). Don't hard-fail the toolchain before they exist.
+    // No-secret-leak test queries audit_log — apply the schema before any test runs.
+    setupFiles: ["./test/apply-migrations.ts"],
+    provide: {
+      // Surfaced to the setup file via inject("migrations").
+      migrations,
+    },
+    // Earlier waves shipped suites that need no D1 schema; keep the toolchain non-failing
+    // if a future config is run with no test files.
     passWithNoTests: true,
   },
   plugins: [
