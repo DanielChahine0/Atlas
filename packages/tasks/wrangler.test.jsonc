@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. @atlas/tasks is a
+  // data-access PACKAGE (not a deployed Worker), but its store.test.ts drives a REAL
+  // D1 in workerd, so the pool needs a worker entry + a D1 binding. There is no
+  // src/index Worker handler here, so we point main at a tiny test-only no-op entry.
+  "name": "atlas-tasks-test",
+  "main": "./test/worker-entry.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  // D1 binding DB + the shared repo-root migrations (0001 + 0002 + 0003 applied by the
+  // apply-migrations setup file before any test runs — the pool does NOT auto-apply).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ]
+}
