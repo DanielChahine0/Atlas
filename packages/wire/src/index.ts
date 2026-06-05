@@ -3,4 +3,4 @@
 // `import { WireEvent } from "@atlas/wire"` and use it as a schema (WireEvent.parse(...))
 // or as a type (let e: WireEvent).
 export { WireEvent } from "./contract.js";
-export { send } from "./send.js";
+export { send, WIRE_MAX_BYTES, WireEventTooLargeError } from "./send.js";

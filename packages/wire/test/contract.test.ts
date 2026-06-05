@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { WireEvent, send } from "../src/index.js";
+import { WireEvent, send, WIRE_MAX_BYTES, WireEventTooLargeError } from "../src/index.js";
 
 // The mandatory Wire-contract test (CLAUDE.md Definition of Done #1): proves the §6.4
 // shape + structured idempotencyKey, and that the producer helper parses before it sends.
@@ -70,5 +70,65 @@ describe("send() producer helper", () => {
     const malformed = { ...validEvent, op: "delete" };
     await expect(send({ WIRE } as never, malformed as never)).rejects.toThrow();
     expect(WIRE.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("send() enforces the 128 KB Wire cap (W11)", () => {
+  it("throws a typed WireEventTooLargeError naming the limit — never silently truncating or sending", async () => {
+    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
+    // Build an event whose encoded JSON clears the 128 KB cap (string > WIRE_MAX_BYTES).
+    const oversized = {
+      agent: "Atlas",
+      type: "noop.tick",
+      entity: "spine",
+      op: "append" as const,
+      payload: { blob: "x".repeat(WIRE_MAX_BYTES + 1) },
+      idempotencyKey: "atlas:noop:2026-06-04",
+    };
+
+    const err = await send({ WIRE } as never, oversized).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WireEventTooLargeError);
+    const tooLarge = err as WireEventTooLargeError;
+    expect(tooLarge.maxBytes).toBe(WIRE_MAX_BYTES);
+    expect(tooLarge.byteLength).toBeGreaterThan(WIRE_MAX_BYTES);
+    expect(tooLarge.message).toContain("128 KB");
+    // No silent truncation: the oversized event NEVER reaches the Queue.
+    expect(WIRE.send).not.toHaveBeenCalled();
+  });
+
+  it("sends a normal (sub-cap) event fine", async () => {
+    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
+    const normal = {
+      agent: "Atlas",
+      type: "noop.tick",
+      entity: "spine",
+      op: "append" as const,
+      payload: { note: "phase-0 smoke" },
+      idempotencyKey: "atlas:noop:2026-06-04",
+    };
+    await send({ WIRE } as never, normal);
+    expect(WIRE.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows an event right at the boundary (≤ cap) and rejects one byte over", async () => {
+    const WIRE = { send: vi.fn().mockResolvedValue(undefined) };
+    // Probe the envelope overhead, then size payload so total === WIRE_MAX_BYTES exactly.
+    const base = {
+      agent: "Atlas",
+      type: "noop.tick",
+      entity: "spine",
+      op: "append" as const,
+      payload: { blob: "" },
+      idempotencyKey: "atlas:noop:2026-06-04",
+    };
+    const overhead = new TextEncoder().encode(JSON.stringify(base)).byteLength;
+    const atCap = { ...base, payload: { blob: "x".repeat(WIRE_MAX_BYTES - overhead) } };
+    expect(new TextEncoder().encode(JSON.stringify(atCap)).byteLength).toBe(WIRE_MAX_BYTES);
+    await expect(send({ WIRE } as never, atCap)).resolves.toBeUndefined();
+    expect(WIRE.send).toHaveBeenCalledTimes(1);
+
+    const overCap = { ...base, payload: { blob: "x".repeat(WIRE_MAX_BYTES - overhead + 1) } };
+    await expect(send({ WIRE } as never, overCap)).rejects.toBeInstanceOf(WireEventTooLargeError);
+    expect(WIRE.send).toHaveBeenCalledTimes(1); // still one — the over-cap event was rejected
   });
 });
