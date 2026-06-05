@@ -22,14 +22,14 @@ import { decideWindow, isUrgent, type WindowRow } from "../src/windows.js";
 const LEAD_TIME = 21;
 const FIT_FLOOR = 0.4;
 
-function makeWindow(overrides: Partial<WindowRow> & { closes_est: string }): WindowRow {
+function makeWindow(overrides: Partial<WindowRow>): WindowRow {
   return {
     id: "meta:fall-2026:new-grad",
     company: "Meta",
     cycle: "fall-2026",
     role_class: "new-grad",
     opens_est: "2026-07-01",
-    closes_est: overrides.closes_est,
+    closes_est: "2026-11-30", // default far future
     confidence: 0.85,
     source: "board:levels.fyi",
     status: "open",

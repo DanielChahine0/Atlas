@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "headhunter",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // HeadhunterState DO — addressed as env.HEADHUNTER_STATE.getByName("pipeline").
+  // One name = one instance = serialized window state transitions.
+  "durable_objects": {
+    "bindings": [{ "name": "HEADHUNTER_STATE", "class_name": "HeadhunterState" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HeadhunterState"] }],
+
+  // Pillar 1: Headhunter is a Wire PRODUCER only — NO consumers block.
+  // D2-05: Headhunter produces onto atlas-incidents via flag() for incident routing.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 system-of-record — Headhunter reads/writes windows + jobs tables.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // KV — CONFIG holds Headhunter knobs:
+  //   headhunter/tracked_companies  — owner-curated watchlist (D2-15; starter seed used if unset)
+  //   headhunter/boards             — board URLs to scan
+  //   headhunter/cycle              — current cycle (e.g. "fall-2026")
+  //   headhunter/rolling_companies  — always-on companies regardless of cycle
+  //   headhunter/lead_time_days     — urgency threshold (default 21)
+  //   headhunter/fit_floor          — fit score floor (default 0.4)
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // Workers AI gateway routing — Headhunter may use Claude for fit scoring (optional v1).
+  "ai": { "binding": "AI" },
+
+  // Forge service binding — apply-by tasks go through Forge's createTask RPC (D2-13/D2-14).
+  // Headhunter NEVER writes the tasks table directly (T-02-hh3 / acceptance criteria).
+  "services": [
+    { "binding": "FORGE", "service": "forge" }
+  ],
+
+  // NO own production cron — Atlas drives Headhunter via service binding (Plan 02-07).
+  // Mon 09:00 ET → env.HEADHUNTER.full(date)
+  // Daily 09:00 ET → env.HEADHUNTER.deadlines(date)
+
+  "observability": { "enabled": true },
+
+  "env": {
+    "staging": {
+      // Staging fires NO crons (CLAUDE.md constraint).
+      "triggers": { "crons": [] }
+    }
+  }
+}
