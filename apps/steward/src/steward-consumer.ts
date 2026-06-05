@@ -1,6 +1,7 @@
 import type { Env as SharedEnv } from "@atlas/shared";
 import { flag } from "@atlas/shared";
 import type { WireEvent } from "@atlas/wire";
+import { NonRetryableError } from "cloudflare:workflows";
 import type { StewardWriter } from "./steward.js";
 
 /**
@@ -26,12 +27,19 @@ export interface Env extends Omit<SharedEnv, "STEWARD_LOCK"> {
  * the batch (which would break ordering / overlap writes).
  *
  * Failure handling:
- *   - Malformed (fails the §6.4 field-presence shape check) → flag P3 + `msg.ack()`
- *     + continue. ACK, never retry — a malformed event can never become valid, so
- *     retrying would poison-loop. The write never reaches `apply()`.
- *   - Transient `apply()` throw → `msg.retry({delaySeconds:60})` (redelivery is
- *     safe; the ledger dedups). At `msg.attempts >= 4` also flag P2; exhausted
- *     retries fall through to the `atlas-wire-dlq` dead-letter queue (SPINE-05).
+ *   - Malformed (fails the §6.4 field-presence shape check, INCLUDING a missing /
+ *     non-object `payload` — W8) → flag P3 + `msg.ack()` + continue. ACK, never
+ *     retry — a malformed event can never become valid, so retrying would
+ *     poison-loop. The write never reaches `apply()` (a payload-less event would
+ *     otherwise throw a TypeError inside `apply()` and be mis-routed to the
+ *     transient-retry path → DLQ).
+ *   - `NonRetryableError` from `apply()` (e.g. a non-integer counter delta — C2) →
+ *     same treatment as malformed: flag P3 + `msg.ack()`. It is a permanent
+ *     contract violation; retrying would poison-loop, so it never reaches the DLQ.
+ *   - Any OTHER (transient) `apply()` throw → `msg.retry({delaySeconds:60})`
+ *     (redelivery is safe; the ledger dedups). At `msg.attempts >= 4` also flag P2;
+ *     exhausted retries fall through to the `atlas-wire-dlq` dead-letter queue
+ *     (SPINE-05).
  *
  * `flag()` is called EXACTLY as `flag(env, severity, title, detail?)`
  * (GLOBAL DECISION 2). The helper builds the full flag record and emits the
@@ -44,8 +52,18 @@ export const stewardConsumer = {
     for (const msg of batch.messages) {
       // SERIAL — never a parallel fan-out (would break the single-writer ordering).
       const e = msg.body;
-      if (!e?.agent || !e?.op || !e?.entity || !e?.idempotencyKey) {
-        // Malformed: ack (don't poison-loop) + raise a P3 incident.
+      if (
+        !e?.agent ||
+        !e?.op ||
+        !e?.entity ||
+        !e?.idempotencyKey ||
+        !e?.payload ||
+        typeof e.payload !== "object"
+      ) {
+        // Malformed: ack (don't poison-loop) + raise a P3 incident. The payload
+        // gate (W8) catches a payload-less event HERE — without it that event would
+        // reach apply(), throw a TypeError on `e.payload.counter`, and be
+        // mis-routed to the transient-retry path → DLQ instead of an immediate ack.
         await flag(env, "P3", "malformed wire event", JSON.stringify(e ?? null));
         msg.ack();
         continue;
@@ -54,6 +72,24 @@ export const stewardConsumer = {
         await steward.apply(e); // replay & success both ⇒ ack
         msg.ack();
       } catch (err) {
+        // A NonRetryableError thrown inside the StewardWriter DO crosses the RPC
+        // boundary; workerd preserves `name`/`message` but may not preserve the
+        // prototype chain, so match on the name too (not just `instanceof`).
+        if (
+          err instanceof NonRetryableError ||
+          (err instanceof Error && err.name === "NonRetryableError")
+        ) {
+          // Permanent contract violation (e.g. a non-integer delta — C2). Same
+          // treatment as malformed: ack + P3, never retry (would poison-loop).
+          await flag(
+            env,
+            "P3",
+            "non-retryable steward event",
+            JSON.stringify({ key: e.idempotencyKey, err: String(err) }),
+          );
+          msg.ack();
+          continue;
+        }
         if (msg.attempts >= 4) {
           await flag(
             env,
