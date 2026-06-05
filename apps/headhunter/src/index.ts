@@ -26,6 +26,7 @@ import {
   upsertWindow,
   upsertJob,
   decideWindow,
+  isUrgent,
   shouldFlagLowConfidence,
   buildScanSummaryEvent,
   buildFunnelEvent,
@@ -283,9 +284,16 @@ export async function runDeadlines(
     const decision = decideWindow(win, { leadTimeDays, fitFloor, date });
     if (decision === null) continue;
 
-    // Promote to "closing" status if in lead time
-    const { isUrgent: isUrgentFn } = await import("./windows.js");
-    if (isUrgentFn(win.closes_est, win.deadline, leadTimeDays, date) && win.status !== "closing") {
+    // Promote to "closing" status if in lead time.
+    // M8 fix: monotonic guard — only advance upcoming→open→closing, never regress.
+    // The status order is: upcoming < open < closing < closed.
+    // I2 fix: isUrgent is a static import (moved to top-level) — no dynamic import.
+    const STATUS_ORDER: Record<string, number> = { upcoming: 0, open: 1, closing: 2, closed: 3 };
+    const canAdvanceToClosing =
+      win.status !== "closing" &&
+      win.status !== "closed" &&
+      (STATUS_ORDER[win.status] ?? 0) < STATUS_ORDER["closing"];
+    if (isUrgent(win.closes_est, win.deadline, leadTimeDays, date) && canAdvanceToClosing) {
       await upsertWindow(env.DB, { ...win, status: "closing", updated_at: Date.now() });
       promotedCount++;
     }

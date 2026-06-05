@@ -123,7 +123,11 @@ export const STARTER_SEED: WindowRow[] = [
 
 /**
  * Load the starter seed into D1 if CONFIG headhunter/tracked_companies is unset.
- * Safe to call on every full() run — upsertWindow is idempotent (INSERT OR REPLACE).
+ *
+ * M8 fix: uses INSERT OR IGNORE instead of INSERT OR REPLACE so that existing
+ * rows (e.g. windows already promoted to "closing" by deadlines()) are NEVER
+ * overwritten. The seed is a one-time bootstrap — subsequent full() runs must
+ * not regress live status/timestamps back to the static seed values.
  */
 export async function loadSeedIfEmpty(env: { CONFIG: KVNamespace; DB: D1Database }): Promise<void> {
   const tracked = await env.CONFIG.get("headhunter/tracked_companies");
@@ -132,8 +136,31 @@ export async function loadSeedIfEmpty(env: { CONFIG: KVNamespace; DB: D1Database
     return;
   }
 
-  // Load seed (idempotent — INSERT OR REPLACE)
+  // M8 fix: INSERT OR IGNORE — seed once, never overwrite live rows.
+  // If a row with the same primary key already exists it is left unchanged
+  // (status, updated_at, deadline, fit_score from previous runs are preserved).
   for (const window of STARTER_SEED) {
-    await upsertWindow(env.DB, window);
+    await env.DB
+      .prepare(
+        `INSERT OR IGNORE INTO windows(id,company,cycle,role_class,opens_est,closes_est,confidence,source,status,last_seen_open,created_at,updated_at,deadline,fit_score)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .bind(
+        window.id,
+        window.company,
+        window.cycle,
+        window.role_class,
+        window.opens_est ?? null,
+        window.closes_est ?? null,
+        window.confidence ?? null,
+        window.source ?? null,
+        window.status,
+        window.last_seen_open ?? null,
+        window.created_at,
+        window.updated_at,
+        window.deadline ?? null,
+        window.fit_score ?? null,
+      )
+      .run();
   }
 }
