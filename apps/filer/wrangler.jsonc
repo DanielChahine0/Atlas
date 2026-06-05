@@ -1,0 +1,53 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "filer",
+  "main": "src/index.ts",
+  // D-09: match Atlas/Steward — >= 2026-04-07 floor; pair with nodejs_compat.
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // FilerCursor — the per-account Gmail historyId cursor (continuous-push path).
+  // new_sqlite_classes (Free-plan SQLite DO).
+  "durable_objects": {
+    "bindings": [{ "name": "FILER_CURSOR", "class_name": "FilerCursor" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FilerCursor"] }],
+
+  // Pillar 1: Filer is a Wire PRODUCER only — it emits filer:sweep:<date> onto
+  // atlas-wire. It declares NO queues.consumers block; Steward is the SOLE consumer.
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+
+  // D1 system-of-record (Filer reads/writes no counters directly — Steward owns them;
+  // the DB binding is here for run_log/audit parity with the rest of the fleet).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // Read-mostly config/flags: the label->color map + filer.push_enabled flag (default
+  // false until D1-06 gateway ceilings are set). Never secrets, never counters.
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // Workers AI gateway routing — Filer's classification resolves to Haiku via claudeFor.
+  "ai": { "binding": "AI" },
+
+  // The 06:00 EDT users.watch renewal cron (Gmail watch expires ~7d; renew daily).
+  // Cron Triggers are UTC-only / no DST (D1): 06:00 EDT = "0 10 * * *"; 06:00 EST =
+  // "0 11 * * *". Hand-edit at the DST boundary (CLAUDE.md /cron-utc). The 07:45 sweep
+  // is NOT a Filer cron — it is the MorningChain `filer-sweep` Workflow step (Plan 08).
+  "triggers": { "crons": ["0 10 * * *"] },
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons.
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}

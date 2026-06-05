@@ -1,0 +1,26 @@
+{
+  "name": "@atlas/filer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@atlas/codex": "workspace:*",
+    "@atlas/model": "workspace:*",
+    "@atlas/shared": "workspace:*",
+    "@atlas/wire": "workspace:*"
+  },
+  "devDependencies": {
+    "@atlas/steward-core": "workspace:*",
+    "@cloudflare/vitest-pool-workers": "^0.16.13",
+    "@cloudflare/workers-types": "^4.20260425.0",
+    "vitest": "^4.1.8"
+  }
+}
