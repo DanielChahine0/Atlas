@@ -13,8 +13,8 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 
 ## Phases
 
-- [x] **Phase 0: Spine** - Infrastructure substrate (Atlas, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth); zero user-visible features. _[MVP]_ (completed 2026-06-05)
-- [x] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_ (completed 2026-06-05)
+- [x] **Phase 0: Spine** - Infrastructure substrate (Atlas, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth); zero user-visible features. _[MVP]_ (code-complete 2026-06-05; owner go-live gates pending — see `.planning/STATE.md` → Blockers)
+- [x] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_ (code-complete + review-remediated 2026-06-05; owner go-live gates pending)
 - [ ] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog).
 - [ ] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first.
 - [ ] **Phase 4: Outward (Gated)** - Usher (gated registration), Envoy (gated public posts); confirmation-gate UX is the real work, gate hardest.
@@ -79,7 +79,29 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
   2. Headhunter creates "apply by X" tasks via Forge and updates the job-pipeline kanban counts (applied → OA → interview → offer/reject); low-confidence hiring-window finds route to a flag, not silently to a task.
   3. Flagger routes P1/P2 to push immediately and batches P3/P4 into the dashboard feed; the Vault Flagger board is sorted by severity then trust.
   4. Flagger self-monitors — it flags its own heartbeat staleness.
-**Plans**: TBD
+**Plans**: 7 plans
+
+**Wave 1** *(foundation — the incident-bus hard edge; runs alone, touches every wrangler)*
+- [ ] 02-01-PLAN.md — `atlas-incidents` queue topology (D2-04) + `RawIncident` schema + `flag()` rework (D2-05) + ALL ~15 caller migrations + `0004` D1 migration (events/windows/jobs/flags); 315 tests stay green
+
+**Wave 2** *(the agents + retrofit — parallel, each owns its own dir; blocked on 02-01)*
+- [ ] 02-02-PLAN.md — Flagger: `atlas-incidents` sole consumer → score/dedupe/route → `op:upsert` flag to `atlas-wire`; FlaggerState DO single-alarm heartbeat scheduler; ntfy push (P1/P2); token-gated `/ack` route
+- [ ] 02-03-PLAN.md — flagger-watchdog (separate cron Worker, self-P1 on Flagger silence — GATING kill test) + heartbeat retrofit into Filer/Forge/Sundial/Compass
+- [ ] 02-04-PLAN.md — Scout: Friday events digest (RSS/HTML/Gmail, no Browser Rendering) + Codex/KV relevance + D1 `events` + idempotent Steward upserts; never follows email links
+- [ ] 02-05-PLAN.md — Headhunter: hiring-window state machine (D1 + HeadhunterState DO) + apply-by tasks via Forge (urgency bypasses fit floor; low-confidence → P3) + single-emitter funnel (GATING re-scan idempotency)
+- [ ] 02-06-PLAN.md — weekly-Herald mode (D2-10): Friday week-in-review draft (redaction-guarded, no send) + `herald:weekly` digest event + Herald heartbeat
+
+**Wave 3** *(integration — blocked on 02-04/05/06)*
+- [ ] 02-07-PLAN.md — Atlas cron wiring (4 standalone dual-EDT/EST cases, Friday `Promise.allSettled`) + Scout/Headhunter/Steward service bindings + `Steward.weeklyReviewBuild` (16:30) + cron-cap human-verify checkpoint
+
+**Cross-cutting constraints** (truths appearing in 2+ plans):
+- Steward stays the SOLE `atlas-wire` consumer (Pillar 1); Flagger consumes the NEW `atlas-incidents` queue and PRODUCES onto `atlas-wire`; the watchdog produces directly onto `atlas-wire` (producer, never consumer).
+- Every emitted Wire event uses a stable structured `idempotencyKey`; a replay through Steward leaves counters unchanged (`meta.changes === 0`).
+- Nothing this phase is destructive or outward-facing — Scout never registers, Headhunter never applies, Flagger never auto-remediates (Pillar 2). ntfy push is flag-gated behind `flagger.push_enabled` (default false).
+- The ntfy topic/token + ack token live in Secrets Store only; the `/ack` route uses constant-time token comparison.
+
+**Owner go-live config gates** (cannot be set from code; mirror the Phase-1 gate discipline): seed the ntfy topic + token and flip `flagger.push_enabled` (D2-03); seed the Headhunter watchlist/boards/cycle KV (D2-15); optionally seed `scout/sources`+`scout/interests`/`headhunter/targets`; verify the Workers Free per-Worker cron cap before deploying the expanded Atlas crons (RESEARCH A1).
+
 **UI hint**: yes
 
 ### Phase 3: Capture (Local)
@@ -127,7 +149,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 |-------|----------------|--------|-----------|
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
-| 2. Weekly Value | 0/TBD | Not started | - |
+| 2. Weekly Value | 0/7 | Planned | - |
 | 3. Capture (Local) | 0/TBD | Not started | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
