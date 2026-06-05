@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-06-05T20:00:21.094Z"
+stopped_at: Completed 02-05 Headhunter Worker
+last_updated: "2026-06-05T20:08:54.756Z"
 last_activity: 2026-06-05
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 33
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 ## Current Position
 
 Phase: 02 (weekly-value) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-06-05
 Next action: Execute Plan 02-06 (Herald weekly mode). Separately, clear the four Phase-1 go-live gates (see Blockers) before flipping the morning chain live + setting `filer.push_enabled=true`.
@@ -77,6 +77,7 @@ Milestone progress (phases): [███░░░░░░░] 33% — 2 of 6 pha
 | Phase 02-weekly-value P03 | 45 minutes | 2 tasks | 15 files |
 | Phase 02-weekly-value P04 | ~90 minutes | 2 tasks | 11 files |
 | Phase 02 P05 | 10 minutes | 2 tasks | 14 files |
+| Phase 02-weekly-value P06 | 10 minutes | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,7 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase 1]: 01-REVIEW: two-pass adversarial code review across forge/tasks, compass, sundial, mcp-google+security, atlas — 20 fixes applied (verified), 3 deferred; 315 tests green at HEAD 09518da.
 - [Phase 2]: 02-04: Scout Worker (apps/scout) built — injectable ScoutSources (RSS/HTML/Gmail), buildGmailQueries() structurally excludes Type/Security/Phishing-Suspect (D2-09), pure relevance() scorer (0-100), INSERT OR REPLACE into D1 events with scout:evt_<date>_<hash> keys, digest summary scout:digest:<date> Wire event. WorkerEntrypoint invoked by Atlas via service binding (no own cron). Codex skills/projects integration deferred to 02-07. 17 tests green; 373 total suite tests pass.
 - [Phase 2]: 02-05: Headhunter Worker built — HeadhunterState DO (blockConcurrencyWhile capture-inside/re-throw-after), upsertWindow/upsertJob (D1 positional ?), decideWindow (low-confidence historical → P3 flag; urgency bypasses fit_floor), classifyFunnelStages (D2-13 single-emitter), full()/deadlines() WorkerEntrypoint, FORGE.createTask service binding path (never writes tasks table directly — T-02-hh3). 24 tests green; 397 total suite tests pass.
+- [Phase ?]: Herald.weekly() entrypoint + heartbeat on daily+weekly success + herald:weekly digest event for 16:30 Vault build
 
 ### Pending Todos
 
@@ -156,6 +158,6 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ## Session Continuity
 
-Last session: 2026-06-05T20:00:21.087Z
+Last session: 2026-06-05T20:08:51.021Z
 Stopped at: Completed 02-05 Headhunter Worker
 Resume file: None
