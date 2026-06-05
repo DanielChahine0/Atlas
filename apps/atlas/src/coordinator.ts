@@ -46,8 +46,16 @@ export class AtlasCoordinator extends DurableObject<Env> {
   /**
    * Arm the self-monitor: schedule the first alarm only if one isn't already set
    * (one alarm per DO). Idempotent — safe to call on every orchestrator startup.
+   *
+   * C6 (cold-start false-fire): SEED `lastBeat` to now when arming a fresh DO so the
+   * first alarm() does NOT read a missing beat as "infinitely stale" and emit a spurious
+   * P1. We seed only when no beat exists yet (never clobber a real, more-recent beat from
+   * a concurrent arm — benign under DO single-threading, but correct regardless).
    */
   async startHeartbeat(): Promise<void> {
+    if ((await this.ctx.storage.get<number>("lastBeat")) == null) {
+      await this.ctx.storage.put("lastBeat", Date.now());
+    }
     if ((await this.ctx.storage.getAlarm()) == null) {
       await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_CADENCE_MS);
     }
@@ -59,25 +67,42 @@ export class AtlasCoordinator extends DurableObject<Env> {
    * ALWAYS reschedule the next alarm so the heartbeat never stops.
    */
   override async alarm(): Promise<void> {
-    const lastBeat = (await this.ctx.storage.get<number>("lastBeat")) ?? 0;
-    if (Date.now() - lastBeat > STALENESS_WINDOW_MS) {
-      // Escalate to Flagger over the Wire — NEVER by writing the Vault directly.
-      // flag() builds the full flag record and emits the canonical Flagger event
-      // (op "upsert" / entity "flag" / idempotencyKey === the structured flag id),
-      // so a replay re-upserts the same board row (no duplicate row). The owner-local
-      // date in that id is derived via Intl/America/Toronto inside flag() (TZ=UTC
-      // gotcha); we surface the same owner-local date in the detail for observability.
-      const localDate = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/Toronto",
-      }).format(new Date());
-      await flag(
-        this.env,
-        "P1",
-        "orchestrator heartbeat stale",
-        `No Atlas heartbeat within the ${STALENESS_WINDOW_MS / 60_000}-minute staleness window (D-10) as of ${localDate}; the orchestrator may be stuck.`,
-      );
+    try {
+      // C6 (cold-start false-fire): a MISSING lastBeat means the supervisor just started
+      // and no beat has landed yet — treat that as "not stale" (NOT epoch 0 = infinitely
+      // stale). startHeartbeat() also seeds lastBeat on arm; this is belt-and-suspenders for
+      // any path that reached an alarm without an arm. A real overdue beat still fires P1.
+      const lastBeat = await this.ctx.storage.get<number>("lastBeat");
+      if (lastBeat != null && Date.now() - lastBeat > STALENESS_WINDOW_MS) {
+        // Escalate to Flagger over the Wire — NEVER by writing the Vault directly.
+        // flag() builds the full flag record and emits the canonical Flagger event
+        // (op "upsert" / entity "flag" / idempotencyKey === the structured flag id),
+        // so a replay re-upserts the same board row (no duplicate row). The owner-local
+        // date in that id is derived via Intl/America/Toronto inside flag() (TZ=UTC
+        // gotcha); we surface the same owner-local date in the detail for observability.
+        const localDate = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Toronto",
+        }).format(new Date());
+        // C7 (heartbeat must never stop): the flag() emit is BEST-EFFORT. A throwing
+        // flag()/WIRE.send must NOT be able to kill supervision — swallow it here so the
+        // finally-block reschedule below always runs. (A lost staleness flag is recoverable
+        // on the next tick; a stopped heartbeat is not.)
+        try {
+          await flag(
+            this.env,
+            "P1",
+            "orchestrator heartbeat stale",
+            `No Atlas heartbeat within the ${STALENESS_WINDOW_MS / 60_000}-minute staleness window (D-10) as of ${localDate}; the orchestrator may be stuck.`,
+          );
+        } catch {
+          // best-effort: never let a flag emit failure stop the heartbeat (C7).
+        }
+      }
+    } finally {
+      // C7: reschedule in `finally` so the next alarm is ALWAYS armed, regardless of any
+      // throw above — the heartbeat can never stop (one alarm per DO; setting a new time
+      // overwrites, so no alarm storm).
+      await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_CADENCE_MS);
     }
-    // Reschedule the next alarm at the END — the heartbeat must never stop.
-    await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_CADENCE_MS);
   }
 }

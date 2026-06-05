@@ -64,6 +64,60 @@ describe("AtlasCoordinator heartbeat self-monitor — D-10", () => {
     expect(alarmAfter).not.toBeNull();
   });
 
+  it("C6 cold-start: a fresh DO's first alarm emits NO P1 (missing beat is not stale)", async () => {
+    // A distinct DO name => a genuinely COLD instance (storage is per-name; tests in this file
+    // share the "root" instance, so use an isolated name to model a true fresh/cold start).
+    const stub = ATLAS.getByName("c6-cold");
+    const { events, alarmAfter } = await runInDurableObject(stub, async (instance, state) => {
+      const collected = spyWire(instance);
+      // Fresh/cold DO: NO lastBeat has ever been written. The first alarm must treat a
+      // missing beat as "just started, not stale" — NOT epoch 0 (infinitely stale).
+      expect(await state.storage.get<number>("lastBeat")).toBeUndefined();
+      await instance.alarm();
+      const next = await state.storage.getAlarm();
+      return { events: collected, alarmAfter: next };
+    });
+    // No spurious P1 on the very first alarm of a fresh DO.
+    expect(events).toHaveLength(0);
+    // ...and the heartbeat still (re)armed for the next tick.
+    expect(alarmAfter).not.toBeNull();
+  });
+
+  it("C6 arm seeds lastBeat: startHeartbeat() on a fresh DO leaves it not-stale", async () => {
+    const stub = ATLAS.getByName("c6-arm"); // isolated cold instance (see note above)
+    const { lastBeat, alarm, events } = await runInDurableObject(stub, async (instance, state) => {
+      const collected = spyWire(instance);
+      await instance.startHeartbeat(); // seeds lastBeat + arms the alarm
+      const seeded = await state.storage.get<number>("lastBeat");
+      const armed = await state.storage.getAlarm();
+      // The seeded beat is fresh, so an immediate alarm() must NOT flag.
+      await instance.alarm();
+      return { lastBeat: seeded, alarm: armed, events: collected };
+    });
+    expect(lastBeat).toBeTypeOf("number");
+    expect(alarm).not.toBeNull();
+    expect(events).toHaveLength(0);
+  });
+
+  it("C7 survives a flag failure: a throwing WIRE.send still leaves the next alarm scheduled", async () => {
+    const stub = ATLAS.getByName("root");
+    const alarmAfter = await runInDurableObject(stub, async (instance, state) => {
+      // Make the Flagger emit THROW: flag() -> @atlas/wire send() -> env.WIRE.send rejects.
+      const inst = instance as unknown as { env: { WIRE: { send: (e: unknown) => Promise<void> } } };
+      inst.env = {
+        ...inst.env,
+        WIRE: { send: vi.fn(async () => { throw new Error("wire down"); }) },
+      };
+      // Force a STALE beat so alarm() takes the flag() branch (which now throws).
+      await state.storage.put("lastBeat", Date.now() - 6 * 60_000);
+      // alarm() must NOT reject even though flag() throws — and must still reschedule.
+      await expect(instance.alarm()).resolves.toBeUndefined();
+      return state.storage.getAlarm();
+    });
+    // C7: the heartbeat survives a flag failure — the next alarm is still armed.
+    expect(alarmAfter).not.toBeNull();
+  });
+
   it("single instance (Pillar 1): two getByName('root') handles address the SAME DO", async () => {
     // Write a marker via one handle...
     const a = ATLAS.getByName("root");
