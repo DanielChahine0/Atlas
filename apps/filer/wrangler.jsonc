@@ -15,8 +15,12 @@
 
   // Pillar 1: Filer is a Wire PRODUCER only — it emits filer:sweep:<date> onto
   // atlas-wire. It declares NO queues.consumers block; Steward is the SOLE consumer.
+  // D2-05: Filer also produces onto atlas-incidents via flag() for watch renewal incidents.
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
 
   // D1 system-of-record (Filer reads/writes no counters directly — Steward owns them;

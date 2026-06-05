@@ -15,14 +15,16 @@ import { WorkerEntrypoint, DurableObject } from "cloudflare:workers";
 import { send } from "@atlas/wire";
 import type { WireEvent } from "@atlas/wire";
 import { localDate } from "@atlas/shared";
-import type { Env as SharedEnv } from "@atlas/shared";
+import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
 import { readOpenDeadlineTasks, type TaskRow } from "@atlas/tasks";
 import { reconcile, type CalendarTools, type ReconcileResult } from "./reconcile.js";
 import { isDateOnly } from "./block.js";
 
 /** Sundial's env surface. */
-export interface Env extends SharedEnv {
+export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   SUNDIAL_STATE?: DurableObjectNamespace;
+  /** INCIDENTS producer (atlas-incidents): Sundial enqueues RawIncidents via flag() (D2-05). */
+  INCIDENTS: Queue<RawIncident>;
 }
 
 /** Per-run state DO (run bookkeeping; the sync itself is stateless given the task input). */

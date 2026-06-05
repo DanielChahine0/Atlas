@@ -7,8 +7,12 @@
 
   // Pillar 1: Herald is a Wire PRODUCER only — it emits herald:daily:<date>. NO
   // queues.consumers block; Steward is the SOLE consumer of atlas-wire.
+  // D2-05: Herald also produces onto atlas-incidents via flag()/guardrail.
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
 
   // D1 system-of-record (run_log/audit parity; Steward owns counters).

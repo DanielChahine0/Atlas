@@ -13,7 +13,10 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FilerCursor"] }],
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
   "d1_databases": [
     {

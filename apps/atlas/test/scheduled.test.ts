@@ -137,12 +137,13 @@ describe("Atlas dispatcher — morning-chain create() error discrimination (NEW-
     } as unknown as ExecutionContext;
   }
 
-  it("SWALLOWS a benign id-already-exists collision: no console.error, no P2 flag", async () => {
+  it("SWALLOWS a benign id-already-exists collision: no console.error, no P2 RawIncident", async () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const sent: unknown[] = [];
+    const incidents: unknown[] = [];
     const waited: Promise<unknown>[] = [];
     const env = {
-      WIRE: { send: vi.fn(async (e: unknown) => { sent.push(e); }) },
+      WIRE: { send: vi.fn(async () => {}) },
+      INCIDENTS: { send: vi.fn(async (inc: unknown) => { incidents.push(inc); }) },
       MORNING_CHAIN: {
         async create() { throw new Error("instance with id morning-2026-06-05 already exists"); },
       },
@@ -153,16 +154,17 @@ describe("Atlas dispatcher — morning-chain create() error discrimination (NEW-
 
     // A re-fire collision is the desired no-op: nothing surfaced.
     expect(errSpy).not.toHaveBeenCalled();
-    expect(sent.map((e) => WireEvent.parse(e)).filter((e) => e.type === "flag")).toHaveLength(0);
+    expect(incidents).toHaveLength(0);
     errSpy.mockRestore();
   });
 
-  it("SURFACES a non-collision create error: console.error + exactly one P2 flag (date-stable id)", async () => {
+  it("SURFACES a non-collision create error: console.error + exactly one P2 RawIncident (D2-05)", async () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const sent: unknown[] = [];
+    const incidents: unknown[] = [];
     const waited: Promise<unknown>[] = [];
     const env = {
-      WIRE: { send: vi.fn(async (e: unknown) => { sent.push(e); }) },
+      WIRE: { send: vi.fn(async () => {}) },
+      INCIDENTS: { send: vi.fn(async (inc: unknown) => { incidents.push(inc); }) },
       MORNING_CHAIN: {
         async create() { throw new Error("rate limited (429) — gateway unavailable"); },
       },
@@ -175,24 +177,22 @@ describe("Atlas dispatcher — morning-chain create() error discrimination (NEW-
     expect(errSpy).toHaveBeenCalledTimes(1);
     expect(errSpy.mock.calls[0]![0]).toContain("MorningChain create failed");
 
-    // …and exactly one P2 flag was emitted toward Flagger with a stable (date-derived) id.
-    const flags = sent.map((e) => WireEvent.parse(e)).filter((e) => e.type === "flag");
-    expect(flags).toHaveLength(1);
-    const flag = flags[0]!;
-    expect(flag.op).toBe("upsert");
-    expect((flag.payload as { severity: string }).severity).toBe("P2");
-    expect((flag.payload as { title: string }).title).toBe("morning-chain.create-failed");
-    // Stable, date-keyed flag id (a repeated failure upserts ONE row; never a random UUID).
-    expect(flag.idempotencyKey).toMatch(/^flg:\d{4}-\d{2}-\d{2}:Atlas:[a-z0-9]+$/);
+    // …and exactly one P2 RawIncident was enqueued onto atlas-incidents (D2-05).
+    expect(incidents).toHaveLength(1);
+    const inc = incidents[0] as { severity_hint: string; kind: string; source_agent: string };
+    expect(inc.severity_hint).toBe("P2");
+    expect(inc.kind).toBe("workflow_create_failed");
+    expect(inc.source_agent).toBe("Atlas");
     errSpy.mockRestore();
   });
 
   it("a non-collision create error never throws out of scheduled() (best-effort flag)", async () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const waited: Promise<unknown>[] = [];
-    // Even if the Flagger emit ALSO fails, the waitUntil promise must resolve (never reject).
+    // Even if the Flagger INCIDENTS emit ALSO fails, the waitUntil promise must resolve.
     const env = {
-      WIRE: { send: vi.fn(async () => { throw new Error("wire down"); }) },
+      WIRE: { send: vi.fn(async () => {}) },
+      INCIDENTS: { send: vi.fn(async () => { throw new Error("incidents down"); }) },
       MORNING_CHAIN: {
         async create() { throw new Error("transient 503"); },
       },

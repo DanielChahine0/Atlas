@@ -29,7 +29,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { flag } from "@atlas/shared";
-import type { Env } from "@atlas/shared";
+import type { AtlasEnv } from "./env.js";
 
 /** 1-minute alarm cadence (the heartbeat self-monitor tick). */
 const HEARTBEAT_CADENCE_MS = 60_000;
@@ -37,7 +37,7 @@ const HEARTBEAT_CADENCE_MS = 60_000;
 /** D-10: the heartbeat staleness window. Stale beyond this -> P1 to Flagger. */
 const STALENESS_WINDOW_MS = 5 * 60_000;
 
-export class AtlasCoordinator extends DurableObject<Env> {
+export class AtlasCoordinator extends DurableObject<AtlasEnv> {
   /** Record a liveness beat — the orchestrator pulse the alarm() watches for. */
   async beat(): Promise<void> {
     await this.ctx.storage.put("lastBeat", Date.now());
@@ -93,6 +93,7 @@ export class AtlasCoordinator extends DurableObject<Env> {
             "P1",
             "orchestrator heartbeat stale",
             `No Atlas heartbeat within the ${STALENESS_WINDOW_MS / 60_000}-minute staleness window (D-10) as of ${localDate}; the orchestrator may be stuck.`,
+            { sourceAgent: "Atlas", kind: "heartbeat_stale" },
           );
         } catch {
           // best-effort: never let a flag emit failure stop the heartbeat (C7).

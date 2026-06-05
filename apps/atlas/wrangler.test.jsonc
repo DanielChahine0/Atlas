@@ -18,7 +18,10 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AtlasCoordinator"] }],
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
   // Local miniflare D1/KV — no remote IDs, so the pool stays fully local.
   "d1_databases": [

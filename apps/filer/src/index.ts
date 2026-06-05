@@ -20,15 +20,17 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { send } from "@atlas/wire";
 import type { WireEvent } from "@atlas/wire";
 import { flag, localDate } from "@atlas/shared";
-import type { Env as SharedEnv } from "@atlas/shared";
+import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
 import { diffTaxonomy } from "./taxonomy.js";
 import { finalizeLabels, isSecurityOrPhishing } from "./classify.js";
 
 export { FilerCursor } from "./cursor.js";
 
 /** Filer's env surface. */
-export interface Env extends SharedEnv {
+export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   FILER_CURSOR?: DurableObjectNamespace;
+  /** INCIDENTS producer (atlas-incidents): Filer enqueues RawIncidents via flag() (D2-05). */
+  INCIDENTS: Queue<RawIncident>;
 }
 
 /** The CONFIG flag gating the continuous-push path (D1-06). Default OFF. */
@@ -167,7 +169,7 @@ export default {
       "P3",
       "filer users.watch renewal due",
       "The 06:00 watch-renewal cron fired; renew users.watch and advance FilerCursor.historyId.",
-      { sourceAgent: "Filer" },
+      { sourceAgent: "Filer", kind: "watch_renewal_due" },
     );
   },
 } satisfies ExportedHandler<Env>;

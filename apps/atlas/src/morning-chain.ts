@@ -150,11 +150,11 @@ export async function emitHalt(
       env,
       "P2",
       "chain.halted",
-      // STABLE detail — a pure function of (date, stepName); NO volatile err.message here, so the
-      // flag id is stable across retries (one board row per halted step per day).
+      // STABLE detail — a pure function of (date, stepName); NO volatile err.message here.
       `MorningChain ${date} halted at ${stepName}. Downstream steps did not run (no planning on stale data); upstream side effects stand.`,
       {
         sourceAgent: "Atlas",
+        kind: "chain_halted",
         // The volatile error summary lives ONLY in the non-keyed suggestedAction (never a secret).
         suggestedAction: `Investigate ${stepName} (error: ${message}); re-fire morning-${date} once fixed (a re-fire is a no-op for completed steps).`,
       },

@@ -11,7 +11,10 @@
   // Consumes the dead-letter queue (atlas-wire-dlq), produces Flagger incidents onto
   // the live bus (atlas-wire). NOT an atlas-wire consumer — Pillar 1 holds.
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }],
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ],
     "consumers": [
       {
         "queue": "atlas-wire-dlq",

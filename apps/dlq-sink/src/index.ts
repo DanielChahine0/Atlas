@@ -35,16 +35,17 @@
 
 import { WireEvent } from "@atlas/wire";
 import { flag, localDate } from "@atlas/shared";
-import type { Env as SharedEnv, Severity } from "@atlas/shared";
+import type { Env as SharedEnv, Severity, RawIncident } from "@atlas/shared";
 
 /**
- * dlq-sink's local Env: the shared binding surface with `WIRE` + `DB` required (the
- * sink PRODUCES Flagger incidents and WRITES the audit_log row). CONFIG is inherited
- * optional from the shared surface.
+ * dlq-sink's local Env: the shared binding surface with `WIRE` + `DB` + `INCIDENTS` required
+ * (the sink PRODUCES Flagger incidents onto atlas-incidents via flag() (D2-05) and WRITES the
+ * audit_log row). CONFIG is inherited optional from the shared surface.
  */
-export interface Env extends SharedEnv {
+export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   WIRE: SharedEnv["WIRE"];
   DB: SharedEnv["DB"];
+  INCIDENTS: Queue<RawIncident>;
 }
 
 /** Default trust per severity (mirrors @atlas/shared flag()'s DEFAULT_TRUST so the
@@ -142,11 +143,11 @@ export const dlqSink = {
           )
           .run();
 
-        // (2) Emit the canonical Flagger incident (op:"upsert"/entity:"flag"/full flag
-        // record). flag() builds the full record + routes through parse-then-send;
-        // sourceAgent "dlq-sink" makes flag.id === the flagId we recorded above.
+        // (2) Emit the Flagger incident (D2-05: flag() now enqueues a RawIncident onto
+        // atlas-incidents; Flagger is the sole consumer and routes to atlas-wire + Vault).
         await flag(env, severity, title, detail, {
           sourceAgent: "dlq-sink",
+          kind: "dlq_dead_letter",
           suggestedAction:
             severity === "P2"
               ? "investigate the Steward write that exhausted retries for this event"

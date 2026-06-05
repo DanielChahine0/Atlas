@@ -1,22 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
+import type { RawIncident } from "@atlas/shared";
 import { claudeFor, modelFor, gatewayBaseURL } from "../src/index.js";
 
 const VALID_IDS = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"] as const;
 
 /**
  * A stub Env exposing the model/AI-Gateway surface. `kv` seeds KV `model:<codename>`
- * overrides; `vars` seeds [vars] MODEL_<CODENAME> defaults. WIRE is a vi.fn() so we can
- * assert exactly one canonical Flagger event is emitted on the error path.
+ * overrides; `vars` seeds [vars] MODEL_<CODENAME> defaults. INCIDENTS is a vi.fn() so we
+ * can assert exactly one RawIncident is emitted on the error path (D2-05: flag() now
+ * enqueues a RawIncident onto atlas-incidents, not a WireEvent onto atlas-wire).
  */
 function makeEnv(
   opts: { kv?: Record<string, string>; vars?: Record<string, string> } = {},
 ) {
   const kv = opts.kv ?? {};
-  const send = vi.fn().mockResolvedValue(undefined);
+  const incidents: RawIncident[] = [];
+  const send = vi.fn(async (inc: RawIncident) => { incidents.push(inc); });
   return {
     env: {
-      WIRE: { send },
+      WIRE: { send: vi.fn(async () => {}) },
+      INCIDENTS: { send },
       CONFIG: { get: vi.fn(async (k: string) => kv[k] ?? null) },
       ANTHROPIC_API_KEY: { get: vi.fn(async () => "sk-ant-fake") },
       CF_AIG_TOKEN: { get: vi.fn(async () => "cf-aig-fake") },
@@ -24,7 +28,9 @@ function makeEnv(
       AIG_GATEWAY_ID: "atlas-reasoning",
       ...(opts.vars ?? {}),
     } as never,
+    /** Spy on INCIDENTS.send — asserts a RawIncident was enqueued (D2-05). */
     send,
+    incidents,
   };
 }
 
@@ -67,14 +73,14 @@ describe("modelFor — tiering is config-driven, not hardcoded", () => {
 
 describe("modelFor — rejects a misconfigured id and falls back to the tier default (W18)", () => {
   it("rejects a RETIRED dated KV override → falls back to the tier id (not returned verbatim)", async () => {
-    const { env, send } = makeEnv({ kv: { "model:filer": "claude-haiku-4-20250514" } });
+    const { env, send, incidents } = makeEnv({ kv: { "model:filer": "claude-haiku-4-20250514" } });
     const id = await modelFor("filer", env);
     expect(id).toBe("claude-haiku-4-5"); // the allowlisted tier-map default, NOT the bad id
     expect(id).not.toBe("claude-haiku-4-20250514");
-    // Best-effort P3 flag for the misconfig.
+    // Best-effort P3 RawIncident for the misconfig (D2-05: flag() → INCIDENTS.send).
     expect(send).toHaveBeenCalledTimes(1);
-    const event = send.mock.calls[0]![0] as Record<string, unknown>;
-    expect((event.payload as Record<string, unknown>).severity).toBe("P3");
+    expect(incidents[0]!.severity_hint).toBe("P3");
+    expect(incidents[0]!.kind).toBe("model_error");
   });
 
   it("rejects a GARBAGE / unknown-family KV override → falls back", async () => {
@@ -138,9 +144,9 @@ describe("claudeFor — routes through the AI Gateway, never api.anthropic.com",
   });
 });
 
-describe("claudeFor — a non-2xx Gateway response raises a Flagger P3 flag", () => {
-  it("emits exactly one canonical op:'upsert'/entity:'flag' event with a structured key, then rethrows", async () => {
-    const { env, send } = makeEnv();
+describe("claudeFor — a non-2xx Gateway response raises a Flagger P3 RawIncident (D2-05)", () => {
+  it("emits exactly one P3 RawIncident (kind 'model_error') then rethrows", async () => {
+    const { env, send, incidents } = makeEnv();
     const c = await claudeFor("forge", env);
 
     // Stub the underlying SDK call to throw a non-2xx APIError (gateway returned 500).
@@ -156,16 +162,11 @@ describe("claudeFor — a non-2xx Gateway response raises a Flagger P3 flag", ()
       c.messages.create({ max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
     ).rejects.toBe(apiError);
 
-    // Exactly one canonical Flagger Wire event.
+    // Exactly one RawIncident enqueued onto atlas-incidents (D2-05: flag() → INCIDENTS.send).
     expect(send).toHaveBeenCalledTimes(1);
-    const event = send.mock.calls[0]![0] as Record<string, unknown>;
-    expect(event.op).toBe("upsert");
-    expect(event.entity).toBe("flag");
-    const payload = event.payload as Record<string, unknown>;
-    expect(payload.severity).toBe("P3");
-    // Structured, NON-random idempotencyKey === the flag id (flg:<date>:<agent>:<hash>).
-    expect(event.idempotencyKey).toBe(payload.id);
-    expect(event.idempotencyKey).toMatch(/^flg:\d{4}-\d{2}-\d{2}:Model:/);
+    expect(incidents[0]!.severity_hint).toBe("P3");
+    expect(incidents[0]!.kind).toBe("model_error");
+    expect(incidents[0]!.source_agent).toBe("Model");
   });
 
   it("does NOT flag a 2xx/non-SDK throw — a plain Error stays quiet", async () => {
@@ -182,8 +183,8 @@ describe("claudeFor — a non-2xx Gateway response raises a Flagger P3 flag", ()
 });
 
 describe("claudeFor — connection/timeout failures are flagged P3, not silent (W19)", () => {
-  it("flags a P3 'gateway unreachable' on an APIConnectionError (status===undefined)", async () => {
-    const { env, send } = makeEnv();
+  it("flags a P3 'gateway unreachable' RawIncident on an APIConnectionError (status===undefined)", async () => {
+    const { env, send, incidents } = makeEnv();
     const c = await claudeFor("forge", env);
     const connErr = new Anthropic.APIConnectionError({ message: "fetch failed" });
     expect((connErr as { status?: unknown }).status).toBeUndefined(); // the silent-path trigger
@@ -194,15 +195,13 @@ describe("claudeFor — connection/timeout failures are flagged P3, not silent (
     ).rejects.toBe(connErr);
 
     expect(send).toHaveBeenCalledTimes(1);
-    const event = send.mock.calls[0]![0] as Record<string, unknown>;
-    const payload = event.payload as Record<string, unknown>;
-    expect(payload.severity).toBe("P3");
-    expect(payload.title).toMatch(/unreachable/i);
-    expect(event.idempotencyKey).toBe(payload.id);
+    expect(incidents[0]!.severity_hint).toBe("P3");
+    expect(incidents[0]!.kind).toBe("model_error");
+    expect(incidents[0]!.title).toMatch(/unreachable/i);
   });
 
-  it("flags a P3 (timeout variant) on an APIConnectionTimeoutError", async () => {
-    const { env, send } = makeEnv();
+  it("flags a P3 timeout RawIncident on an APIConnectionTimeoutError", async () => {
+    const { env, send, incidents } = makeEnv();
     const c = await claudeFor("herald", env);
     const timeoutErr = new Anthropic.APIConnectionTimeoutError({ message: "timed out" });
     vi.spyOn(c.client.messages, "create").mockRejectedValue(timeoutErr as never);
@@ -212,8 +211,7 @@ describe("claudeFor — connection/timeout failures are flagged P3, not silent (
     ).rejects.toBe(timeoutErr);
 
     expect(send).toHaveBeenCalledTimes(1);
-    const payload = (send.mock.calls[0]![0] as Record<string, unknown>).payload as Record<string, unknown>;
-    expect(payload.severity).toBe("P3");
-    expect(payload.title).toMatch(/timeout/i);
+    expect(incidents[0]!.severity_hint).toBe("P3");
+    expect(incidents[0]!.title).toMatch(/timeout/i);
   });
 });

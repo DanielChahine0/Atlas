@@ -5,7 +5,10 @@
   "compatibility_date": "2026-04-25",
   "compatibility_flags": ["nodejs_compat"],
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
   "d1_databases": [
     {

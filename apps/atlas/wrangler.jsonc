@@ -19,9 +19,13 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AtlasCoordinator"] }],
 
   // Atlas is a Wire PRODUCER only (Pillar 1). It declares no read side on the
-  // bus; the lone reader is Steward, in apps/steward.
+  // bus; the lone reader is Steward, in apps/steward. Atlas also produces onto
+  // atlas-incidents (D2-05): flag() routes incident events there instead of atlas-wire.
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
 
   // D1 system-of-record (atlas-db). All counters + idempotency keys live here.

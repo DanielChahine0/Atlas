@@ -14,8 +14,12 @@
 
   // Pillar 1: Forge is a Wire PRODUCER only — it emits one event per task (keyed on task id).
   // NO queues.consumers block; Steward is the SOLE consumer of atlas-wire.
+  // D2-05: Forge also produces onto atlas-incidents via flag() for phishing/skip incidents.
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
 
   // D1 system-of-record — Forge writes the tasks/subtasks store via @atlas/tasks.

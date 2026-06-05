@@ -20,13 +20,16 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { send } from "@atlas/wire";
 import type { WireEvent } from "@atlas/wire";
 import { localDate } from "@atlas/shared";
-import type { Env as SharedEnv } from "@atlas/shared";
+import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
 import { bucketThreads, sectionCounts, SECTIONS, type DigestThread } from "./bucket.js";
 import { renderDigestBody, draftSubject } from "./digest.js";
 import { guardDigestOutput } from "./guardrail.js";
 
 /** Herald's env surface. */
-export type Env = SharedEnv;
+export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
+  /** INCIDENTS producer (atlas-incidents): Herald enqueues RawIncidents via flag()/guardrail (D2-05). */
+  INCIDENTS: Queue<RawIncident>;
+}
 
 /** The owner's mailbox — the draft recipient (NEVER sent). */
 export const OWNER_ADDRESS = "chahinedaniel0@gmail.com";

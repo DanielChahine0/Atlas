@@ -12,8 +12,10 @@ import type { StewardWriter } from "./steward.js";
  * `extends` (which cannot change a property's type). WIRE is required here —
  * Steward PRODUCES Flagger events on it.
  */
-export interface Env extends Omit<SharedEnv, "STEWARD_LOCK"> {
+export interface Env extends Omit<SharedEnv, "STEWARD_LOCK" | "INCIDENTS"> {
   STEWARD_LOCK: DurableObjectNamespace<StewardWriter>;
+  /** INCIDENTS producer (atlas-incidents): Steward enqueues RawIncidents when emitting flags (D2-05). */
+  INCIDENTS: Queue<import("@atlas/shared").RawIncident>;
 }
 
 /**
@@ -64,7 +66,7 @@ export const stewardConsumer = {
         // gate (W8) catches a payload-less event HERE — without it that event would
         // reach apply(), throw a TypeError on `e.payload.counter`, and be
         // mis-routed to the transient-retry path → DLQ instead of an immediate ack.
-        await flag(env, "P3", "malformed wire event", JSON.stringify(e ?? null));
+        await flag(env, "P3", "malformed wire event", JSON.stringify(e ?? null), { kind: "malformed_event" });
         msg.ack();
         continue;
       }
@@ -86,6 +88,7 @@ export const stewardConsumer = {
             "P3",
             "non-retryable steward event",
             JSON.stringify({ key: e.idempotencyKey, err: String(err) }),
+            { kind: "steward_nonretryable" },
           );
           msg.ack();
           continue;
@@ -96,6 +99,7 @@ export const stewardConsumer = {
             "P2",
             "steward write failing",
             JSON.stringify({ key: e.idempotencyKey, err: String(err) }),
+            { kind: "steward_write_fail" },
           );
         }
         // Redelivery is safe — the ledger dedups; exhausted retries → atlas-wire-dlq.

@@ -17,7 +17,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { send } from "@atlas/wire";
 import type { WireEvent } from "@atlas/wire";
 import { flag, localDate } from "@atlas/shared";
-import type { Env as SharedEnv } from "@atlas/shared";
+import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
 import { upsertTask, dedupeKey, normalizeTitle, type TaskInput, type UpsertAction } from "@atlas/tasks";
 import {
   isActionRequired,
@@ -34,9 +34,11 @@ export { ForgeLock } from "./lock.js";
 import type { ForgeLock } from "./lock.js";
 
 /** Forge's env surface. */
-export interface Env extends SharedEnv {
+export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   // Typed namespace so the stub from getByName() exposes the DO's withLock() RPC method.
   FORGE_LOCK?: DurableObjectNamespace<ForgeLock>;
+  /** INCIDENTS producer (atlas-incidents): Forge enqueues RawIncidents via flag() (D2-05). */
+  INCIDENTS: Queue<RawIncident>;
 }
 
 /** The result of the morning pass (returned to the Workflow step). */
@@ -129,7 +131,7 @@ async function processThread(
       "P2",
       "forge skipped a phishing-suspect thread",
       "A ⚠ Phishing-Suspect thread was not extracted into a task (the owner is never nudged to act on a phish).",
-      { sourceAgent: "Forge" },
+      { sourceAgent: "Forge", kind: "phishing_skipped" },
     );
     return { action: "phishing" };
   }

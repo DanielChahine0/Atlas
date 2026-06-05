@@ -140,6 +140,7 @@ const dispatcher = {
                   `MorningChain instance morning-${date} failed to start. The morning pipeline did NOT run (missed crons are not auto-replayed).`,
                   {
                     sourceAgent: "Atlas",
+                    kind: "workflow_create_failed",
                     suggestedAction: `Investigate the Workflow create failure (error: ${message}); manually create morning-${date} to recover today's chain.`,
                   },
                 ).catch(() => {

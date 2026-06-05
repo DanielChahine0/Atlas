@@ -12,8 +12,12 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SundialState"] }],
 
   // Pillar 1: Sundial is a Wire PRODUCER only — it emits sundial-<date>. NO consumers block.
+  // D2-05: Sundial also produces onto atlas-incidents via flag() for calendar sync incidents.
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
 
   // D1 — Sundial READS the tasks store (readOpenDeadlineTasks) via @atlas/tasks.

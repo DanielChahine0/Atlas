@@ -18,14 +18,16 @@ import { WorkerEntrypoint, DurableObject } from "cloudflare:workers";
 import { send } from "@atlas/wire";
 import type { WireEvent } from "@atlas/wire";
 import { flag, localDate } from "@atlas/shared";
-import type { Env as SharedEnv } from "@atlas/shared";
+import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
 import { readOpenTasks, type TaskRow } from "@atlas/tasks";
 import { buildPlan, demandMinutes, freeMinutes, buildGrid, resolveEffort, type DayPlan } from "./plan.js";
 import type { BusyInterval, GridParams } from "./grid.js";
 
 /** Compass's env surface. */
-export interface Env extends SharedEnv {
+export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   COMPASS_STATE?: DurableObjectNamespace;
+  /** INCIDENTS producer (atlas-incidents): Compass enqueues RawIncidents via flag() (D2-05). */
+  INCIDENTS: Queue<RawIncident>;
 }
 
 /** Per-run state DO (run bookkeeping). */
@@ -118,6 +120,7 @@ export async function runPlan(
       `${capacityClause}; ${plan.couldntFit.length} task(s) could not be placed today (${atRiskCount} at-risk). They are surfaced under "⚠ Couldn't fit today" — never dropped.`,
       {
         sourceAgent: "Compass",
+        kind: "overcommit",
         suggestedAction: "Defer a lower-priority item or extend working hours.",
       },
     );

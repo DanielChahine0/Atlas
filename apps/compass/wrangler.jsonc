@@ -12,8 +12,12 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CompassState"] }],
 
   // Pillar 1: Compass is a Wire PRODUCER only — it emits compass:plan:<date>. NO consumers.
+  // D2-05: Compass also produces onto atlas-incidents via flag() for overcommit incidents.
   "queues": {
-    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
   },
 
   // D1 — Compass READS open tasks (readOpenTasks) via @atlas/tasks.

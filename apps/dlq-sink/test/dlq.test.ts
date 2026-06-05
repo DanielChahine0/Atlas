@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { WireEvent } from "@atlas/wire";
+import type { RawIncident } from "@atlas/shared";
 import { dlqSink, type Env } from "../src/index.js";
 
 // SPINE-05 — the failure-path test (Definition of Done): the back half of the
@@ -10,17 +11,14 @@ import { dlqSink, type Env } from "../src/index.js";
 // Without a consumer on that dead-letter queue, those dead events drop silently and
 // counters go stale with no signal (RESEARCH Pitfall 5). This sink is the mandatory
 // consumer that makes a dead event LOUD: every dead message becomes (1) a durable
-// audit_log row (outcome="dlq", scope_used recorded, NEVER a token) AND (2) a Flagger
-// incident event on the Wire, then is ack()'d (never retried — it already exhausted
-// atlas-wire's retries, so re-queuing would poison-loop).
+// audit_log row (outcome="dlq", scope_used recorded, NEVER a token) AND (2) a
+// RawIncident on atlas-incidents via flag() (D2-05: kind "dlq_dead_letter"),
+// then is ack()'d (never retried — it already exhausted atlas-wire's retries).
 //
 // Routing is deterministic:
 //   - a well-shaped dead WireEvent (it reached the DLQ ⇒ a real Steward write
 //     failure) → P2 High
 //   - an unparseable / non-WireEvent dead message → P3 Medium (agent="unknown")
-//
-// The incident idempotencyKey === flag.id is STABLE + structured
-// (flg:dlq:<localDate>:<hash>), so a redelivered DLQ message dedupes to ONE flag.
 
 const DB = (env as unknown as { DB: D1Database }).DB;
 
@@ -45,23 +43,23 @@ function fakeBatch(body: unknown, opts: { id?: string; attempts?: number } = {})
   return { batch, ack, retry, msg };
 }
 
-/** An env whose WIRE.send is spied so we can read the emitted Flagger incident. */
+/** An env whose INCIDENTS.send is spied (D2-05: flag() -> INCIDENTS, not WIRE). */
 function spyEnv() {
-  const sent: unknown[] = [];
+  const incidents: RawIncident[] = [];
   const e = {
     ...(env as unknown as Env),
-    WIRE: {
-      send: vi.fn(async (event: unknown) => {
-        sent.push(event);
+    INCIDENTS: {
+      send: vi.fn(async (inc: RawIncident) => {
+        incidents.push(inc);
       }),
     },
   } as unknown as Env;
-  return { env: e, sent };
+  return { env: e, incidents };
 }
 
-describe("dlq-sink — exhausted message → audit_log row + Flagger incident (never silent)", () => {
-  it("well-shaped dead WireEvent → P2 incident + audit_log(outcome='dlq'), ack() (never retry)", async () => {
-    const { env: e, sent } = spyEnv();
+describe("dlq-sink — exhausted message → audit_log row + RawIncident (never silent)", () => {
+  it("well-shaped dead WireEvent → P2 RawIncident (kind dlq_dead_letter) + audit_log(outcome='dlq'), ack() (never retry)", async () => {
+    const { env: e, incidents } = spyEnv();
     const dead: WireEvent = {
       agent: "Forge",
       type: "task",
@@ -78,23 +76,18 @@ describe("dlq-sink — exhausted message → audit_log row + Flagger incident (n
     expect(ack).toHaveBeenCalledTimes(1);
     expect(retry).not.toHaveBeenCalled();
 
-    // Exactly one canonical Flagger incident, P2.
-    expect(sent).toHaveLength(1);
-    const parsed = WireEvent.parse(sent[0]);
-    expect(parsed.op).toBe("upsert"); // a flag is a stable row, mutated in place
-    expect(parsed.entity).toBe("flag");
-    expect(parsed.type).toBe("flag");
-    expect((parsed.payload as { severity?: string }).severity).toBe("P2");
-    // The incident idempotencyKey is the structured flag.id (built by @atlas/shared
-    // flag() with sourceAgent "dlq-sink") — never a random UUID.
-    expect(parsed.idempotencyKey).toMatch(/^flg:\d{4}-\d{2}-\d{2}:dlq-sink:/);
+    // Exactly one RawIncident enqueued to INCIDENTS (D2-05), P2, kind "dlq_dead_letter".
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]!.severity_hint).toBe("P2");
+    expect(incidents[0]!.kind).toBe("dlq_dead_letter");
+    expect(incidents[0]!.source_agent).toBe("dlq-sink");
 
-    // A durable audit_log row was written: outcome="dlq", flag_id === the incident id,
-    // and NO token column exists on the row (scope_used recorded, never a secret).
+    // A durable audit_log row was written: outcome="dlq", and NO token column exists
+    // on the row (scope_used recorded, never a secret).
     const row = await DB.prepare(
-      "SELECT agent, action, outcome, scope_used, flag_id, trust FROM audit_log WHERE flag_id = ?",
+      "SELECT agent, action, outcome, scope_used, flag_id, trust FROM audit_log WHERE action = ?",
     )
-      .bind(parsed.idempotencyKey)
+      .bind("dlq.dead_letter")
       .first<{
         agent: string;
         action: string;
@@ -107,13 +100,12 @@ describe("dlq-sink — exhausted message → audit_log row + Flagger incident (n
     expect(row?.outcome).toBe("dlq");
     expect(row?.agent).toBe("Forge");
     expect(row?.action).toBe("dlq.dead_letter");
-    expect(row?.flag_id).toBe(parsed.idempotencyKey);
     // scope_used is empty — a queue failure is not a token-scoped action.
     expect(row?.scope_used ?? "").toBe("");
   });
 
-  it("malformed / non-WireEvent dead message → P3 incident + audit_log(agent='unknown'), ack()", async () => {
-    const { env: e, sent } = spyEnv();
+  it("malformed / non-WireEvent dead message → P3 RawIncident + audit_log(agent='unknown'), ack()", async () => {
+    const { env: e, incidents } = spyEnv();
     // Missing op/entity/idempotencyKey — fails WireEvent.safeParse.
     const { batch, ack, retry } = fakeBatch({ foo: "not a wire event" }, { id: "dead-2" });
 
@@ -122,23 +114,21 @@ describe("dlq-sink — exhausted message → audit_log row + Flagger incident (n
     expect(ack).toHaveBeenCalledTimes(1);
     expect(retry).not.toHaveBeenCalled();
 
-    expect(sent).toHaveLength(1);
-    const parsed = WireEvent.parse(sent[0]);
-    expect(parsed.op).toBe("upsert");
-    expect(parsed.entity).toBe("flag");
-    expect((parsed.payload as { severity?: string }).severity).toBe("P3");
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]!.severity_hint).toBe("P3");
+    expect(incidents[0]!.kind).toBe("dlq_dead_letter");
 
     const row = await DB.prepare(
-      "SELECT agent, outcome, flag_id FROM audit_log WHERE flag_id = ?",
+      "SELECT agent, outcome FROM audit_log WHERE action = ? AND agent = ?",
     )
-      .bind(parsed.idempotencyKey)
-      .first<{ agent: string; outcome: string; flag_id: string }>();
+      .bind("dlq.dead_letter", "unknown")
+      .first<{ agent: string; outcome: string }>();
     expect(row).not.toBeNull();
     expect(row?.agent).toBe("unknown"); // unparseable ⇒ no trustworthy agent field
     expect(row?.outcome).toBe("dlq");
   });
 
-  it("replay — the SAME dead message twice yields an IDENTICAL structured idempotencyKey (dedupe to one flag)", async () => {
+  it("replay — the SAME dead message twice yields IDENTICAL kind/source_agent RawIncidents (same incident class)", async () => {
     const dead: WireEvent = {
       agent: "Filer",
       type: "sweep",
@@ -162,22 +152,16 @@ describe("dlq-sink — exhausted message → audit_log row + Flagger incident (n
       {} as ExecutionContext,
     );
 
-    const k1 = WireEvent.parse(first.sent[0]).idempotencyKey;
-    const k2 = WireEvent.parse(second.sent[0]).idempotencyKey;
-    expect(k1).toBe(k2); // stable ⇒ op:"upsert" re-upserts ONE flag row, no spam
-    expect(k1).toMatch(/^flg:\d{4}-\d{2}-\d{2}:dlq-sink:/);
-
-    // Both incidents carry op:"upsert"/entity:"flag" (a redelivered DLQ message
-    // re-upserts the same board row rather than spawning a duplicate).
-    expect(WireEvent.parse(first.sent[0]).op).toBe("upsert");
-    expect(WireEvent.parse(second.sent[0]).entity).toBe("flag");
+    expect(first.incidents[0]!.kind).toBe(second.incidents[0]!.kind);
+    expect(first.incidents[0]!.source_agent).toBe(second.incidents[0]!.source_agent);
+    expect(first.incidents[0]!.severity_hint).toBe(second.incidents[0]!.severity_hint);
   });
 
   it("an internal sink error still ack()s — never loses the message (no poison-loop)", async () => {
     // Force the audit_log INSERT to throw by handing the sink a broken DB.
     const broken = {
       ...(env as unknown as Env),
-      WIRE: { send: vi.fn(async () => {}) },
+      INCIDENTS: { send: vi.fn(async () => {}) },
       DB: {
         prepare: () => {
           throw new Error("D1 unavailable");

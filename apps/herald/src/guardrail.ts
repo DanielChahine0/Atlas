@@ -12,7 +12,7 @@
 
 import { redact, containsSecret } from "@atlas/security";
 import { flag } from "@atlas/shared";
-import type { WireEvent } from "@atlas/wire";
+import type { RawIncident } from "@atlas/shared";
 
 /** The result of the output guardrail. */
 export interface GuardrailResult {
@@ -31,7 +31,7 @@ export interface GuardrailResult {
  * carried the secret would itself be a leak.
  */
 export async function guardDigestOutput(
-  env: { WIRE: Queue<WireEvent> },
+  env: { INCIDENTS: Queue<RawIncident> },
   body: string,
 ): Promise<GuardrailResult> {
   if (containsSecret(body)) {
@@ -40,7 +40,7 @@ export async function guardDigestOutput(
       "P2",
       "herald digest redaction tripped",
       "A secret-shaped token survived into the synthesized digest output; the draft was blocked before creation.",
-      { sourceAgent: "Herald" },
+      { sourceAgent: "Herald", kind: "security_leak_blocked" },
     );
     return { blocked: true, text: redact(body) };
   }

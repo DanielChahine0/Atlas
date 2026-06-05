@@ -14,11 +14,13 @@
  * (CLAUDE.md security invariant). Secret reads are async: `await env.X.get()`.
  */
 
-import type { Env as SharedEnv } from "@atlas/shared";
+import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import type { NoopAgent } from "./noop-agent.js";
 
-export interface AtlasEnv extends SharedEnv {
+export interface AtlasEnv extends Omit<SharedEnv, "INCIDENTS"> {
+  /** INCIDENTS producer (atlas-incidents): Atlas enqueues RawIncidents via flag() (D2-05). */
+  INCIDENTS: Queue<RawIncident>;
   /** The D-11 self service-binding; `Service<NoopAgent>` exposes the agent's public RPC. */
   NOOP: Service<NoopAgent>;
 

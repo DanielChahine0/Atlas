@@ -11,8 +11,8 @@ import { flag, type Env } from "@atlas/shared";
 // `model:<codename>` override → `[vars]` `MODEL_<CODENAME>` default → the CLAUDE.md tiering
 // map fallback), NOT hardcoded — re-tunable without a redeploy (D-05). A non-2xx Gateway
 // response raises a Flagger flag via `flag(env, "P3", …)` (degraded model access is
-// non-fatal in Phase 0), which emits the canonical op:"upsert"/entity:"flag" full-flag
-// record Wire event toward Flagger (T-00-75) — never a silent failure.
+// non-fatal), which enqueues a RawIncident (kind "model_error") onto atlas-incidents (D2-05).
+// Flagger is the sole consumer and routes it to the Vault board — never a silent failure.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -116,16 +116,16 @@ async function flagBadModelId(
   badId: string,
   fallback: string,
 ): Promise<void> {
-  const wire = env["WIRE"];
-  if (!isQueueLike(wire)) return;
+  const incidents = env["INCIDENTS"];
+  if (!isQueueLike(incidents)) return;
   try {
     await flag(
-      { WIRE: wire as Env["WIRE"] },
+      { INCIDENTS: incidents as NonNullable<Env["INCIDENTS"]> },
       "P3",
       `Invalid model id configured for ${agent}`,
       `${source} resolved "${badId}", which is not an allowlisted 4.x id; ` +
         `fell back to "${fallback}".`,
-      { sourceAgent: "Model", suggestedAction: "Fix the KV/[vars] model id (use a pinned 4.x id)." },
+      { sourceAgent: "Model", kind: "model_error", suggestedAction: "Fix the KV/[vars] model id (use a pinned 4.x id)." },
     );
   } catch {
     // Telemetry is best-effort — never let a flag failure break model resolution.
@@ -152,7 +152,7 @@ export function gatewayBaseURL(accountId: string, gatewayId: string): string {
 /** The minimal Env surface claudeFor needs (the model/AI-Gateway TYPE surface from 00-02). */
 type ModelEnv = Pick<
   Env,
-  "WIRE" | "CONFIG" | "ANTHROPIC_API_KEY" | "CF_AIG_TOKEN" | "AIG_ACCOUNT_ID" | "AIG_GATEWAY_ID"
+  "INCIDENTS" | "CONFIG" | "ANTHROPIC_API_KEY" | "CF_AIG_TOKEN" | "AIG_ACCOUNT_ID" | "AIG_GATEWAY_ID"
 > &
   Record<string, unknown>;
 
@@ -242,11 +242,10 @@ export async function claudeFor(agent: string, env: ModelEnv): Promise<AgentClau
 }
 
 /**
- * On a degraded-Gateway throw, raise a Flagger P3 flag (degraded model access is non-fatal
- * in Phase 0). `flag()` builds the FULL flag record and emits the canonical
- * `op:"upsert"`/`entity:"flag"` Wire event with a STRUCTURED idempotencyKey (the flag id;
- * derived deterministically inside flag() — never a random UUID). Two degraded classes are
- * flagged:
+ * On a degraded-Gateway throw, raise a Flagger P3 flag (degraded model access is non-fatal).
+ * `flag()` (D2-05) enqueues a RawIncident (kind "model_error") onto atlas-incidents; Flagger
+ * is the sole consumer and routes it to the Vault board (never a silent failure). Two degraded
+ * classes are flagged:
  *   1. a genuine non-2xx HTTP response (an `APIError` carrying a numeric `status`), and
  *   2. a connection/timeout failure reaching the Gateway (`APIConnectionError` and its
  *      `APIConnectionTimeoutError` subclass) — these carry `status===undefined`, so the
@@ -255,20 +254,21 @@ export async function claudeFor(agent: string, env: ModelEnv): Promise<AgentClau
  * Genuine non-error paths (a 2xx, a plain non-SDK throw) stay quiet; the caller rethrows.
  */
 async function flagGatewayError(
-  env: { WIRE: Env["WIRE"] },
+  env: { INCIDENTS?: Env["INCIDENTS"] },
   agent: string,
   err: unknown,
 ): Promise<void> {
+  if (!env.INCIDENTS) return; // INCIDENTS not yet bound — telemetry best-effort
   // 2. Connection / timeout failure — the Gateway was unreachable (no HTTP status at all).
   if (err instanceof Anthropic.APIConnectionError) {
     const timeout = err instanceof Anthropic.APIConnectionTimeoutError;
     const detail = err instanceof Error ? err.message : String(err);
     await flag(
-      env,
+      { INCIDENTS: env.INCIDENTS },
       "P3",
       `Model gateway unreachable for ${agent}${timeout ? " (timeout)" : ""}`,
       detail,
-      { sourceAgent: "Model", suggestedAction: "Check AI Gateway reachability / network." },
+      { sourceAgent: "Model", kind: "model_error", suggestedAction: "Check AI Gateway reachability / network." },
     );
     return;
   }
@@ -281,11 +281,11 @@ async function flagGatewayError(
   }
   const detail = err instanceof Error ? err.message : String(err);
   await flag(
-    env,
+    { INCIDENTS: env.INCIDENTS },
     "P3",
     `Model gateway returned ${status} for ${agent}`,
     detail,
-    { sourceAgent: "Model", suggestedAction: "Check AI Gateway / Anthropic key + budget." },
+    { sourceAgent: "Model", kind: "model_error", suggestedAction: "Check AI Gateway / Anthropic key + budget." },
   );
 }
 

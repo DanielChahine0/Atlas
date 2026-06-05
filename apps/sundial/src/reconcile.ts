@@ -13,7 +13,7 @@
  */
 
 import { flag } from "@atlas/shared";
-import type { WireEvent } from "@atlas/wire";
+import type { RawIncident } from "@atlas/shared";
 import type { TaskRow } from "@atlas/tasks";
 import { taskToBlock, type CalendarBlock } from "./block.js";
 
@@ -60,7 +60,7 @@ export interface CalendarTools {
  * proposals (never a delete). Returns the result + the decision list (no delete anywhere).
  */
 export async function reconcile(
-  env: { WIRE: Queue<WireEvent> },
+  env: { INCIDENTS: Queue<RawIncident> },
   tasks: TaskRow[],
   tools: CalendarTools,
 ): Promise<ReconcileResult> {
@@ -111,7 +111,7 @@ export async function reconcile(
         "P2",
         "sundial detected a duplicate calendar block",
         `Two blocks share atlasTaskId ${taskId}; keeping the earliest and proposing removal of the duplicate (gated on owner confirm — never an autonomous delete).`,
-        { sourceAgent: "Sundial" },
+        { sourceAgent: "Sundial", kind: "calendar_sync_failed" },
       );
     }
   }
@@ -158,7 +158,7 @@ export async function reconcile(
       "P2",
       "sundial found an orphaned calendar block",
       `Block(s) for atlasTaskId ${taskId} have no matching open task (done/cancelled); proposing a GATED removal (owner confirm — never an autonomous delete).`,
-      { sourceAgent: "Sundial" },
+      { sourceAgent: "Sundial", kind: "calendar_sync_failed" },
     );
   }
 
