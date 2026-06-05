@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "herald",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Pillar 1: Herald is a Wire PRODUCER only — it emits herald:daily:<date>. NO
+  // queues.consumers block; Steward is the SOLE consumer of atlas-wire.
+  "queues": {
+    "producers": [{ "binding": "WIRE", "queue": "atlas-wire" }]
+  },
+
+  // D1 system-of-record (run_log/audit parity; Steward owns counters).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // Read-mostly config/flags (model.synthesize override, VIP source). Never secrets.
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // Workers AI gateway routing — Herald synthesis resolves to Sonnet via claudeFor.
+  "ai": { "binding": "AI" },
+
+  // Herald has NO cron of its own in Phase 1 — it runs as the `herald-daily` MorningChain
+  // Workflow step (08:00 budget gate), not a separate cron (CLAUDE.md: ONE cron kicks the
+  // Workflow, not five racing crons).
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons.
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}
