@@ -248,7 +248,9 @@ describe("Headhunter apply-by task via Forge (T-02-hh3)", () => {
 // ── Failure path test ────────────────────────────────────────────────────────
 
 describe("Headhunter failure path", () => {
-  it("Headhunter.full() flags P2 kind:headhunter_failed when runFull throws", async () => {
+  // L6 fix: previously this test allowed either kind — tightened to assert the
+  // SPECIFIC kind it actually exercises (per-task Forge error, not fatal runFull throw).
+  it("Forge task creation failure flags P2 kind:headhunter_forge_task_failed (per-task catch)", async () => {
     const { testEnv, incidents } = makeEnv();
 
     // Force an error by injecting a window that causes Forge to throw
@@ -262,16 +264,50 @@ describe("Headhunter failure path", () => {
 
     // Run with a window that should create a task
     const headhunter = new Headhunter({} as ExecutionContext, errEnv);
-    // full() catches the Forge error and flags P2, but doesn't re-throw the task error
-    // (it's a per-task error, not a fatal run error)
+    // full() catches the Forge error in the per-task try/catch and flags P2.
+    // runFull itself does NOT throw — this is the per-task error path, not the fatal path.
     await headhunter.full({ date: BASE_DATE, windows: [makeWindow()] });
 
-    const failIncident = incidents.find(
-      (i) => i.kind === "headhunter_forge_task_failed" || i.kind === "headhunter_failed",
-    );
+    // L6 fix: assert the SPECIFIC kind — headhunter_forge_task_failed, not headhunter_failed
+    const failIncident = incidents.find((i) => i.kind === "headhunter_forge_task_failed");
     expect(failIncident).toBeDefined();
     expect(failIncident!.source_agent).toBe("Headhunter");
     expect(failIncident!.severity_hint).toBe("P2");
+
+    // Confirm the fatal kind was NOT emitted (runFull did not throw)
+    const fatalIncident = incidents.find((i) => i.kind === "headhunter_failed");
+    expect(fatalIncident).toBeUndefined();
+  });
+
+  // L6 fix: dedicated test for the FATAL outer catch path (runFull itself throws).
+  // Previously this path had no dedicated test — a regression could silently drop
+  // the headhunter_failed P2 incident while the above test would still pass.
+  it("Fatal runFull error flags P2 kind:headhunter_failed (outer catch in Headhunter.full)", async () => {
+    const { testEnv, incidents } = makeEnv();
+
+    // Force runFull to throw by making the WIRE.send explode on the scan summary event
+    // (i.e., after all tasks, when send() is called — the outer try/catch in full() catches it)
+    let sendCallCount = 0;
+    const fatalEnv: Env = {
+      ...testEnv,
+      WIRE: {
+        send: vi.fn(async () => {
+          sendCallCount++;
+          // First send is the scan summary — throw to force runFull to throw
+          throw new Error("WIRE send fatal failure");
+        }),
+      } as unknown as Queue<WireEvent>,
+    };
+
+    const headhunter = new Headhunter({} as ExecutionContext, fatalEnv);
+    // full() should catch the fatal error and flag headhunter_failed, then re-throw
+    await expect(headhunter.full({ date: BASE_DATE, windows: [] })).rejects.toThrow();
+
+    // L6 fix: assert the FATAL kind — headhunter_failed with P2
+    const fatalIncident = incidents.find((i) => i.kind === "headhunter_failed");
+    expect(fatalIncident).toBeDefined();
+    expect(fatalIncident!.source_agent).toBe("Headhunter");
+    expect(fatalIncident!.severity_hint).toBe("P2");
   });
 });
 
