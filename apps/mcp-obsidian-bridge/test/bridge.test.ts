@@ -202,4 +202,135 @@ describe("mcp-obsidian-bridge inbound surface + op→REST safety", () => {
       expect(SAFE_METHODS as readonly string[]).toContain(intent.method);
     }
   });
+
+  it("W14 — every intent carries an X-Atlas-Idem dedupe header (append idempotency)", () => {
+    const ops: WireEvent["op"][] = ["increment", "upsert", "append"];
+    for (const op of ops) {
+      const ev: WireEvent = {
+        agent: "Filer",
+        type: "t",
+        entity: "e",
+        op,
+        payload: {},
+        idempotencyKey: `dedupe:${op}`,
+      };
+      const intent = toOutboxIntent(ev);
+      const headers = JSON.parse(intent.headers) as Record<string, string>;
+      // The append POST is the one Obsidian would otherwise duplicate on a
+      // redelivery — its header MUST carry the stable per-intent dedupe key.
+      expect(headers["X-Atlas-Idem"]).toBe(`dedupe:${op}`);
+    }
+  });
+});
+
+describe("mcp-obsidian-bridge W14 — outbox claim/lease boundary", () => {
+  it("poll CLAIMS a pending row (pending → sent) and returns it", async () => {
+    await seedPending("idem-claim-1");
+    expect(await rowState("idem-claim-1")).toBe("pending");
+
+    const res = await worker.fetch(
+      req("/bridge/poll", { method: "GET", headers: { Authorization: `Bearer ${REAL_TOKEN}` } }),
+      testEnv,
+    );
+    const body = (await res.json()) as { intents: { idem: string }[] };
+    expect(body.intents.map((i) => i.idem)).toContain("idem-claim-1");
+
+    // The row is now CLAIMED (in-flight), not still pending.
+    expect(await rowState("idem-claim-1")).toBe("sent");
+  });
+
+  it("two overlapping polls NEVER return the same row (atomic claim)", async () => {
+    // Seed more rows than one poll can over-claim across both calls.
+    for (let i = 0; i < 20; i++) await seedPending(`idem-race-${i}`);
+
+    // Fire two polls concurrently — the atomic UPDATE...RETURNING serializes at D1,
+    // so each row is claimed by AT MOST ONE poll. No idem appears in both responses.
+    const [r1, r2] = await Promise.all([
+      worker.fetch(
+        req("/bridge/poll", { method: "GET", headers: { Authorization: `Bearer ${REAL_TOKEN}` } }),
+        testEnv,
+      ),
+      worker.fetch(
+        req("/bridge/poll", { method: "GET", headers: { Authorization: `Bearer ${REAL_TOKEN}` } }),
+        testEnv,
+      ),
+    ]);
+    const b1 = (await r1.json()) as { intents: { idem: string }[] };
+    const b2 = (await r2.json()) as { intents: { idem: string }[] };
+    const set1 = new Set(b1.intents.map((i) => i.idem));
+    const set2 = new Set(b2.intents.map((i) => i.idem));
+
+    // No overlap between the two claimed batches.
+    const overlap = [...set1].filter((idem) => set2.has(idem));
+    expect(overlap).toEqual([]);
+    // Together they covered all 20 rows exactly once (no row served twice, none lost).
+    expect(set1.size + set2.size).toBe(20);
+  });
+
+  it("a freshly-claimed (sent) row is NOT re-served by an immediate second poll", async () => {
+    await seedPending("idem-noreserve");
+    // First poll claims it.
+    await worker.fetch(
+      req("/bridge/poll", { method: "GET", headers: { Authorization: `Bearer ${REAL_TOKEN}` } }),
+      testEnv,
+    );
+    expect(await rowState("idem-noreserve")).toBe("sent");
+    // Immediate second poll: the claim lease has NOT expired, so it is not re-served.
+    const res = await worker.fetch(
+      req("/bridge/poll", { method: "GET", headers: { Authorization: `Bearer ${REAL_TOKEN}` } }),
+      testEnv,
+    );
+    const body = (await res.json()) as { intents: { idem: string }[] };
+    expect(body.intents.map((i) => i.idem)).not.toContain("idem-noreserve");
+  });
+
+  it("a STALE claim (sent, lease expired) is RECLAIMED — never lost (T-00-37)", async () => {
+    // Seed a row already in `sent` with an ancient claimed_at (a crashed daemon).
+    await DB.prepare(
+      "INSERT OR REPLACE INTO vault_outbox (idem, path, method, headers, body, state, claimed_at, ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+      .bind("idem-stale", "/vault/Counters/metrics.md", "PATCH", "{}", "{}", "sent", 1, Date.now())
+      .run();
+
+    const res = await worker.fetch(
+      req("/bridge/poll", { method: "GET", headers: { Authorization: `Bearer ${REAL_TOKEN}` } }),
+      testEnv,
+    );
+    const body = (await res.json()) as { intents: { idem: string }[] };
+    // The abandoned claim is re-delivered (reclaimed), not stranded.
+    expect(body.intents.map((i) => i.idem)).toContain("idem-stale");
+  });
+
+  it("ack flips a CLAIMED (sent) row to done; a redelivered ack is a no-op", async () => {
+    await seedPending("idem-ack-sent");
+    // Claim it (pending → sent) via poll.
+    await worker.fetch(
+      req("/bridge/poll", { method: "GET", headers: { Authorization: `Bearer ${REAL_TOKEN}` } }),
+      testEnv,
+    );
+    expect(await rowState("idem-ack-sent")).toBe("sent");
+
+    const ack1 = await worker.fetch(
+      req("/bridge/ack", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${REAL_TOKEN}` },
+        body: JSON.stringify({ idem: "idem-ack-sent" }),
+      }),
+      testEnv,
+    );
+    expect(((await ack1.json()) as { changed: number }).changed).toBe(1);
+    expect(await rowState("idem-ack-sent")).toBe("done");
+
+    // A redelivered ack on the now-done row changes nothing (no double-apply).
+    const ack2 = await worker.fetch(
+      req("/bridge/ack", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${REAL_TOKEN}` },
+        body: JSON.stringify({ idem: "idem-ack-sent" }),
+      }),
+      testEnv,
+    );
+    expect(((await ack2.json()) as { changed: number }).changed).toBe(0);
+    expect(await rowState("idem-ack-sent")).toBe("done");
+  });
 });

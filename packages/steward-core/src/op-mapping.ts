@@ -107,6 +107,14 @@ export function toOutboxIntent(e: WireEvent): OutboxIntent {
     throw new Error(`refusing non-safe outbound method: ${method}`);
   }
 
+  // W14 — per-intent DEDUPE KEY. Every outbound intent carries its stable idem as
+  // the `X-Atlas-Idem` header so the append→POST (which Obsidian would otherwise
+  // append unconditionally, duplicating a feed line on a redelivery) is idempotent
+  // at the write boundary: a reclaimed/redelivered intent carries the SAME idem, so
+  // the daemon/Obsidian side can dedupe on it. The vault_outbox PK (idem) dedups the
+  // ENQUEUE; this dedups the OUTBOUND WRITE. The header is non-destructive metadata.
+  headers["X-Atlas-Idem"] = e.idempotencyKey;
+
   return {
     idem: e.idempotencyKey,
     path,

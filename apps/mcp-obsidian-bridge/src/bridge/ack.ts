@@ -3,13 +3,15 @@
  *
  * After the daemon successfully PATCHes/POSTs the Obsidian Local REST API for a
  * drained intent, it calls this endpoint (OUTBOUND) with
- * `Authorization: Bearer <ATLAS_BRIDGE_TOKEN>` and the intent's `idem` to mark the
- * vault_outbox row `state = 'done'`.
+ * `Authorization: Bearer <ATLAS_BRIDGE_TOKEN>` and the intent's `idem` to flip the
+ * vault_outbox row from its claimed `state = 'sent'` (W14) to `state = 'done'`.
  *
  * IDEMPOTENT (T-00-37): marking an already-done or unknown `idem` is a safe no-op —
  * a redelivered/replayed ack does NOT double-apply (the underlying Obsidian write is
- * separately idempotent; this only flips the outbox state). The UPDATE is keyed by
- * the PRIMARY KEY `idem` with a positional `?` (no named params).
+ * separately idempotent; this only flips the outbox state). The `AND state != 'done'`
+ * guard makes that observable (changed === 0 on an already-done / unknown row), and
+ * works from EITHER `sent` (the normal claim path) or a legacy `pending`. The UPDATE
+ * is keyed by the PRIMARY KEY `idem` with a positional `?` (no named params).
  */
 
 import { authorizeBridge, unauthorized, type BridgeAuthEnv } from "../auth.js";
