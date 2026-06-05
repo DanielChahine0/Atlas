@@ -1,0 +1,158 @@
+/**
+ * index.ts — Flagger Worker: sole consumer of `atlas-incidents` (WEEKLY-02, Plan 02-02).
+ *
+ * Architecture:
+ * - queue(batch): consumes atlas-incidents; scores, dedupes, routes each incident
+ *   through FlaggerState DO; pushes P1/P2 via ntfy; emits canonical flag upsert to atlas-wire
+ * - fetch(request): token-gated /ack inbound route (only inbound surface in Phase 2)
+ *
+ * Pillar 1: this Worker consumes atlas-incidents ONLY (NOT atlas-wire). Steward
+ * remains the sole atlas-wire consumer. Flagger is a PRODUCER on atlas-wire.
+ */
+
+import { RawIncidentSchema } from "@atlas/shared";
+import type { RawIncident, FlagRecord } from "@atlas/shared";
+import type { Env as SharedEnv } from "@atlas/shared";
+import { send } from "@atlas/wire";
+import { FlaggerState } from "./state.js";
+import { score } from "./score.js";
+import { pushFlag } from "./push.js";
+import { timingSafeEqual } from "./auth.js";
+
+// Export FlaggerState class so vitest-pool-workers can discover it as a DO class.
+export { FlaggerState };
+
+// Re-export for test convenience
+export type { Env };
+
+/** Flagger's local Env — extends SharedEnv with required bindings. */
+export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
+  /** Consumer binding for atlas-incidents (Flagger is the sole consumer). */
+  INCIDENTS: Queue<RawIncident>;
+  /** FlaggerState DO namespace — addressed as getByName("fleet"). */
+  FLAGGER_STATE: DurableObjectNamespace<FlaggerState>;
+  /** ntfy.sh topic (Secrets Store async binding). */
+  NTFY_TOPIC?: SecretsStoreSecret;
+  /** ntfy.sh auth token (Secrets Store async binding). */
+  NTFY_TOKEN?: SecretsStoreSecret;
+  /** Ack endpoint Bearer token (Secrets Store async binding). */
+  ACK_TOKEN?: SecretsStoreSecret;
+}
+
+/** Build the canonical flag upsert Wire event for atlas-wire → Steward → Vault. */
+function buildFlagWireEvent(flag: FlagRecord) {
+  return {
+    agent: "Flagger" as const,
+    type: "flag",
+    entity: "flag",
+    op: "upsert" as const,
+    payload: flag,
+    idempotencyKey: flag.id,
+  };
+}
+
+/** Build a P3 flag upsert Wire event for malformed incidents (sent directly to WIRE). */
+function buildMalformedFlagEvent(msgId: string, body: unknown): ReturnType<typeof buildFlagWireEvent> {
+  const hash = simpleHash(String(msgId));
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
+  const id = `flg:${date}:Flagger:${hash}`;
+  const flag: FlagRecord = {
+    id,
+    ts: new Date().toISOString(),
+    source_agent: "Flagger",
+    severity: "P3",
+    trust: 50,
+    title: "malformed incident on atlas-incidents",
+    detail: JSON.stringify(body).slice(0, 500),
+    status: "open",
+  };
+  return buildFlagWireEvent(flag);
+}
+
+function simpleHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+export default {
+  async queue(batch: MessageBatch<RawIncident>, env: Env): Promise<void> {
+    // Update KV last_seen FIRST (best-effort — watchdog depends on this)
+    await env.CONFIG.put("flagger:last_seen", String(Date.now())).catch(() => {});
+
+    for (const msg of batch.messages) {
+      // SERIAL for...of — never Promise.all (single-writer discipline through the DO)
+      try {
+        const parsed = RawIncidentSchema.safeParse(msg.body);
+
+        if (!parsed.success) {
+          // Malformed: ack() immediately (never retry) + P3 flag sent directly to WIRE
+          await send(env as unknown as Parameters<typeof send>[0], buildMalformedFlagEvent(msg.id, msg.body));
+          msg.ack();
+          continue;
+        }
+
+        const incident = parsed.data;
+
+        // Build signature: source_agent + kind + hash of title+detail
+        const fingerprint = simpleHash(`${incident.title}|${incident.detail ?? ""}`);
+        const signature = `${incident.source_agent}:${incident.kind}:${fingerprint}`;
+
+        const stateStub = env.FLAGGER_STATE.getByName("fleet");
+
+        // Score the incident (pure function — no LLM)
+        const scored = score(incident, 0);
+
+        // Upsert flag (dedup by signature, recurrence bump)
+        const flag = await stateStub.upsertFlag(signature, {
+          source_agent: incident.source_agent,
+          severity: scored.severity,
+          trust: scored.trust,
+          title: incident.title,
+          detail: incident.detail,
+          status: "open",
+        });
+
+        // Re-score with actual recurrence from the DO
+        const rescore = score(incident, flag.recurrence);
+        const finalSeverity = rescore.severity;
+
+        // P1/P2: route to ntfy push (fire-and-forget, board fallback on failure)
+        const pushEnabled = (await env.CONFIG.get("flagger.push_enabled")) === "true";
+        if (pushEnabled && (finalSeverity === "P1" || finalSeverity === "P2")) {
+          // Build ack URL: we don't know our own hostname here; use a placeholder
+          const ackUrl = `https://flagger.workers.dev/ack`;
+          await pushFlag(env, flag, ackUrl).catch(() => {});
+        }
+
+        // Emit canonical flag upsert to atlas-wire → Steward → Vault
+        await send(env as unknown as Parameters<typeof send>[0], buildFlagWireEvent(flag));
+        msg.ack();
+      } catch (err) {
+        console.error("flagger: incident processing failed", msg.id, err);
+        msg.retry({ delaySeconds: 30 });
+      }
+    }
+  },
+
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/ack" && request.method === "POST") {
+      // Constant-time token auth (D2-02) — fail-closed on missing binding
+      const token = await env.ACK_TOKEN?.get();
+      if (!token) return new Response("Unauthorized", { status: 401 });
+
+      const auth = request.headers.get("Authorization") ?? "";
+      if (!(await timingSafeEqual(auth, `Bearer ${token}`))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      const { id } = await request.json<{ id: string }>();
+      await env.FLAGGER_STATE.getByName("fleet").ackFlag(id);
+      return new Response("OK");
+    }
+
+    return new Response("Not found", { status: 404 });
+  },
+} satisfies ExportedHandler<Env>;

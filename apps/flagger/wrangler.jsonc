@@ -1,0 +1,77 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "flagger",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // FlaggerState DO — the open-flags index + single-alarm heartbeat scheduler.
+  // Addressed as env.FLAGGER_STATE.getByName("fleet") — one name = one instance.
+  // new_sqlite_classes (Free-tier eligible; NOT legacy new_classes).
+  "durable_objects": {
+    "bindings": [{ "name": "FLAGGER_STATE", "class_name": "FlaggerState" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlaggerState"] }],
+
+  // QUEUES — Pillar 1 critical section (read carefully):
+  //   * CONSUMER: atlas-incidents ONLY (NOT atlas-wire — Pillar 1; Steward is the
+  //     sole atlas-wire consumer). Own DLQ atlas-incidents-dlq (NOT atlas-wire-dlq).
+  //     max_batch_size:25 for burst handling; max_batch_timeout:5 for P1 latency;
+  //     max_concurrency:1 for serial FlaggerState DO access.
+  //   * PRODUCERS: WIRE (to emit canonical flag upserts to atlas-wire → Steward → Vault)
+  //     + INCIDENTS (Flagger re-emits its own heartbeat stale incidents to its queue).
+  //
+  // The guard-wire-consumer.js hook will hard-fail if atlas-wire appears in consumers.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ],
+    "consumers": [
+      {
+        "queue": "atlas-incidents",
+        "max_batch_size": 25,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 1,
+        "dead_letter_queue": "atlas-incidents-dlq"
+      }
+    ]
+  },
+
+  // D1 system-of-record — Flagger mirrors resolved flags into the D1 flags audit table
+  // (0004 migration). Positional ? binds only (no named params).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // KV: config/flags (heartbeat_grace, severity_overrides, flagger.push_enabled).
+  // NEVER secrets, NEVER counters.
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }
+  ],
+
+  // Secrets Store — NTFY_TOPIC/NTFY_TOKEN/ACK_TOKEN read via async get().
+  // NEVER in [vars], KV, Vault, Codex, audit_log, or any tracked file.
+  // store_id placeholder: replace <atlas-store-id> with the real Cloudflare Secrets
+  // Store ID after provisioning (same store as mcp-google/atlas/mcp-obsidian-bridge).
+  "secrets_store_secrets": [
+    { "binding": "NTFY_TOPIC", "store_id": "<atlas-store-id>", "secret_name": "ntfy-topic" },
+    { "binding": "NTFY_TOKEN", "store_id": "<atlas-store-id>", "secret_name": "ntfy-token" },
+    { "binding": "ACK_TOKEN",  "store_id": "<atlas-store-id>", "secret_name": "ack-token" }
+  ],
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (Flagger has no scheduled triggers — event-driven only).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}
