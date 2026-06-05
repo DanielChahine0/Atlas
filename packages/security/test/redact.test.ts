@@ -63,9 +63,9 @@ describe("C3 — 2FA code bypass classes (was: 6-digit-only `\\b\\d{6}\\b`)", ()
     assertRedacted("code 482-9137", "482-9137");
   });
 
-  it("redacts a FULL-WIDTH digit code `４８２９１３` (normalized before matching)", () => {
+  it("redacts a FULL-WIDTH digit code `４８２９１３` with an English cue nearby", () => {
     const input = "your code is ４８２９１３";
-    // After normalization the run becomes ASCII; assert neither form survives.
+    // The run is masked unconditionally (full-width origin); assert neither form survives.
     const out = redact(input);
     expect(out).not.toContain("４８２９１３");
     expect(out).not.toContain("482913");
@@ -74,6 +74,65 @@ describe("C3 — 2FA code bypass classes (was: 6-digit-only `\\b\\d{6}\\b`)", ()
 
   it("redacts a code cue AFTER the digits (`483920 is your code`)", () => {
     assertRedacted("483920 is your code", "483920");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CLASS: full-width-origin LEAK CLOSURE (post-batch-2 probe).
+// A run of 6–8 full-width digits is redacted UNCONDITIONALLY (no English cue required) —
+// full-width origin is itself a strong code signal. This closes the leak where a CJK / non-
+// English code context ("コード" = "code") normalized the full-width digits to ASCII but then
+// escaped the English-only cue-gated branch, surfacing `482913`. See redact.ts FULLWIDTH_CODE_RUN.
+// ---------------------------------------------------------------------------
+describe("full-width-origin codes are redacted unconditionally (leak-closure)", () => {
+  it("REGRESSION GUARD — the exact reported probe `コード ４８２９１３` is flagged + the ASCII form does NOT survive", () => {
+    const input = "コード ４８２９１３";
+    const out = redact(input);
+    // Neither the full-width run nor its normalized ASCII form may survive.
+    expect(out).not.toContain("４８２９１３");
+    expect(out).not.toContain("482913");
+    // containsSecret must agree (the leak was BOTH redact() leaving ASCII AND containsSecret()===false).
+    expect(containsSecret(input)).toBe(true);
+    // The non-digit CJK context is preserved; only the code run is masked.
+    expect(out).toContain("コード");
+  });
+
+  it("redacts a bare full-width code with NO cue word at all (full-width origin alone suffices)", () => {
+    const input = "４８２９１３";
+    const out = redact(input);
+    expect(out).not.toContain("４８２９１３");
+    expect(out).not.toContain("482913");
+    expect(out).toBe("[REDACTED]");
+    expect(containsSecret(input)).toBe(true);
+  });
+
+  it("redacts a 7- and 8-digit full-width run", () => {
+    for (const fw of ["４８２９１３７", "４８２９１３７０"]) {
+      const out = redact(fw);
+      expect(out).toBe("[REDACTED]");
+      expect(containsSecret(fw)).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CLASS: broadened proximity cue list (pin / token / passcode / mfa / auth / access / etc.)
+// ---------------------------------------------------------------------------
+describe("broadened code-cue variants gate the bare ASCII run", () => {
+  it("redacts a 'PIN' cue context", () => {
+    assertRedacted("Your PIN is 482913", "482913");
+  });
+
+  it("redacts a 'token' cue context", () => {
+    assertRedacted("token 4829137 expires soon", "4829137");
+  });
+
+  it("redacts an 'access code' cue context", () => {
+    assertRedacted("access code 482913 below", "482913");
+  });
+
+  it("redacts an 'MFA' cue context", () => {
+    assertRedacted("MFA 482913 required", "482913");
   });
 });
 

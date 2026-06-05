@@ -89,8 +89,10 @@ describe("mcp-google redaction backstop (SPINE-04)", () => {
     expect(out.isError).toBe(true);
   });
 
-  it("C3: strips a FULL-WIDTH digit code", async () => {
-    const out = await safeToolOutput("your code is ４８２９１３", noopEnv);
+  it("C3: strips a FULL-WIDTH digit code on egress — incl. the CJK-cue leak probe", async () => {
+    // Regression guard: `コード ４８２９１３` (full-width digits in a non-English code context)
+    // must not surface its ASCII form `482913` past the egress strip.
+    const out = await safeToolOutput("コード ４８２９１３", noopEnv);
     const text = textOf(out);
     expect(text).not.toContain("４８２９１３");
     expect(text).not.toContain("482913");

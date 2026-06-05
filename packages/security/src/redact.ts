@@ -12,23 +12,33 @@
  * raises a P1 (block + flag) via `@atlas/shared` `flag(env, "P1", "secret-exposure-blocked",
  * detail?)` — but the primitive itself never reaches for the Wire.
  *
- * --- Pattern strategy (revised after the 00 review C3/C4/W10) ---
+ * --- Pattern strategy (revised after the 00 review C3/C4/W10, hardened after the full-width-CJK leak) ---
  *
  * The original patterns were too narrow (a bare `\b\d{6}\b`, a `reset|verify|confirm` URL only,
  * two phrase patterns) and leaked: 7/8-digit and spaced/dashed codes, full-width-digit codes,
  * login/signin/magic-link/SSO URLs, and the `OTP`/`one-time passcode`/`security code` phrases.
  *
- * Two classes of digit pattern, deliberately split to balance fail-safe redaction against
+ * THREE classes of digit pattern, deliberately split to balance fail-safe redaction against
  * over-redaction (T-00-26 / I24):
+ *   - FULL-WIDTH origin (ALWAYS-ON, no cue): a run of 6–8 FULL-WIDTH digits (U+FF10–U+FF19) in
+ *     the ORIGINAL text is redacted UNCONDITIONALLY — full-width digit runs are a strong 2FA
+ *     signal and benign full-width 6–8 digit numbers in prose are vanishingly rare. This closes
+ *     the leak where `コード ４８２９１３` (a non-English / CJK code context) normalized to ASCII
+ *     `482913` but then escaped the cue-gated branch (the cue "コード" is not English). Detected on
+ *     the PRE-normalization text; the normalized run is what gets masked.
  *   - ALWAYS-ON (formatted codes): clearly-formatted code shapes (3-3 / 3-4 / 3-5 groupings
  *     with a space or dash separator) are redacted unconditionally — a `482 913` or `482-9137`
  *     run almost never appears in benign prose and reads as a code.
- *   - PROXIMITY-GATED (bare runs): a bare 6–8 digit run is redacted ONLY when a code cue
- *     (code / OTP / passcode / verification / verify / 2fa) appears within ~20 chars. This keeps
- *     a benign `Order #483920` (no cue nearby) intact while `your code is 483920` is stripped.
+ *   - PROXIMITY-GATED (bare ASCII runs): a bare ASCII 6–8 digit run is redacted ONLY when a code
+ *     cue (see CODE_CUE) appears within ~20 chars. This keeps a benign `Order #483920` (no cue
+ *     nearby) and a year range intact while `your code is 483920` is stripped.
  *
- * Full-width digits (U+FF10–U+FF19) are normalized to ASCII BEFORE matching so a `４８２９１３`
- * code cannot slip past an ASCII-only `\d`.
+ * INTENTIONAL NON-COVERAGE: a bare ASCII 6–8 digit run with NO nearby cue is intentionally NOT
+ * redacted, to avoid masking order numbers / years / tracking IDs (the `Order #483920` and
+ * year-range controls guard this). That is an accepted residual: the PRIMARY 2FA defense is the
+ * upstream `Type/Security` WHOLESALE body strip in mcp-google (00-08), which removes the entire
+ * security-mail body server-side regardless of scope. THIS regex is the defense-in-depth
+ * BACKSTOP, not the sole gate — so erring toward ASCII-number precision here is acceptable.
  *
  * Over-redaction of a rare benign formatted-number is an accepted residual risk (T-00-26):
  * losing a stray number is fail-safe vs leaking a 2FA code. The benign-fixture tests guard
@@ -37,8 +47,22 @@
 
 const MASK = "[REDACTED]";
 
-/** Code cue tokens that gate the bare-digit-run branch (proximity cue, ~20 chars). */
-const CODE_CUE = "(?:code|otp|passcode|verification|verify|2fa)";
+/**
+ * Code cue tokens that gate the bare-ASCII-digit-run branch (proximity cue, ~20 chars).
+ * Broadened (hardening) beyond the original code/otp/verification set so common code contexts
+ * aren't missed: pin / token / passcode / mfa / 2fa / auth / security / one-time / login /
+ * sign-in / access. (Full-width-origin runs do NOT depend on this list — see below.)
+ */
+const CODE_CUE =
+  "(?:code|otp|verification|verify|pin|token|passcode|mfa|2fa|auth|security|one[-\\s]?time|login|sign[-\\s]?in|access)";
+
+/**
+ * A run of 6–8 FULL-WIDTH digits (U+FF10–U+FF19). Detected on the ORIGINAL (pre-normalization)
+ * text and redacted UNCONDITIONALLY — full-width origin is itself a strong code signal, so no
+ * proximity cue is required (this is what closes the CJK-context full-width leak). Authored with
+ * `g` for the redact walk; a non-`g` clone is used for the `.test()` in `containsSecret`.
+ */
+const FULLWIDTH_CODE_RUN = /[０-９]{6,8}/g;
 
 /**
  * The canonical pattern set, authored WITHOUT the `g` flag (source of truth for both
@@ -111,11 +135,17 @@ function normalizeDigits(text: string): string {
 }
 
 /**
- * Replace every SECRET_PATTERNS match with the mask token. Each pattern is applied GLOBALLY
- * (every occurrence). Full-width digits are normalized first so a `４８２９１３` code is caught.
+ * Replace every SECRET_PATTERNS match with the mask token. Order of operations:
+ *   1. FULL-WIDTH-origin pass FIRST, on the ORIGINAL text — any 6–8 full-width digit run is
+ *      masked UNCONDITIONALLY (no cue), closing the CJK-context leak. Because the run is replaced
+ *      with the (ASCII) mask, the subsequent normalization can't resurrect it.
+ *   2. Normalize remaining full-width digits to ASCII (so a SHORT full-width run adjacent to an
+ *      English cue, or a full-width formatted shape, still feeds the ASCII patterns).
+ *   3. Apply the ASCII pattern set globally.
  */
 export function redact(text: string): string {
-  let out = normalizeDigits(text);
+  let out = text.replace(FULLWIDTH_CODE_RUN, MASK);
+  out = normalizeDigits(out);
   for (const pattern of REDACT_PATTERNS) {
     out = out.replace(pattern, MASK);
   }
@@ -123,11 +153,13 @@ export function redact(text: string): string {
 }
 
 /**
- * True iff any SECRET_PATTERNS match — the signal a caller maps to a P1 block-and-flag.
- * Uses the non-`g` `TEST_PATTERNS` so there is no shared `lastIndex` state between calls.
- * Normalizes full-width digits first to stay in lockstep with `redact`.
+ * True iff a secret pattern matches — the signal a caller maps to a P1 block-and-flag.
+ * Mirrors `redact`'s order: a full-width 6–8 digit run in the ORIGINAL text is an unconditional
+ * hit; otherwise normalize and test the ASCII pattern set. Uses non-`g` `.test()` (a fresh clone
+ * for the full-width run) so there is no shared `lastIndex` state between calls.
  */
 export function containsSecret(text: string): boolean {
+  if (/[０-９]{6,8}/.test(text)) return true;
   const normalized = normalizeDigits(text);
   return TEST_PATTERNS.some((pattern) => pattern.test(normalized));
 }
