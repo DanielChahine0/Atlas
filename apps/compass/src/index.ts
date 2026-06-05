@@ -45,8 +45,22 @@ export interface PlanResult {
   overcommitted: boolean;
 }
 
+/**
+ * The idempotency-key segment for a plan mode (spec failure-table key: `compass:<mode>:<date>`).
+ * The morning chain step writes `compass:plan:<date>`; the 21:00 preview writes
+ * `compass:preview:<date>`. Distinct segments mean a preview for tomorrow is NOT deduped away
+ * against the morning plan for the same target date (they are different rows in the ledger).
+ */
+function keyModeFor(mode: string): string {
+  return mode === "morning" ? "plan" : mode;
+}
+
 /** Build the canonical §6.4 day_plan Wire event (op:upsert — REPLACES the Today note). */
 export function buildDayPlanEvent(date: string, mode: string, plan: DayPlan): WireEvent {
+  // couldnt_fit and at_risk must be DISJOINT — an at-risk overflow item belongs to at_risk only
+  // (else the Vault renderer double-lists it). Surface non-at-risk overflow under couldnt_fit.
+  const atRisk = plan.couldntFit.filter((c) => c.atRisk);
+  const couldntFit = plan.couldntFit.filter((c) => !c.atRisk);
   return {
     agent: "Compass",
     type: "day_plan",
@@ -57,10 +71,10 @@ export function buildDayPlanEvent(date: string, mode: string, plan: DayPlan): Wi
       mode,
       top3: plan.top3,
       blocks: plan.blocks,
-      couldnt_fit: plan.couldntFit,
-      at_risk: plan.couldntFit.filter((c) => c.atRisk),
+      couldnt_fit: couldntFit,
+      at_risk: atRisk,
     },
-    idempotencyKey: `compass:plan:${date}`,
+    idempotencyKey: `compass:${keyModeFor(mode)}:${date}`,
   };
 }
 
@@ -86,16 +100,22 @@ export async function runPlan(
 
   const plan = buildPlan(tasks, events, date, options.gridParams);
 
-  // Overcommitment: demand > free → P3 (surface, never drop). Computed deterministically.
+  // Overcommitment: overflow exists → P3 (surface, never drop). Computed deterministically.
+  // plan.overcommitted is bin-pack FRAGMENTATION (couldntFit.length > 0), which can fire even
+  // when total demand <= total free; only claim "demand exceeds free" when that is actually true.
   if (plan.overcommitted) {
     const demand = demandMinutes(tasks);
     const free = freeMinutes(buildGrid(events, options.gridParams));
+    const overByDemand = demand > free;
+    const capacityClause = overByDemand
+      ? `Demand ${demand}m exceeds free ${free}m`
+      : `Demand ${demand}m fits free ${free}m but fragmentation blocked placement`;
     const atRiskCount = plan.couldntFit.filter((c) => c.atRisk).length;
     await flag(
       env,
       "P3",
       "compass day is overcommitted",
-      `Demand ${demand}m exceeds free ${free}m; ${plan.couldntFit.length} task(s) could not fit today (${atRiskCount} at-risk). They are surfaced under "⚠ Couldn't fit today" — never dropped.`,
+      `${capacityClause}; ${plan.couldntFit.length} task(s) could not be placed today (${atRiskCount} at-risk). They are surfaced under "⚠ Couldn't fit today" — never dropped.`,
       {
         sourceAgent: "Compass",
         suggestedAction: "Defer a lower-priority item or extend working hours.",
@@ -133,14 +153,28 @@ export class Compass extends WorkerEntrypoint<Env> {
   }
 }
 
+/**
+ * The owner-local calendar date one day after `date` (YYYY-MM-DD). Operates on the parsed
+ * integer Y/M/D components (NOT a bare `new Date()` that workerd would read as UTC), so the
+ * +1-day roll is calendar-pure and DST-safe — a date-only string carries no offset to skew.
+ */
+export function nextOwnerLocalDate(date: string): string {
+  const [y, m, d] = date.split("-").map((x) => Number(x));
+  // Date.UTC normalizes month/day overflow (e.g. day 31 → next month) deterministically.
+  const next = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + 1));
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(next);
+}
+
 export default {
   /**
    * The independent 21:00 EDT preview cron — a next-day glance (separate from the morning
-   * chain's compass-plan step). The live model + calendar read wire in with OAuth; here we
-   * run the plan against whatever D1 tasks exist (events default to none until wired).
+   * chain's compass-plan step). It plans for owner-local TOMORROW (today + 1 day) and writes a
+   * distinct `compass:preview:<tomorrow>` key, so it is never deduped against the morning
+   * `compass:plan:<date>` step. The live model + calendar read wire in with OAuth; here we run
+   * the plan against whatever D1 tasks exist (events default to none until wired).
    */
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const date = localDate(env);
-    await runPlan(env, date, "preview");
+    const tomorrow = nextOwnerLocalDate(localDate(env));
+    await runPlan(env, tomorrow, "preview");
   },
 } satisfies ExportedHandler<Env>;
