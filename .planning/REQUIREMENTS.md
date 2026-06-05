@@ -13,7 +13,7 @@ Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = S
 
 - [x] **SPINE-01**: Atlas can schedule a no-op agent and route a message onto the Wire (the Cloudflare Queue event bus). _(docs/agents/atlas.md, 02-architecture.md)_
 - [x] **SPINE-02**: Steward consumes one Wire event and applies it to the Vault per the §6.4 contract `{ agent, type, entity, op, payload, idempotencyKey }`, serialized single-consumer; `increment` is idempotent on replay (same idempotencyKey twice → counter unchanged, `meta.changes === 0`). _(docs/agents/steward.md, SPEC-CANON §6.4, 13-build-plan §2 T5/T6)_
-- [ ] **SPINE-03**: The Codex exists with the §11 sections (identity, education, work, skills, projects, bios, socials), read-only to agents except the explicit "update my profile" flow. _(07-source-of-truth-codex.md, SPEC-CANON §11)_
+- [x] **SPINE-03**: The Codex exists with the §11 sections (identity, education, work, skills, projects, bios, socials), read-only to agents except the explicit "update my profile" flow. _(07-source-of-truth-codex.md, SPEC-CANON §11)_
 - [ ] **SPINE-04**: Google (least-privilege scopes) and GitHub (GitHub App) OAuth round-trips succeed; tokens live in Cloudflare Secrets Store, never in the Vault or Codex. _(11-security-privacy.md, 06-hosting-cloudflare-mcp.md)_
 - [x] **SPINE-05**: The DLQ (`atlas-wire-dlq`) exists; an exhausted-retry message lands there, produces an audit row + a P2/P3 incident, and never silently buffers. The Obsidian bridge writes outbound-only from Steward to the Vault. _(13-build-plan §2 T7, 06-hosting-cloudflare-mcp.md)_
 
@@ -73,7 +73,7 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 |-------------|-------|--------|
 | SPINE-01 | Phase 0 | Complete |
 | SPINE-02 | Phase 0 | Complete |
-| SPINE-03 | Phase 0 | Pending |
+| SPINE-03 | Phase 0 | Complete |
 | SPINE-04 | Phase 0 | Pending |
 | SPINE-05 | Phase 0 | Complete |
 | CORE-01 | Phase 1 | Pending |
