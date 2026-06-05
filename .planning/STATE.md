@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-06-05T19:32:24.585Z"
+last_updated: "2026-06-05T19:46:40.021Z"
 last_activity: 2026-06-05
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 23
-  completed_plans: 19
+  completed_plans: 20
   percent: 33
 ---
 
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 ## Current Position
 
 Phase: 02 (weekly-value) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-06-05
-Next action: `/gsd-plan-phase 2` (Weekly Value: Scout, Headhunter, Flagger). Separately, clear the four Phase-1 go-live gates (see Blockers) before flipping the morning chain live + setting `filer.push_enabled=true`.
+Next action: Execute Plan 02-05 (Headhunter). Separately, clear the four Phase-1 go-live gates (see Blockers) before flipping the morning chain live + setting `filer.push_enabled=true`.
 
 Milestone progress (phases): [███░░░░░░░] 33% — 2 of 6 phases complete (Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅)
 
@@ -75,6 +75,7 @@ Milestone progress (phases): [███░░░░░░░] 33% — 2 of 6 pha
 | Phase 01 P08 | - | 5 tasks | 10 files |
 | Phase 02-weekly-value P02 | ~1 hour | 3 tasks | 14 files |
 | Phase 02-weekly-value P03 | 45 minutes | 2 tasks | 15 files |
+| Phase 02-weekly-value P04 | ~90 minutes | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,7 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase 1]: 01-07: Compass overcommitment surfaces a visible Couldn't-fit list (never silently drops) + at-risk + P3; Opus effort resolved from CONFIG compass.effort, default medium, NEVER high hardcoded (D1-05 cost discipline); day_plan op:upsert REPLACES the Today note (compass:plan:<date>), never appends.
 - [Phase 1]: 01-08: ONE 07:45 cron → ONE MorningChain Workflow (atlas-morning-chain) with five await-ed start-after-success steps + step.sleepUntil DST-safe budget gates (NOT five racing crons); instance id morning-<date> is the idempotency handle (re-fire = no-op); a step's terminal failure rethrows → halt-downstream (Sundial/Compass never run on stale data) + ONE chain.halted P2; invokeAgent service-binding RPC transport (D-11).
 - [Phase 1]: 01-REVIEW: two-pass adversarial code review across forge/tasks, compass, sundial, mcp-google+security, atlas — 20 fixes applied (verified), 3 deferred; 315 tests green at HEAD 09518da.
+- [Phase 2]: 02-04: Scout Worker (apps/scout) built — injectable ScoutSources (RSS/HTML/Gmail), buildGmailQueries() structurally excludes Type/Security/Phishing-Suspect (D2-09), pure relevance() scorer (0-100), INSERT OR REPLACE into D1 events with scout:evt_<date>_<hash> keys, digest summary scout:digest:<date> Wire event. WorkerEntrypoint invoked by Atlas via service binding (no own cron). Codex skills/projects integration deferred to 02-07. 17 tests green; 373 total suite tests pass.
 
 ### Pending Todos
 
@@ -152,6 +154,6 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ## Session Continuity
 
-Last session: 2026-06-05T19:32:24.578Z
+Last session: 2026-06-05T19:46:40.015Z
 Stopped at: Phase 2 context gathered
 Resume file: None

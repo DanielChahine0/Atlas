@@ -30,7 +30,7 @@ Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = S
 
 ### Weekly Value (Phase 2)
 
-- [ ] **WEEKLY-01**: Scout produces a Friday 16:00 events digest and Headhunter (Mon 09:00 full + daily-light 09:00) creates "apply by X" tasks via Forge and updates the job-pipeline kanban counts (applied → OA → interview → offer/reject); low-confidence hiring-window finds route to a flag, not silently to a task. _(docs/agents/scout.md, docs/agents/headhunter.md, 13-build-plan §4)_
+- [x] **WEEKLY-01**: Scout produces a Friday 16:00 events digest and Headhunter (Mon 09:00 full + daily-light 09:00) creates "apply by X" tasks via Forge and updates the job-pipeline kanban counts (applied → OA → interview → offer/reject); low-confidence hiring-window finds route to a flag, not silently to a task. _(docs/agents/scout.md, docs/agents/headhunter.md, 13-build-plan §4)_
 - [x] **WEEKLY-02**: Flagger receives error/incident events from every agent, routes P1/P2 to push immediately and batches P3/P4 into the dashboard feed (Vault Flagger board sorted by severity then trust), and self-monitors its own heartbeat staleness. _(08-flagger.md, docs/agents/flagger.md, SPEC-CANON §8)_
 
 ### Capture — Local (Phase 3)
@@ -84,7 +84,7 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | FORGE-01 | Phase 1 | Code-complete (owner-gated) |
 | SUNDIAL-01 | Phase 1 | Code-complete (owner-gated) |
 | COMPASS-01 | Phase 1 | Code-complete (owner-gated) |
-| WEEKLY-01 | Phase 2 | Pending |
+| WEEKLY-01 | Phase 2 | Complete |
 | WEEKLY-02 | Phase 2 | Complete |
 | CAPTURE-01 | Phase 3 | Pending |
 | CAPTURE-02 | Phase 3 | Pending |
