@@ -24,6 +24,19 @@ export interface ExtractedTask {
   title: string;
   subtasks: string[];
   priority: string; // P1..P4
+  /**
+   * An EXPLICIT due date the email *states verbatim*, parsed to an ISO-8601 string
+   * (date-only "2026-06-02" or a full owner-local datetime). `null`/absent ⇒ the email
+   * states no explicit deadline (do NOT invent one). When set, this wins over every
+   * inferred Due/* label (deadline.ts `inferDeadline` → due_kind "explicit").
+   * Backward compatible: optional, defaults to null.
+   */
+  explicitDue?: string | null;
+  /**
+   * True iff the email states "EOD" / "end of day" (without a specific clock time).
+   * Drives the 23:59 owner-local time when combined with the stated date. Optional.
+   */
+  eod?: boolean;
 }
 
 const has = (t: CandidateThread, label: string): boolean => t.labels.includes(label);
@@ -62,10 +75,26 @@ export function shouldSecuritySkip(t: CandidateThread): boolean {
 export function sanitizeExtracted(task: ExtractedTask): ExtractedTask {
   const safeTitle = containsSecret(task.title) ? "" : task.title;
   const safeSubtasks = task.subtasks.filter((s) => !containsSecret(s));
-  return { title: safeTitle, subtasks: safeSubtasks, priority: task.priority };
+  // explicitDue / eod are structural deadline signals, not free-text the model could smuggle
+  // a secret into — carry them through unchanged (a parsed ISO date / boolean).
+  return {
+    title: safeTitle,
+    subtasks: safeSubtasks,
+    priority: task.priority,
+    explicitDue: task.explicitDue ?? null,
+    eod: task.eod ?? false,
+  };
 }
 
-/** The model-call surface (injected so extraction is unit-testable without a network). */
+/**
+ * The model-call surface (injected so extraction is unit-testable without a network).
+ *
+ * The Sonnet output schema MUST return `{ title, subtasks[], priority, explicitDue?, eod? }`.
+ * The model sets `explicitDue` to a parsed ISO-8601 date (e.g. "2026-06-02") ONLY when the
+ * email states a concrete due date verbatim, and `eod:true` ONLY when it says "EOD" / "end of
+ * day" — it must NEVER invent a date the email does not state (an absent deadline ⇒ both
+ * omitted/null, so deadline inference falls back to the Due/* label rules).
+ */
 export interface Extractor {
   extract(thread: CandidateThread): Promise<ExtractedTask>;
 }

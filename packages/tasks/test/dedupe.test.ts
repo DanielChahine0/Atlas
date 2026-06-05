@@ -46,4 +46,12 @@ describe("dedupeKey", () => {
     const y = await dedupeKey("a", "bc", "");
     expect(x).not.toBe(y);
   });
+
+  it("does not collide when a field itself contains a space (NUL separator, not space)", async () => {
+    // A literal-space separator would map ("a","b c") and ("a b","c") to the same
+    // material ("a b c") and collide. The NUL separator keeps them distinct (WR-02).
+    const x = await dedupeKey("a", "b c", "");
+    const y = await dedupeKey("a b", "c", "");
+    expect(x).not.toBe(y);
+  });
 });
