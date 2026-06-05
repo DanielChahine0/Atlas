@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mcp-github",
+  "main": "src/index.ts",
+  // D-09: match Atlas/Steward — >= 2026-04-07 floor; pair with nodejs_compat
+  // (REQUIRED by the agents SDK — omitting it is a runtime failure).
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The STATEFUL GitHub MCP. agents@0.14.1 `McpAgent` is a Durable-Object-backed
+  // Agent, so the McpAgent subclass IS a DO class (GithubMcp). The McpAgent's
+  // static serve() factory addresses this DO via the "GITHUB_MCP" binding.
+  // SQLite-backed (Free-tier eligible) — NEVER legacy `new_classes`.
+  "durable_objects": {
+    "bindings": [{ "name": "GITHUB_MCP", "class_name": "GithubMcp" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GithubMcp"] }],
+
+  // OAUTH_KV — the inbound OAuthProvider grant store. Required or the provider fails
+  // at startup. The provider validates the access token, then routes to the McpAgent
+  // serve() handler with the granted scopes attached as ctx.props.
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "970e569e796a4868ad82449885d0319f" }
+  ],
+
+  // The GitHub App RS256 private key — read ONLY via the Secrets Store async binding
+  // (await env.GH_APP_PRIVATE_KEY.get()). NEVER in [vars]/KV/Vault/Codex/tracked files.
+  // store_id is the same per-account placeholder as apps/atlas/wrangler.jsonc.
+  "secrets_store_secrets": [
+    {
+      "binding": "GH_APP_PRIVATE_KEY",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "github-app-private-key"
+    }
+  ],
+
+  // PLAINTEXT non-secrets ONLY. The GitHub App client id (the JWT `iss`) is a public
+  // identifier, not a secret. The installation id is also non-secret.
+  "vars": {
+    "GH_APP_CLIENT_ID": "<set-after-github-app>",
+    "GH_APP_INSTALLATION_ID": "<set-after-github-app-install>"
+  },
+
+  // Pillar 1: mcp-github does NOT read the Wire and is not the bus's write side — it
+  // declares no queues block, so the CI one-writer gate counts ZERO bus readers here.
+  // Steward remains the SOLE reader of atlas-wire.
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (convention — this Worker has no crons of its own).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}

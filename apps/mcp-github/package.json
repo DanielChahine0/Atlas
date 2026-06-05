@@ -1,0 +1,26 @@
+{
+  "name": "@atlas/mcp-github",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@atlas/shared": "workspace:*",
+    "@cloudflare/workers-oauth-provider": "^0.7.2",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "agents": "^0.14.1",
+    "jose": "^6.2.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.13",
+    "@cloudflare/workers-types": "^4.20260425.0",
+    "vitest": "^4.1.8"
+  }
+}

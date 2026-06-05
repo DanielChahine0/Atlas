@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Register the cloudflare:test ambient module declarations used by the workerd
+    // test suites. `types` does NOT merge across `extends`, so re-list
+    // @cloudflare/workers-types here too.
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+}

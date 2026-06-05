@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. Mirrors the
+  // production apps/mcp-obsidian-bridge/wrangler.jsonc but uses a local-only D1 (no
+  // remote id). The token gate is exercised by injecting ATLAS_BRIDGE_TOKEN via the
+  // test env (a secret stub), since secrets_store_secrets has no local emulation.
+  "name": "mcp-obsidian-bridge-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ]
+}

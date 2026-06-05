@@ -1,0 +1,50 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mcp-obsidian-bridge",
+  "main": "src/index.ts",
+  // D-09: match Atlas/Steward — >= 2026-04-07 floor; pair with nodejs_compat.
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The cloud side of the OUTBOUND-ONLY Obsidian bridge (SPINE-05). Steward (00-04)
+  // writes PENDING intents into vault_outbox; this Worker exposes ONLY /bridge/poll +
+  // /bridge/ack, both gated by ATLAS_BRIDGE_TOKEN, which the LOCAL macOS daemon drains
+  // OUTBOUND (the laptop has NO inbound port). The bridge NEVER pushes to the laptop.
+  //
+  // Pillar 1: this Worker reads vault_outbox from D1, NOT the Wire. It declares no
+  // queues block at all — Steward remains the SOLE reader of atlas-wire; the CI
+  // one-writer gate counts ZERO bus readers here.
+
+  // D1 system-of-record — the vault_outbox table the poll endpoint drains and the ack
+  // endpoint marks done. Positional `?` binds only at the call site.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // The long-poll bearer token — read ONLY via the Secrets Store async binding
+  // (await env.ATLAS_BRIDGE_TOKEN.get()). NEVER in [vars]/KV/Vault/Codex/tracked
+  // files. The owner mints it and seeds it on BOTH sides (cloud Secrets Store +
+  // the daemon's local env) at the owner gate (Task 4). store_id is the same
+  // per-account placeholder as apps/atlas/wrangler.jsonc.
+  "secrets_store_secrets": [
+    {
+      "binding": "ATLAS_BRIDGE_TOKEN",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "atlas-bridge-token"
+    }
+  ],
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (convention — this Worker has no crons of its own).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. Mirrors the
+  // production apps/mcp-github/wrangler.jsonc but uses a local-only KV (no remote id)
+  // and no secrets_store_secrets so the pool stays fully local.
+  "name": "mcp-github-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "GITHUB_MCP", "class_name": "GithubMcp" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GithubMcp"] }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "test-oauth-kv" }]
+}

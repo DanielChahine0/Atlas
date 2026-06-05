@@ -30,8 +30,13 @@ export interface OutboxIntent {
   body: string;
 }
 
-/** The ONLY HTTP verbs Steward is ever permitted to enqueue (Pillar 2). */
-const SAFE_METHODS = ["PATCH", "POST"] as const;
+/**
+ * The ONLY HTTP verbs Steward is ever permitted to enqueue (Pillar 2). Exported so the
+ * outbound Obsidian bridge (00-08) can assert the no-DELETE invariant against THIS single
+ * canonical allow-list rather than redefining it (GLOBAL DECISION 5: the op→REST source
+ * lives here, never duplicated downstream). There is no removal verb anywhere in this list.
+ */
+export const SAFE_METHODS = ["PATCH", "POST"] as const;
 type SafeMethod = (typeof SAFE_METHODS)[number];
 
 /**
