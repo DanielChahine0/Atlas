@@ -60,6 +60,12 @@ importers:
       '@atlas/wire':
         specifier: workspace:*
         version: link:../../packages/wire
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.7.2
+        version: 0.7.2
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.16.13
