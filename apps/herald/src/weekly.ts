@@ -13,9 +13,11 @@
  *
  * The method emits ONE Wire event: a "digest" event with idempotencyKey `herald:weekly:<date>`
  * (op:"upsert", entity:"email") feeding the 16:30 weekly-review Vault build.
+ * On success (draft not blocked), also emits a kind:heartbeat incident (P4).
  */
 
 import type { WireEvent } from "@atlas/wire";
+import type { RawIncident } from "@atlas/shared";
 import { guardDigestOutput, stripSnippet } from "./guardrail.js";
 import { bucketThreads, sectionCounts, SECTIONS, type DigestThread } from "./bucket.js";
 import type { Env, HeraldGmailTools } from "./index.js";
@@ -139,8 +141,9 @@ export function renderWeeklyBody(date: string, threads: DigestThread[]): string 
 /**
  * Run the weekly week-in-review pass. PURE of network via injected `tools`:
  *   bucket → render (snippets pre-stripped) → output guardrail → create draft (if clean)
- *   → emit the digest event. On a guardrail trip: no draft, P2 raised, event still emitted
- *   with draftId:null so the Vault glance is observable (the leak is the flagged incident).
+ *   → emit heartbeat on success. The Wire digest event is emitted by the
+ *   Herald.weekly() WorkerEntrypoint method (in index.ts). On a guardrail trip: no draft,
+ *   P2 raised (by guardDigestOutput), no heartbeat.
  *
  * The guardrail is the OUTPUT-side check (belt 2) — identical to the daily pass.
  */
@@ -164,6 +167,17 @@ export async function runWeekly(
   if (!guard.blocked && tools) {
     draftId = await tools.createDraft(OWNER_ADDRESS, weeklyDraftSubject(date), guard.text);
     drafted = true;
+  }
+
+  // Heartbeat: emit after a successful (non-blocked) run.
+  if (!guard.blocked) {
+    await env.INCIDENTS?.send({
+      source_agent: "Herald",
+      kind: "heartbeat",
+      severity_hint: "P4",
+      title: `Herald heartbeat ${date}`,
+      run_id: date,
+    } as RawIncident);
   }
 
   return { drafted, draftId, counts, actionRequiredRefs, blocked: guard.blocked };
