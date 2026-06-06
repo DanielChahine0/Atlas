@@ -863,22 +863,20 @@ export class EchoSession extends DurableObject<Env> {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Archivist Workflow trigger mechanism — alarm vs. direct trigger?**
+1. **Archivist Workflow trigger mechanism — alarm vs. direct trigger? — RESOLVED**
    - What we know: Echo emits a Wire event → Steward processes it → D1 `meetings` row written. Atlas needs to then kick the Archivist Workflow.
-   - What's unclear: Whether to extend `AtlasCoordinator` alarm to detect new meeting rows, or have Steward directly call a Workflow trigger endpoint on the Archivist Worker via service binding.
-   - Recommendation: Steward calling `ARCHIVIST_WF.create({ id: "archivist-<session_id>", params: { session_id } })` via service binding in the same critical section where it stores the meeting row. This is direct, synchronous, and avoids polling. Verify Workflow `create()` API in Archivist wrangler.jsonc.
+   - Resolution: **Steward triggers the Archivist Workflow via a cross-script `workflows` binding**, calling `env.ARCHIVIST_WF.create({ id: "archivist-<session_id>", params: { session_id } })` from within its existing sole `atlas-wire` consumer (NOT via AtlasCoordinator alarm polling, and NOT via a new RPC trigger endpoint). The cross-script binding is **confirmed supported in Wrangler v4**: the `WorkflowBinding` schema in `node_modules/wrangler/config-schema.json` exposes a `script_name` field ("The script where the Workflow is defined (if it's external to this Worker)"), and the Cloudflare Workflows docs document binding a Workflow defined in another Worker via `script_name` + calling `env.BINDING.create({...})` on it. The exact binding shape on `apps/steward/wrangler.jsonc` (+ `wrangler.test.jsonc`):
+     `{ "binding": "ARCHIVIST_WF", "name": "atlas-archivist", "class_name": "ArchivistWorkflow", "script_name": "archivist" }` — `name`/`class_name` match `apps/archivist/wrangler.jsonc`. The instance id `archivist-<session_id>` is itself the idempotency handle (re-fire swallows the benign instance-exists collision → exactly one Workflow instance per session_id, mirroring `morning-<date>` in `apps/atlas/src/morning-chain.ts`). This is a Worker-to-Worker private binding (the same private-RPC trust posture as the D-11 invokeAgent service bindings) — NOT a public HTTP endpoint, NOT a new inbound port, and NOT a second `atlas-wire` consumer (Pillar 1 preserved). Planned in 03-03 Task 2; threat-modeled as T-03-03-06; the per-session-id "exactly one instance" idempotency is unit-tested in 03-03.
 
-2. **Local Codex copy freshness for Quill**
+2. **Local Codex copy freshness for Quill — RESOLVED**
    - What we know: Quill needs a local read-only copy of the Codex. The Codex lives in Google Drive.
-   - What's unclear: How and how often the local copy stays fresh without creating a cloud dependency in the fill loop.
-   - Recommendation: The capture daemon's outbound poll channel (reusing the drain.ts pattern) fetches a fresh Codex snapshot when armed or on a 24h timer. The Codex is cached as a JSON file on disk. The fill loop reads the disk cache — no cloud round-trip during Quill operation. Staleness of >48h emits a P4 flag.
+   - Resolution: The capture daemon's outbound poll channel (reusing the drain.ts pattern) fetches a fresh Codex snapshot when armed (the 24h-poll-on-arm approach) and caches it as a JSON file on disk; Quill's fill loop reads ONLY the disk cache — no cloud round-trip and no cloud LLM during Quill operation. Staleness > 48h emits a P4 flag. Planned in 03-04 Task 2 (CodexCache.swift) and consumed in 03-06 Task 2 (CodexMapper reads the local cache only).
 
-3. **R2 not enabled on the account (err 10042)**
-   - What we know: `wrangler r2 bucket create atlas-blobs` fails with CF API err 10042 (per STATE.md). This blocks all Echo transcript storage.
-   - What's unclear: Whether enabling R2 requires any plan change or is purely a dashboard action.
-   - Recommendation: This is a pure owner action — enable R2 in the Cloudflare dashboard, then `wrangler r2 bucket create atlas-blobs`. This is a go-live gate, not a code gate.
+3. **R2 not enabled on the account (err 10042) — RESOLVED**
+   - What we know: `wrangler r2 bucket create atlas-blobs` fails with CF API err 10042 (per STATE.md). This blocks live Echo transcript/audio storage.
+   - Resolution: This is an **owner go-live gate, not a code gate**. The owner enables R2 in the Cloudflare dashboard, creates `atlas-blobs`, and applies the `audio/raw/` 7-day lifecycle rule. All Phase-3 cloud code builds and unit-tests against mocks (R2/Codex/Wire/Forge) WITHOUT R2 being live; presigned-URL behavior is verified on staging at go-live (Pitfall 5 — presign is not testable in `wrangler dev`). No plan change required; tracked as a go-live gate alongside the Xcode toolchain and Apple Developer ID.
 
 ---
 
