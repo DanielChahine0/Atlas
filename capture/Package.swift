@@ -55,12 +55,13 @@ let package = Package(
             path: "Sources/Echo"
         ),
 
-        // Main executable: menubar app shell (AppDelegate wires Shared + Echo at launch)
+        // Main executable: menubar app shell (AppDelegate wires Shared + Echo + Quill at launch)
         .executableTarget(
             name: "AtlasCapture",
             dependencies: [
                 "Shared",
                 "Echo",
+                "Quill",
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],
@@ -80,6 +81,24 @@ let package = Package(
             name: "EchoTests",
             dependencies: ["Echo", "Shared"],
             path: "Tests/EchoTests"
+        ),
+
+        // Quill library: HotkeyMonitor, ScreenReader, CodexMapper, ReviewPanel, QuillController
+        // Hotkey-triggered autofill from the local Codex (D3-07, D3-09).
+        // No Echo data dependency (D6 — builds independently of 03-05).
+        .target(
+            name: "Quill",
+            dependencies: ["Shared"],
+            path: "Sources/Quill"
+        ),
+
+        // XCTest target for Quill: privacy-boundary assertions (T-03-06-01 through T-03-06-06).
+        // Pure-logic tests (CodexMapper, secret refusal, confirm-before-submit).
+        // No AX/OCR/SwiftUI runtime required (pure logic, no Xcode signing gate).
+        .testTarget(
+            name: "QuillTests",
+            dependencies: ["Quill", "Shared"],
+            path: "Tests/QuillTests"
         ),
     ]
 )
