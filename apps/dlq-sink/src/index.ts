@@ -1,36 +1,42 @@
 /**
- * dlq-sink — the consumer of the `atlas-wire-dlq` dead-letter queue (SPINE-05, the
- * back half of the "never silent loss" guarantee).
+ * dlq-sink — the consumer of BOTH dead-letter queues (SPINE-05 + D2-05-dlq):
+ *   • `atlas-wire-dlq`      — dead WireEvents that exhausted Steward's retries
+ *   • `atlas-incidents-dlq` — dead RawIncidents that exhausted Flagger's retries
  *
- * Steward's consumer (00-04) routes exhausted-retry messages to `atlas-wire-dlq`.
- * Without a consumer on that DLQ, dead events drop silently and counters go stale
- * with no signal (RESEARCH Pitfall 5). This Worker is the mandatory sink that makes a
- * dead event LOUD instead of lost: for every dead message it
- *   (1) writes a durable `audit_log` row (outcome="dlq", scope_used recorded — NEVER
- *       a token; security hard invariant), and
- *   (2) emits a canonical Flagger incident event back onto the live Wire via the
- *       shared `flag()` helper (op:"upsert" / entity:"flag" / payload:<full flag
- *       record> / idempotencyKey === flag.id — GLOBAL DECISION 1/2),
- * then ALWAYS `ack()`s. It NEVER `retry()`s: a dead-letter message already exhausted
- * atlas-wire's retries, so re-queuing would poison-loop a message that can never
- * succeed (Pillar 2 fail-safe; T-00-31).
+ * Without a consumer on a DLQ, exhausted-retry messages drop silently after the
+ * retention window with no signal (RESEARCH Pitfall 5 / M1). This Worker is the
+ * mandatory sink that makes every dead message LOUD instead of lost.
  *
- * Severity is DETERMINISTIC by source signal (never LLM-assigned):
- *   - a well-shaped dead WireEvent (it reached the DLQ ⇒ a real Steward write
- *     failure) → P2 High
- *   - an unparseable / non-WireEvent dead message → P3 Medium (agent="unknown")
+ * For EACH dead message (regardless of queue) it:
+ *   (1) writes a durable `audit_log` row (outcome="dlq", scope_used="" — NEVER a
+ *       token; security hard invariant), and
+ *   (2) raises an owner-visible alert that BYPASSES the failing queue path:
+ *       - atlas-wire-dlq path: calls flag() → enqueues a RawIncident onto
+ *         atlas-incidents; Flagger is the sole consumer and emits the canonical
+ *         flag upsert to atlas-wire → Steward → Vault.
+ *       - atlas-incidents-dlq path: emits a flag upsert event DIRECTLY to
+ *         atlas-wire (NOT via flag()/atlas-incidents — Flagger is the consumer
+ *         that just failed). This mirrors the flagger-watchdog's "alert path that
+ *         can't depend on the thing it alerts about" pattern: op:"upsert",
+ *         entity:"flag", severity P1, structured idempotencyKey.
+ * then ALWAYS `ack()`s. It NEVER `retry()`s: a dead-letter message already
+ * exhausted its retries, so re-queuing would poison-loop (Pillar 2 fail-safe).
  *
- * Idempotency: the Flagger incident's idempotencyKey IS flag.id — STABLE + structured
- * (flag() builds `flg:<localDate>:<sourceAgent>:<contentHash>`, never a random UUID).
- * We derive the title+detail deterministically from the ORIGINAL event's
- * idempotencyKey (or the raw body when unparseable), so a redelivered DLQ message
- * produces the SAME flag.id and the upsert re-targets ONE flag row rather than
- * spamming the board (docs/08 §4 dedupe rule; T-00-34). The same flag.id is recorded
- * in the audit_log row's `flag_id`, tying the forensic record to the incident.
+ * Severity is DETERMINISTIC (never LLM-assigned):
+ *   atlas-wire-dlq:
+ *     - well-shaped dead WireEvent (real Steward write failure) → P2
+ *     - unparseable dead message                                 → P3 (agent="unknown")
+ *   atlas-incidents-dlq:
+ *     - any dead incident (Flagger exhausted retries)           → P1 (highest-
+ *       consequence substrate; dead incident = Flagger cannot process it)
  *
- * This Worker consumes `atlas-wire-dlq` ONLY and is a `WIRE` producer onto
- * `atlas-wire` — it is NEVER an `atlas-wire` consumer (Pillar 1; Steward alone reads
- * the bus).
+ * Idempotency: all flag ids are deterministic (localDate + contentHash), never
+ * crypto.randomUUID(). A redelivered DLQ message produces the SAME flag id and
+ * re-targets ONE flag row rather than spamming the board.
+ *
+ * This Worker consumes `atlas-wire-dlq` and `atlas-incidents-dlq` ONLY. It is a
+ * WIRE producer and an INCIDENTS producer. It is NEVER an `atlas-wire` consumer
+ * (Pillar 1; Steward alone reads the bus).
  */
 
 import { WireEvent } from "@atlas/wire";
