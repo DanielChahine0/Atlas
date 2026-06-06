@@ -43,11 +43,24 @@ let package = Package(
             path: "Sources/Shared"
         ),
 
-        // Main executable: menubar app shell (AppDelegate wires Shared at launch)
+        // Echo library: AudioTap, TranscriptionPipeline, ConsentGate, CalendarMonitor,
+        // EchoSession (WS client), EchoController — the capture pipeline (03-05)
+        .target(
+            name: "Echo",
+            dependencies: [
+                "Shared",
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Sources/Echo"
+        ),
+
+        // Main executable: menubar app shell (AppDelegate wires Shared + Echo at launch)
         .executableTarget(
             name: "AtlasCapture",
             dependencies: [
                 "Shared",
+                "Echo",
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],
@@ -59,6 +72,14 @@ let package = Package(
             name: "SharedTests",
             dependencies: ["Shared"],
             path: "Tests/SharedTests"
+        ),
+
+        // XCTest target for Echo: AudioWatchdogTests, ConsentGateTests, TranscriptContractTests
+        // Pure-logic tests — no real audio hardware required (D3-04 toolchain gate).
+        .testTarget(
+            name: "EchoTests",
+            dependencies: ["Echo", "Shared"],
+            path: "Tests/EchoTests"
         ),
     ]
 )
