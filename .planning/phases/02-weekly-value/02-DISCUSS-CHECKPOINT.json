@@ -1,0 +1,50 @@
+{
+  "phase": "2",
+  "phase_name": "Weekly Value",
+  "timestamp": "2026-06-05",
+  "areas_completed": ["Push & alert delivery", "Flagger internals & flag() rework", "Scout + Friday weekly cadence", "Headhunter watchlist & pipeline truth"],
+  "areas_remaining": [],
+  "decisions": {
+    "Push & alert delivery": [
+      {"question": "Which delivery channel should the push path target?", "answer": "ntfy.sh", "options_presented": ["ntfy.sh (Recommended)", "Pushover", "Telegram bot"]},
+      {"question": "How should ack + escalation work (bridge is outbound-only, board can't ack back)?", "answer": "ntfy action button -> token-gated Flagger ack endpoint (flips flag to ack in FlaggerState, stops re-push; un-ack'd P1 re-pushes every escalation_window; deterministic recovery auto-resolves)", "options_presented": ["ntfy action button -> ack endpoint (Recommended)", "Tap-to-open Vault note, no programmatic ack", "Time-boxed re-push, then stop"]},
+      {"question": "How should the push path roll out, and what if ntfy is unreachable?", "answer": "Flag-gated behind CONFIG flagger.push_enabled (default false until ntfy topic+token seeded = Phase-2 go-live gate, mirrors filer.push_enabled); board is the fallback if POST fails; no second push channel", "options_presented": ["Flag-gated, board is the fallback (Recommended)", "Always-on once the secret exists", "Flag-gated + backup channel"]}
+    ],
+    "Flagger internals & flag() rework": [
+      {"question": "How does Flagger receive incidents while Steward stays sole atlas-wire consumer?", "answer": "New atlas-incidents queue (Flagger sole consumer); agents fire raw incidents fire-and-forget (never block); Flagger scores+dedupes+lifecycle in FlaggerState DO, then emits canonical type:'flag' upsert onto atlas-wire -> Steward writes board. Rework flag() to enqueue an incident instead of a finished flag.", "options_presented": ["Separate incidents queue, Flagger -> Steward (Recommended)", "Steward-invoked enrichment (RPC from Steward)", "RPC from emitters"]},
+      {"question": "Emitter vs Flagger scoring ownership?", "answer": "Emitter passes a severity hint + kind tag; Flagger applies KV severity_overrides for final severity and is sole authority on trust (evidence bands + recurrence + corroboration/degraded-source adjustments, re-scored on recurrence).", "options_presented": ["Emitter hints severity; Flagger owns final severity + all trust (Recommended)", "Emitter asserts severity AND trust (status quo + push)", "Flagger derives severity purely from a kind taxonomy"]},
+      {"question": "Heartbeat emit + stale detection + grace?", "answer": "Scheduled agents emit kind:'heartbeat' on atlas-incidents; FlaggerState DO arms an alarm per expected slot+grace; miss -> stale-heartbeat P1 (trust 100). heartbeat_grace KV default 10m (override to 5m per-agent). Flagger's own death caught by the separate watchdog Worker (selfwatch_threshold 15m).", "options_presented": ["Heartbeats on atlas-incidents + FlaggerState DO alarm, grace 10m (Recommended)", "Watchdog Worker sweeps everything, grace 5m", "Per-agent grace, DO-alarm model"]}
+    ],
+    "Scout + Friday weekly cadence": [
+      {"question": "How should Scout gather events (browser vs RSS/fetch)?", "answer": "RSS/fetch + plain-HTML/JSON listings + Gmail Type/Newsletter + Events/Invite threads (Filer-labeled) first; NO Playwright/Browser Rendering in v1. JS-rendered sources (Luma/Eventbrite/Meetup) deferred to a follow-up. Reuses Phase-1 plumbing, lowest ToS/flake risk.", "options_presented": ["RSS/fetch + Gmail newsletters first; defer browser (Recommended)", "Browser Rendering (Playwright) from day one", "Hybrid: fetch/RSS for most, browser for 1-2 key sources"]},
+      {"question": "What's in the weekly-Herald (deferred from Phase 1 by D1-02, now in scope)?", "answer": "Week-in-review retrospective: action-required still open, waiting-on, VIP threads, items that slipped over the 7-day window. Draft-only (gmail.compose, no send) + digest event feeding the 16:30 weekly-review Vault build. Runs Fri 16:00 parallel with Scout via Promise.all on cron 0 21 * * 5; 16:30 build on 30 21 * * 5 (build-plan-locked).", "options_presented": ["Week-in-review retrospective (Recommended)", "Daily digest, week-windowed", "Events-only Friday (skip weekly-Herald) - WOULD FAIL WEEKLY-01 criterion 1"]},
+      {"question": "Where do Scout relevance + Headhunter fit interest signals live (Codex has no interests section)?", "answer": "Codex skills + projects (read-only, populated) + a small owner-curated KV keyword list (scout/interests, headhunter/targets); location from Codex addresses. No Codex schema change, tunable without redeploy, keeps profile facts in the single-source-of-truth Codex.", "options_presented": ["Codex skills/projects + KV keyword list (Recommended)", "Add an 'interests' section to the Codex", "KV-only interest config"]}
+    ],
+    "Headhunter watchlist & pipeline truth": [
+      {"question": "What evidence advances the funnel counts + who emits (no double-count)?", "answer": "Headhunter reads Filer-labeled Type/Job threads (inbound email = ground truth), classifies stage (application sent/OA/interview/offer/reject), emits the funnel increment to Steward deduped by (thread, stage). Single emitter = Headhunter (matches roadmap attribution), no double-count, evidence is real mail. Headhunter also owns windows + apply-by tasks + tracked-windows count.", "options_presented": ["Headhunter emits from Filer's Type/Job threads (Recommended)", "Headhunter emits from task completion", "Manual owner-maintained kanban"]},
+      {"question": "How does window/deadline urgency interact with the fit floor (0.4)?", "answer": "Closing windows (inside 21d lead-time) + postings with explicit deadlines ALWAYS surface + task even below fit 0.4 -- nothing time-critical hidden by fit. Only the non-urgent shortlist stays fit-gated. Low-confidence DATES still route to Flagger P3 (build-plan), so bypass != trusting a shaky date. Matches 'zero missed deadlines'.", "options_presented": ["Closing windows + real deadlines bypass the fit floor (Recommended)", "Strict fit floor always applies", "Watchlist companies bypass; generic boards don't"]},
+      {"question": "How to handle the tracked-company watchlist / boards / cycle?", "answer": "Planner builds the hiring-window model + a small starter seed (a few known intern/new-grad programs + fall-2026 cycle) so it runs out of the box; the real list is owner-curated KV (headhunter/tracked_companies, /boards, /cycle, /rolling_companies) set before go-live = a Phase-2 config gate. Tunable without redeploy.", "options_presented": ["KV config gate + small starter seed (Recommended)", "Capture the exact watchlist now", "Infer the watchlist from your Type/Job email over time"]}
+    ]
+  },
+  "deferred_ideas": ["JS-rendered event scraping (Luma/Eventbrite/Meetup via Browser Rendering/Playwright) - deferred from Scout v1", "Scout->Usher registration hand-off (Usher is Phase 4, gated)", "Second push fallback channel for Flagger (board is the only fallback in Phase 2)", "Codex 'interests' section (using KV keyword list instead this phase)"],
+  "canonical_refs": [
+    "docs/SPEC-CANON.md",
+    "docs/08-flagger.md",
+    "docs/agents/flagger.md",
+    "docs/agents/scout.md",
+    "docs/agents/headhunter.md",
+    "docs/agents/herald.md",
+    "docs/13-build-plan.md",
+    "docs/03-scheduling.md",
+    "docs/05-dashboard.md",
+    "docs/07-source-of-truth-codex.md",
+    "docs/04-email-taxonomy.md",
+    "docs/02-architecture.md",
+    "docs/11-security-privacy.md",
+    ".planning/REQUIREMENTS.md",
+    ".planning/phases/00-spine/00-CONTEXT.md",
+    ".planning/phases/01-core-loop-morning-pipeline/01-CONTEXT.md",
+    "CLAUDE.md",
+    "packages/shared/src/flag.ts"
+  ]
+}

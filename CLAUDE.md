@@ -6,10 +6,17 @@
 > and personal-brand publishing. Atlas itself does **no domain work** — it schedules, routes,
 > sequences, supervises, and owns the shared event bus (the Wire) + state.
 >
-> **Status: design phase — no agent code exists yet.** This repo is the spec. You are building it.
+> **Status: MVP code-complete.** Phase 0 (Spine) + Phase 1 (Core Loop / Morning Pipeline) are built,
+> reviewed, and on `main` (HEAD `09518da`, 315 tests green) — **awaiting owner go-live gates** (live
+> OAuth round-trips, Secrets Store seed, Obsidian bridge, AI-Gateway ceilings; see `.planning/STATE.md`
+> → Blockers). **Current focus: Phase 2 (Weekly Value).**
+> **Built (`apps/`):** atlas · steward · filer · herald · forge · sundial · compass · dlq-sink ·
+> mcp-google · mcp-github · mcp-obsidian-bridge (+ the local `daemon/`). **Not yet built (Phases 2–5):**
+> scout · headhunter · flagger · echo · archivist · usher · envoy · switchboard · librarian.
+> *Do NOT re-scaffold an agent that already exists under `apps/`.*
 > **Authoritative design:** `docs/SPEC-CANON.md` (if two docs disagree, it wins).
 > **How to build it:** `docs/13-build-plan.md` (task-level Phase 0 & 1, with pins & acceptance).
-> **Project state / current phase:** `.planning/` (GSD).
+> **Project state / current phase:** `.planning/STATE.md` (GSD — authoritative live status).
 
 ---
 

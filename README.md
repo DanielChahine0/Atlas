@@ -162,6 +162,10 @@ Cloudflare **Workers** + **Durable Objects** for the agents, **Cron Triggers** f
 
 ## Status
 
-📐 **Design phase.** This repo is the design spec — a set of READMEs describing the system before
-a line of agent code is written. Start at **[docs/00-overview.md](docs/00-overview.md)**, then
-**[docs/12-roadmap.md](docs/12-roadmap.md)** for the build order.
+✅ **MVP code-complete.** Phase 0 (Spine) + Phase 1 (the morning pipeline **Filer → Herald → Forge →
+Sundial → Compass**) are built, reviewed, and on `main` (2026-06-05) — 11 Workers, 7 packages, 315
+passing tests — **awaiting owner go-live activation gates** (live OAuth, Secrets Store seed, Obsidian
+bridge, AI-Gateway spend ceilings). Phases 2–5 (Weekly Value · Capture · Outward · Meta) are not yet
+started. Start at **[docs/00-overview.md](docs/00-overview.md)**, then
+**[docs/12-roadmap.md](docs/12-roadmap.md)** for the build order, and **`.planning/STATE.md`** for
+live status.
