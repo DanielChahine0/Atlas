@@ -1,0 +1,79 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "echo",
+  "main": "src/index.ts",
+  // D-09: >= 2026-04-07 enables web_socket_auto_reply_to_close (Echo uses WebSocket Hibernation).
+  "compatibility_date": "2026-04-25",
+  // REQUIRED by the `agents` SDK — omitting it is a runtime failure.
+  "compatibility_flags": ["nodejs_compat"],
+
+  // EchoSession DO — per-meeting WebSocket Hibernation DO.
+  // Addressed as env.ECHO_SESSION.getByName("echo-<ISO-timestamp>") per meeting.
+  // new_sqlite_classes (Free-plan SQLite DO). NEVER legacy new_classes.
+  "durable_objects": {
+    "bindings": [{ "name": "ECHO_SESSION", "class_name": "EchoSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["EchoSession"] }],
+
+  // Pillar 1: Echo is a Wire PRODUCER only. NO queues.consumers block.
+  // A second atlas-wire consumer is a hard CI failure.
+  // D2-05: Echo also produces onto atlas-incidents via flag() for incident routing.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 system-of-record — Echo reads/writes the meetings transcript index (0006).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // CONFIG KV — Echo knobs (audio.retain, trigger.mode, stt.model, etc.). Never secrets.
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // BLOBS R2: audio/raw/ expires 7d; transcripts/ persists (atlas.wrangler.jsonc line 54).
+  // NOTE: atlas-blobs bucket provisioned once R2 is enabled on account (err 10042 gate).
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "atlas-blobs" }],
+
+  // Workers AI binding — all Claude routes through claudeFor(agent,env) -> AI Gateway.
+  "ai": { "binding": "AI" },
+
+  // R2 presign credentials (Secrets Store — NEVER in [vars]).
+  // The presign endpoint mints S3-compatible presigned PUT URLs for approved audio uploads.
+  // `store_id` is a placeholder until the owner creates the store (Plan 00-06 gate).
+  "secrets_store_secrets": [
+    {
+      "binding": "R2_ACCESS_KEY_ID",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "r2-access-key-id"
+    },
+    {
+      "binding": "R2_SECRET_ACCESS_KEY",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "r2-secret-access-key"
+    }
+  ],
+
+  // PLAINTEXT non-secrets ONLY. NEVER secrets, NEVER counters.
+  "vars": {
+    "AIG_ACCOUNT_ID": "<set-before-phase-1>",
+    "AIG_GATEWAY_ID": "atlas-reasoning",
+    "CF_ACCOUNT_ID": "<set-before-phase-3>"
+  },
+
+  "observability": { "enabled": true },
+
+  "env": {
+    "staging": {
+      // Staging fires NO crons (CLAUDE.md constraint).
+      "triggers": { "crons": [] }
+    }
+  }
+}
