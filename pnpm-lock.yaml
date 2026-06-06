@@ -157,6 +157,9 @@ importers:
 
   apps/flagger:
     dependencies:
+      '@atlas/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       '@atlas/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -363,6 +366,9 @@ importers:
       '@atlas/codex':
         specifier: workspace:*
         version: link:../../packages/codex
+      '@atlas/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       '@atlas/shared':
         specifier: workspace:*
         version: link:../../packages/shared
