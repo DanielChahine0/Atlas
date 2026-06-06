@@ -84,4 +84,27 @@ describe("Forge heartbeat", () => {
     expect(result).toBeDefined();
     expect(typeof result.inserted).toBe("number");
   });
+
+  it("M9: run still succeeds when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // morning() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful morning run into a failure or halt the MorningChain (M9 regression test).
+    const rejectingSend = vi.fn(async () => {
+      throw new Error("transient queue error");
+    });
+    const testEnv: Env = {
+      ...(env as unknown as Env),
+      WIRE: { send: vi.fn(async () => {}) } as unknown as Queue<WireEvent>,
+      INCIDENTS: { send: rejectingSend } as unknown as Queue<import("@atlas/shared").RawIncident>,
+    };
+
+    const forge = new Forge({} as ExecutionContext, testEnv);
+    // No extractor/candidates → early-return empty result (still a successful run)
+    const result = await forge.morning({ date: "2026-06-05" });
+    // Must resolve normally even though INCIDENTS.send rejects
+    expect(result).toBeDefined();
+    expect(typeof result.inserted).toBe("number");
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
+  });
 });

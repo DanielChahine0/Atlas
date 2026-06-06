@@ -89,4 +89,29 @@ describe("Filer heartbeat", () => {
     expect(result).toBeDefined();
     expect(typeof result.labeled).toBe("number");
   });
+
+  it("M9: run still succeeds when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // sweep() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful sweep into a failure or halt the MorningChain (M9 regression test).
+    const wireEvents: WireEvent[] = [];
+    const rejectingSend = vi.fn(async (_incident: RawIncident) => {
+      throw new Error("transient queue error");
+    });
+    const e = {
+      WIRE: { send: vi.fn(async (event: WireEvent) => { wireEvents.push(event); }) } as unknown as Queue<WireEvent>,
+      INCIDENTS: { send: rejectingSend } as unknown as Queue<RawIncident>,
+      CONFIG: { get: vi.fn(async () => null) } as unknown as KVNamespace,
+    } as unknown as Env;
+
+    const filer = new Filer({} as ExecutionContext, e);
+    // Must not throw even though INCIDENTS.send rejects
+    const result = await filer.sweep({ date: "2026-06-05", tools: makeTools() });
+    expect(result).toBeDefined();
+    expect(typeof result.labeled).toBe("number");
+    // The Wire event for sweep.done must still have been emitted before the heartbeat
+    expect(wireEvents.some((ev) => ev.idempotencyKey === "filer:sweep:2026-06-05")).toBe(true);
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
+  });
 });
