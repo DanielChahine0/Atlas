@@ -13,8 +13,11 @@ interface SecretsStoreBinding {
 export interface Env {
   // EchoSession DO — per-meeting WebSocket Hibernation DO.
   // Addressed as env.ECHO_SESSION.getByName("echo-<ISO-timestamp>") per meeting.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ECHO_SESSION: DurableObjectNamespace<any>;
+  // Plain (non-generic) namespace: production only forwards `.fetch()` to the DO for the
+  // WS upgrade. Typing it `<any>` makes the stub's RPC-proxy type recurse infinitely
+  // (TS2589). Tests that exercise RPC methods (getSessionSegments) cast to
+  // DurableObjectNamespace<EchoSession> locally.
+  ECHO_SESSION: DurableObjectNamespace;
 
   // Wire PRODUCER binding (atlas-wire). Echo produces transcript.ready + wire events.
   // Echo is a PRODUCER ONLY — NO consumer binding (Pillar 1; a second atlas-wire

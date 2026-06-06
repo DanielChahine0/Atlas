@@ -153,13 +153,19 @@ Executed 64 tests, with 0 failures (0 unexpected)
 - **Files modified:** `capture/Sources/Echo/ConsentGate.swift`
 - **Commit:** `8b47285`
 
-## Cloud WS Route (Open Dependency)
+## Cloud WS Route (Open Dependency — RESOLVED at phase close)
 
-`apps/echo/src/index.ts` currently routes ONLY `/health` and `/echo/presign`. There is NO public WebSocket route to the `EchoSession` DO yet.
+~~`apps/echo/src/index.ts` currently routes ONLY `/health` and `/echo/presign`.~~ **RESOLVED:** the orchestrator added the authenticated `/echo/ws` route to `apps/echo/src/index.ts` at Phase-3 close (post-03-06).
 
-`EchoSession.open()` constructs the correct URL: `wss://<host>/echo/ws?session_id=<id>` and presents `Authorization: Bearer <token>` via `authenticateCapture()`. The cloud route must be added to `apps/echo/src/index.ts` BEFORE this endpoint goes live.
+`EchoSession.open()` constructs `wss://<host>/echo/ws?session_id=<id>` and presents `Authorization: Bearer <token>`. The cloud route now:
+1. Calls `authenticateCapture(request, env)` (constant-time bearer verify vs `ECHO_CAPTURE_TOKEN`) FIRST — fail-closed 401 on missing/wrong token, so the DO is never reachable unauthenticated.
+2. Validates `session_id` against `^echo-…$` (rejects UUID / injected names → 400) before it addresses a DO.
+3. Requires the `Upgrade: websocket` header (426 otherwise).
+4. Only then forwards to `env.ECHO_SESSION.getByName(session_id).fetch(request)`.
 
-**Security invariant:** When that route is added, it MUST call `authenticateCapture(request, env)` from `apps/echo/src/auth.ts` (constant-time bearer verify, fail-closed 401) BEFORE forwarding the WS upgrade to the EchoSession DO. Exposing the DO unauthenticated is a hard pillar violation.
+Covered by `apps/echo/test/ws-route.test.ts` (401 missing/wrong token, 400 missing/malformed session_id, 426 non-upgrade). The live 101 upgrade is covered by `echo-session.test.ts` (DO fetch directly).
+
+**Security invariant (now enforced):** the DO is unreachable without a valid capture token — see the route in `index.ts` and the guard tests.
 
 This is the single remaining gap between the local daemon (complete) and the cloud backend. Tracked for 03-06 or a dedicated cloud-side micro-plan.
 
