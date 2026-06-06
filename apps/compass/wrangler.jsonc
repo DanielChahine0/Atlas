@@ -25,6 +25,7 @@
     {
       "binding": "DB",
       "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
       "migrations_dir": "../../migrations"
     }
   ],
