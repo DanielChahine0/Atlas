@@ -238,7 +238,85 @@ export async function runMorning(
   return result;
 }
 
+/** The exact task shape Headhunter passes via the service-binding RPC. */
+export interface CreateTaskInput {
+  title: string;
+  due: string | null;
+  due_kind: "explicit" | "inferred";
+  source_agent: string;
+  thread: null;
+  priority: string;
+}
+
+/** Options Headhunter supplies with every createTask call. */
+export interface CreateTaskOpts {
+  /** The stable structured idempotencyKey (e.g. headhunter:window:<co>:<cycle>:<role>). */
+  idempotencyKey: string;
+  /** The owner-local run date (YYYY-MM-DD) — addresses the FORGE_LOCK DO instance. */
+  runId: string;
+}
+
 export class Forge extends WorkerEntrypoint<Env> {
+  /**
+   * Service-binding RPC entrypoint for Headhunter (closes INT-BLOCKER-1 / WEEKLY-01).
+   *
+   * Accepts the exact task shape Headhunter calls with and delegates entirely to Forge's
+   * EXISTING pipeline: taskIdFor / upsertTask / buildTaskEvent / contentHashOf /
+   * FORGE_LOCK / send. No duplicated dedupe logic (Pillar 5).
+   *
+   * Headhunter tasks carry thread:null so the thread-based dedupeKey() does not apply;
+   * the structured opts.idempotencyKey IS the stable per-window identity — we compute
+   * `id = taskIdFor(opts.idempotencyKey)` so a re-run re-derives the same id.
+   *
+   * Returns `{id}` for inserted | merged; returns `null` for noop (owner-locked).
+   */
+  async createTask(
+    task: CreateTaskInput,
+    opts: CreateTaskOpts,
+  ): Promise<{ id: string } | null> {
+    const db = (this.env as unknown as { DB: D1Database }).DB;
+    const id = taskIdFor(opts.idempotencyKey);
+
+    const input: TaskInput = {
+      id,
+      dedupe_key: opts.idempotencyKey,
+      thread: null,
+      title: task.title,
+      priority: task.priority,
+      due: task.due,
+      due_kind: task.due_kind,
+      status: "open",
+      source_agent: task.source_agent,
+      locked_by_owner: 0,
+      subtasks: [],
+    };
+
+    // Run the dedupe+write inside the FORGE_LOCK DO when present, addressed by runId
+    // (the run date) — exactly like morning() does. The lock guards only dedupe+write;
+    // send() runs OUTSIDE the lock (mirror runMorning pattern).
+    const lock = this.env.FORGE_LOCK;
+    const runUnderLock = lock
+      ? <T>(fn: () => Promise<T>) => lock.getByName(opts.runId).withLock(fn)
+      : <T>(fn: () => Promise<T>) => fn();
+
+    const { action } = await runUnderLock(async () => upsertTask(db, input));
+
+    // Emit per the upsert action, mirroring runMorning (send outside the lock).
+    if (action === "inserted") {
+      await send(this.env, buildTaskEvent(id, "inserted"));
+      return { id };
+    } else if (action === "merged") {
+      await send(
+        this.env,
+        buildTaskEvent(id, "merged", await contentHashOf(task.priority, task.due)),
+      );
+      return { id };
+    } else {
+      // noop (owner-locked) — emit nothing, return null.
+      return null;
+    }
+  }
+
   /**
    * The `forge-morning` Workflow-step RPC target. Reuses Herald's digest refs (does NOT
    * re-fetch full bodies), extracts deadline-safe tasks into D1, and emits per-task events.
