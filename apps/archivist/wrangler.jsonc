@@ -1,0 +1,75 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "archivist",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  // REQUIRED by the `agents` SDK — omitting it is a runtime failure.
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Archivist Workflow — triggered per meeting end by Atlas.
+  // Instance id = "archivist-<session_id>" (stable, structured — never randomUUID).
+  "workflows": [
+    {
+      "name": "atlas-archivist",
+      "binding": "ARCHIVIST_WF",
+      "class_name": "ArchivistWorkflow"
+    }
+  ],
+
+  // Archivist has no stateful DO — it uses R2 (transcripts) + Wire.
+  // The empty new_sqlite_classes list is required when workflows is present.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": [] }],
+
+  // Pillar 1: Archivist is a Wire PRODUCER only. NO queues.consumers block.
+  // A second atlas-wire consumer is a hard CI failure.
+  // D2-05: Archivist also produces onto atlas-incidents via flag() for incident routing.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 system-of-record — Archivist reads meetings table (0006) to verify consent.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // CONFIG KV — Archivist knobs (prior_notes_window, action_item_confidence, etc.).
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // BLOBS R2 — Archivist reads transcript blob from transcripts/ prefix in step 1.
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "atlas-blobs" }],
+
+  // Workers AI binding — all Claude routes through claudeFor(agent,env) -> AI Gateway.
+  // Archivist uses atlas-reasoning (Opus tier — reasoning gateway, not highvolume).
+  "ai": { "binding": "AI" },
+
+  // Forge service binding — Archivist creates owner action items via Forge.createTask RPC.
+  // Archivist NEVER writes the tasks table directly (Pillar 1 / T-02-hh3).
+  "services": [
+    { "binding": "FORGE", "service": "forge" }
+  ],
+
+  // PLAINTEXT non-secrets ONLY. NEVER secrets, NEVER counters.
+  // Model tier in [vars] — re-tunable without redeploy (CLAUDE.md convention).
+  "vars": {
+    "AIG_ACCOUNT_ID": "<set-before-phase-1>",
+    "AIG_GATEWAY_ID": "atlas-reasoning",
+    "MODEL_ARCHIVIST": "claude-opus-4-8"
+  },
+
+  "observability": { "enabled": true },
+
+  "env": {
+    "staging": {
+      // Staging fires NO crons (CLAUDE.md constraint).
+      "triggers": { "crons": [] }
+    }
+  }
+}

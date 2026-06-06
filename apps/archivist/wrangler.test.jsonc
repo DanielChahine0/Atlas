@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "archivist-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Wire + Incidents producers — test stubs (no real queues in workerd test pool).
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 — no database_id in test config (test pool uses an in-memory D1).
+  "d1_databases": [
+    { "binding": "DB", "database_name": "atlas-db", "migrations_dir": "../../migrations" }
+  ],
+
+  // CONFIG KV — stub id for test environment.
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }],
+
+  // PLAINTEXT stub vars for test environment.
+  "vars": {
+    "AIG_ACCOUNT_ID": "test-account",
+    "AIG_GATEWAY_ID": "atlas-reasoning",
+    "MODEL_ARCHIVIST": "claude-opus-4-8"
+  }
+}
