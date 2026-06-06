@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist — Atlas Capture menubar app metadata.
+
+  Key decisions reflected here:
+    LSUIElement = YES           No Dock icon, no menu bar; pure status-item app (D3-12).
+    NSMicrophoneUsageDescription + NSAudioCaptureUsageDescription — for Echo audio
+      capture (mic + Core Audio loopback tap, D3-04). Both required; the OS shows
+      them when the app first requests the relevant audio permission.
+    NSCalendarsFullAccessUsageDescription — for EventKit calendar awareness (D3-11).
+
+  Screen Recording is intentionally ABSENT (D3-07, D3-04 rationale):
+    Quill's OCR fallback uses VNRecognizeTextRequest on a CGImage, not a live
+    screen-capture API. Adding NSScreenCaptureUsageDescription upfront would force
+    an alarming early prompt for something that is only ever used on-demand by the
+    OCR path — deferred to Quill's first run (lazy permission request).
+
+  Usage descriptions are honest and specific. They follow Apple HIG guidance:
+    "Inform users of what data will be collected and how it will be used."
+-->
+<plist version="1.0">
+<dict>
+  <!-- Bundle identity -->
+  <key>CFBundleIdentifier</key>
+  <string>com.atlas.capture</string>
+
+  <key>CFBundleName</key>
+  <string>Atlas Capture</string>
+
+  <key>CFBundleDisplayName</key>
+  <string>Atlas Capture</string>
+
+  <key>CFBundleVersion</key>
+  <string>1</string>
+
+  <key>CFBundleShortVersionString</key>
+  <string>1.0.0</string>
+
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+
+  <key>CFBundleExecutable</key>
+  <string>AtlasCapture</string>
+
+  <!-- LSUIElement = YES: no Dock icon, no system menu bar at the top of the screen.
+       The app appears ONLY as an NSStatusItem in the system status bar (the right side
+       of the menu bar). This is the correct shape for a menubar-only daemon (D3-12). -->
+  <key>LSUIElement</key>
+  <true/>
+
+  <!-- Minimum OS version (macOS 14.4+ for AudioHardwareCreateProcessTap, D3-04). -->
+  <key>LSMinimumSystemVersion</key>
+  <string>14.4</string>
+
+  <!-- ──────────────────────────────────────────────────────────────────────────────
+       Privacy usage descriptions (required for TCC permission prompts).
+       Each key must be present BEFORE the OS shows the permission dialog.
+       ────────────────────────────────────────────────────────────────────────────── -->
+
+  <!-- Microphone: Echo mic channel captures the owner's speech during meetings. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Atlas Echo uses your microphone to capture your speech during meetings. Audio is transcribed on-device and never leaves your Mac except as a text transcript you explicitly approve.</string>
+
+  <!-- Audio capture: Core Audio process tap for system-audio loopback (D3-04).
+       This is the correct, honest description for AudioHardwareCreateProcessTap —
+       it is NOT a screen-recording prompt (unlike ScreenCaptureKit audio). -->
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Atlas Echo taps system audio output to capture meeting participants' voices for transcription. Audio is processed entirely on-device; no raw audio leaves your Mac unless you explicitly approve upload.</string>
+
+  <!-- Calendar: EventKit calendar awareness for Echo auto-arming (D3-11). -->
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Atlas reads your calendar to detect upcoming meetings and automatically prompt you to start a capture session at the right time.</string>
+
+  <!-- NOTE: NSScreenCaptureUsageDescription is intentionally ABSENT here.
+       Screen Recording is requested LAZILY by Quill's Vision OCR fallback the first
+       time it is triggered, not upfront at app launch. Prompting for it at launch
+       would be misleading (the app doesn't capture the screen until the owner uses Quill)
+       and would produce an alarming early permission dialog for Echo-only users.
+       Per RESEARCH.md Pattern 4 + CONTEXT.md D3-04 rationale. -->
+
+</dict>
+</plist>

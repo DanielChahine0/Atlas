@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Atlas-Capture.entitlements — code-signing entitlements for AtlasCapture.
+
+  Used with Developer-ID signing (D3-03). These entitlements are the minimum required
+  for Echo (audio input + Core Audio process tap) and Quill (Accessibility read/inject +
+  on-device OCR fallback). Screen Recording is intentionally ABSENT — Quill's OCR
+  fallback uses Vision (VNRecognizeTextRequest) which does NOT require the scary
+  Screen-Recording permission; it operates on a pre-captured CGImage passed in by the
+  caller, not a live screen capture API.
+
+  Per RESEARCH.md Pattern 4 and Apple docs on AudioHardwareCreateProcessTap:
+    com.apple.security.device.audio-input     — microphone input (Echo mic channel)
+    com.apple.developer.audio.multi-channel-capture  — Core Audio process taps for
+      system-audio loopback (exact entitlement for AudioHardwareCreateProcessTap;
+      verify at go-live against insidegui/AudioCap and Apple WWDC notes).
+
+  Accessibility (Quill AXUIElement read + value injection) does NOT require a plist
+  entitlement — it requires a macOS TCC grant (the owner grants via System Settings →
+  Privacy & Security → Accessibility). No entitlement key is needed here for AX.
+
+  NOTE: The exact loopback-tap entitlement string was verified against Apple developer
+  documentation for "Capturing system audio with Core Audio Taps" + insidegui/AudioCap
+  sample. Re-verify at signing time — these entitlement names have changed across macOS
+  versions. The placeholder com.apple.developer.audio.multi-channel-capture is the
+  current (macOS 14.4+) form for aggregate device + process tap access.
+-->
+<plist version="1.0">
+<dict>
+  <!-- Microphone input: Echo mic channel (Owner speaker, deterministic prior, D3-06).
+       Triggers NSMicrophoneUsageDescription prompt (Info.plist key required). -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+
+  <!-- System-audio loopback tap via AudioHardwareCreateProcessTap (D3-04).
+       Required for capturing the "remote speakers" (loopback) channel.
+       Triggers NSAudioCaptureUsageDescription prompt (Info.plist key required).
+       Verify exact entitlement string at signing time against current Apple docs
+       and insidegui/AudioCap (https://github.com/insidegui/AudioCap). -->
+  <key>com.apple.developer.audio.multi-channel-capture</key>
+  <true/>
+
+  <!-- Hardened runtime: required for Developer-ID notarization (D3-03).
+       Must be combined with the specific exception entitlements below. -->
+  <key>com.apple.security.hardened-runtime</key>
+  <true/>
+
+  <!-- App Sandbox: NOT enabled. The capture daemon is a LaunchAgent, not a sandboxed
+       app. Sandboxing would prevent the process-tap, AX reads, and Keychain writes
+       across the required system surfaces. Developer-ID without sandbox is the correct
+       posture for a privileged daemon helper (standard launchd agent pattern). -->
+</dict>
+</plist>

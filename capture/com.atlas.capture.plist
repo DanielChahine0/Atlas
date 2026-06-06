@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.atlas.capture — the Atlas OUTBOUND-only capture daemon (Echo + Quill, Phase 3).
+
+  This launchd LaunchAgent runs the Swift capture app at login and keeps it alive.
+  The daemon authenticates OUTBOUND and PULLS work from the cloud command endpoint
+  (/capture/poll + /capture/ack); the laptop has ZERO inbound port. This plist therefore
+  declares NO inbound-listener key of any kind — launchd does NOT open any port on the
+  daemon's behalf.
+
+  Privacy invariants (T-03-04-01 through T-03-04-05):
+    - ZERO inbound listener keys anywhere in this file (outbound-only daemon, T-03-04-01).
+    - Daemon initiates ALL connections; uses default cert validation on outbound HTTPS.
+    - OAuth bearer token is stored in the macOS Keychain (Auth.swift: SecItemCopyMatching /
+      SecItemAdd) — NEVER in this plist's EnvironmentVariables, never in UserDefaults.
+    - Raw audio/screen never leave the device except as owner-approved derived artifacts.
+
+  SECRETS are NOT in this file. The OAuth bearer token comes from the macOS Keychain,
+  not from an EnvironmentVariables block. This is the key difference from com.atlas.bridge
+  which used ATLAS_BRIDGE_TOKEN in EnvironmentVariables for the Node env — the Swift app
+  reads the token directly from Keychain (T-03-04-02).
+
+  Three changes from com.atlas.bridge.plist (per plan + PATTERNS.md):
+    1. Label   → com.atlas.capture  (separate launchd agent; bridge is com.atlas.bridge)
+    2. ProgramArguments → the built Swift binary (not Node)
+    3. StandardOut/ErrorPath → new log paths
+
+  Everything else (RunAtLoad, KeepAlive, no inbound listener keys) is PRESERVED verbatim.
+
+  Install (owner go-live gate — after Developer-ID signing + notarization, D3-03):
+    cp capture/com.atlas.capture.plist ~/Library/LaunchAgents/com.atlas.capture.plist
+    launchctl load ~/Library/LaunchAgents/com.atlas.capture.plist
+  Owner verifies: lsof -i -nP | grep LISTEN  →  NO AtlasCapture port (gating criterion).
+
+  NOTE: The binary path uses a placeholder USERNAME — the owner edits this to match their
+  install location before registering the plist.
+-->
+<plist version="1.0">
+<dict>
+  <!-- Change 1: separate Label (com.atlas.bridge is the Node bridge; this is the Swift daemon) -->
+  <key>Label</key>
+  <string>com.atlas.capture</string>
+
+  <!-- Change 2: ProgramArguments points at the built Swift binary, not Node.
+       The owner edits USERNAME to match their home directory.
+       Release build: swift build -c release in capture/ produces AtlasCapture. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/USERNAME/Atlas/capture/.build/release/AtlasCapture</string>
+  </array>
+
+  <!-- Start at login and restart if it exits (a dead daemon = missed meetings/forms).
+       This plist has ZERO inbound-listener keys (T-03-04-01 — outbound-only daemon). -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- Change 3: new log paths (separate from com.atlas.bridge logs) -->
+  <key>StandardOutPath</key>
+  <string>/tmp/atlas-capture.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/atlas-capture.err.log</string>
+
+  <!-- SECRETS NOT IN THIS FILE (T-03-04-02).
+       The OAuth bearer token is stored in the macOS Keychain and read by Auth.swift
+       via SecItemCopyMatching. No EnvironmentVariables secret block here. -->
+</dict>
+</plist>
