@@ -172,4 +172,44 @@ describe("Flagger fetch() — /ack token-gated inbound route (T-02-ack)", () => 
     expect(resp.status).toBe(401);
     expect(ackFlag).not.toHaveBeenCalled();
   });
+
+  // L2 gap-closure: malformed / empty JSON body with a valid token → 400 (not unhandled 500)
+  it("L2: POST /ack with valid token but malformed JSON body → 400 (not 500)", async () => {
+    const { env: e, ackFlag } = makeAuthEnv();
+    const url = "https://flagger.workers.dev/ack";
+    const req = new Request(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${CORRECT_TOKEN}`,
+      },
+      body: "not-valid-json{{{",
+    });
+
+    const resp = await flaggerDefault.fetch(req, e);
+
+    // L2 fix: must return 400 (not throw / 500)
+    expect(resp.status).toBe(400);
+    // ackFlag must NOT be called (bad request rejected before DO access)
+    expect(ackFlag).not.toHaveBeenCalled();
+  });
+
+  it("L2: POST /ack with valid token but empty body → 400", async () => {
+    const { env: e, ackFlag } = makeAuthEnv();
+    const url = "https://flagger.workers.dev/ack";
+    const req = new Request(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${CORRECT_TOKEN}`,
+      },
+      body: "{}",
+    });
+
+    const resp = await flaggerDefault.fetch(req, e);
+
+    // Empty body: `id` is missing (undefined), should be rejected with 400
+    expect(resp.status).toBe(400);
+    expect(ackFlag).not.toHaveBeenCalled();
+  });
 });
