@@ -21,6 +21,7 @@ import { send } from "@atlas/wire";
 import type { WireEvent } from "@atlas/wire";
 import { flag, localDate, contentHash } from "@atlas/shared";
 import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
+import { redact } from "@atlas/security";
 import { defaultSources, buildGmailQueries } from "./sources.js";
 import type { ScoutSources, EventCandidate } from "./sources.js";
 import { relevance } from "./score.js";
@@ -230,21 +231,37 @@ export async function runWeekly(
     .slice(0, maxPerDigest);
 
   // ── Dedupe + D1 persist ────────────────────────────────────────────────────
+  //
+  // M2 (security defense-in-depth): redact() is applied to every untrusted feed
+  // field — title, description, url — BEFORE the record is persisted to D1 OR
+  // emitted to the Wire. This is the Scout backstop analogous to Herald's guardrail.
+  //
+  // L5 (replay/idempotency): `isDuplicate` gates the D1 INSERT only (prevents
+  // double-counting in the database). The per-event Wire upsert is emitted for
+  // EVERY surfaced event on EVERY run — the stable `idempotencyKey = event.id`
+  // lets Steward dedup the Vault projection (replay → meta.changes === 0).
+  // This means a lost Vault projection row self-heals on the next weekly run.
   const surfaced: EventRecord[] = [];
+  // Tracks all records that pass scoring (new + already-seen) for Wire emit on replay.
+  const allSurfacedRecords: EventRecord[] = [];
 
   for (const { candidate, score } of filtered) {
-    const dup = await isDuplicate(env, candidate, dedupeWindowWeeks);
-    if (dup) continue;
+    // ── M2: redact untrusted feed fields before any persist or emit ──────────
+    const safeTitle = redact(candidate.title ?? "");
+    const safeDescription = candidate.description != null
+      ? redact(candidate.description)
+      : undefined;
+    const safeUrl = candidate.url != null ? redact(candidate.url) : undefined;
 
-    const id = `scout:evt_${date}_${contentHash((candidate.title ?? "") + (candidate.start ?? ""))}`;
+    const id = `scout:evt_${date}_${contentHash((safeTitle) + (candidate.start ?? ""))}`;
     const record: EventRecord = {
       id,
-      title: candidate.title,
+      title: safeTitle,
       start: candidate.start ?? null,
       end: candidate.end ?? null,
       location: candidate.location ?? null,
       online: candidate.online ? 1 : 0,
-      url: candidate.url ?? null,
+      url: safeUrl ?? null,
       source: candidate.source,
       relevance: score,
       why: `Matched ${score} relevance points against skills/interests`,
@@ -253,6 +270,19 @@ export async function runWeekly(
       digest_date: date,
       created_at: Date.now(),
     };
+
+    // ── L5: always collect for Wire emit (Steward deduplicates the projection) ─
+    // The per-event Wire upsert is emitted for EVERY scored event on every run —
+    // new AND already-seen — so Steward-level dedup (stable idempotencyKey = event.id)
+    // ensures a lost Vault projection row self-heals on replay. The D1 INSERT is the
+    // only thing gated by isDuplicate (to prevent double-counting in the database).
+    allSurfacedRecords.push(record);
+
+    const dup = await isDuplicate(env, candidate, dedupeWindowWeeks);
+    if (dup) {
+      // D1 INSERT skipped (no double-count), but Wire upsert still emitted below.
+      continue;
+    }
 
     // INSERT OR REPLACE INTO events — positional ? binds only (D1 rule)
     await env.DB.prepare(
@@ -278,14 +308,21 @@ export async function runWeekly(
       )
       .run();
 
-    // Per-event upsert Wire event
-    await send(env, buildEventUpsert(record));
-
     surfaced.push(record);
   }
 
+  // ── Per-event Wire upserts (all scored events — L5 self-heal on replay) ────
+  // Emitted AFTER the D1 loop so every record (new + duplicate) gets the upsert.
+  // Steward dedups via the stable idempotencyKey; replay is a no-op in the Vault.
+  for (const record of allSurfacedRecords) {
+    await send(env, buildEventUpsert(record));
+  }
+
   // ── Digest summary event ───────────────────────────────────────────────────
-  await send(env, buildScoutEvent(date, surfaced));
+  // Use allSurfacedRecords (all scored events, new + already-seen) so the digest
+  // always reflects the full weekly slate. On replay, Steward deduplicates the
+  // projection via the stable idempotencyKey; meta.changes === 0 is the no-op signal.
+  await send(env, buildScoutEvent(date, allSurfacedRecords));
 
   return {
     date,
