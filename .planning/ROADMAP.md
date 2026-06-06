@@ -150,7 +150,30 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
   1. No outward action ever fires without an explicit owner confirm (confirmation-gate adherence = 100%; gate fail-safe = deny on error); a public post / payment is never silent.
   2. Usher does on-demand event search + gated registration + Google Calendar add and bumps the Steward `events-registered` counter; captcha and payment are hard stops that hand back to the human.
   3. Envoy fans one owner intent into per-channel drafts (LinkedIn / GitHub README / X / portfolio) reading the Codex, and ships a channel only on confirmation — a post can't be un-posted, so nothing posts silently.
-**Plans**: TBD
+**Plans**: 7 plans
+
+**Wave 1** *(foundation — parallel, no file overlap)*
+- [ ] 04-01-PLAN.md — `packages/gate` shared confirmation-gate primitive (D4-04) + `migrations/0007_gate.sql` (gate_pending + browser_action_outbox) + dual audit rows + constant-time token + all Wave-0 test stubs
+- [ ] 04-02-PLAN.md — mcp-github `github_create_branch` + `github_open_pr` tools (pull_requests:write) for Envoy's portfolio PR (+ owner App-permission checkpoint)
+
+**Wave 2** *(consumers of the gate — parallel, each owns its own dir; blocked on 04-01)*
+- [ ] 04-03-PLAN.md — `apps/gate` Worker: token-gated confirm page (GET/POST /confirm, fail-closed, expired→410), expiry-sweep `scheduled()`, daemon browser poll/ack endpoints, approve→re-invoke
+- [ ] 04-04-PLAN.md — daemon browser-action runner: outbound poll/drain/ack + Playwright `launchPersistentContext` (owner's logged-in profile), captcha/payment hard stops, Usher auto-submit / Envoy prefill-no-submit
+- [ ] 04-05-PLAN.md — Sundial retrofit: route the existing propose-removal proposal through `packages/gate` (D4-04 gate-UX maturity proof); reconcile.ts unchanged
+
+**Wave 3** *(the outward agents — parallel, each owns its own dir; blocked on the gate Worker + daemon + mcp-github)*
+- [ ] 04-06-PLAN.md — `apps/usher` (OUTWARD-01): on-demand gated registration, price disclosed, ~24h gate, auto-submit free path, captcha/payment hard stops, Calendar add + events-registered++ only on a scraped confirmation #
+- [ ] 04-07-PLAN.md — `apps/envoy` (OUTWARD-02): fan one intent into 4 Codex-sourced drafts, ~7d gate per-target approve/edit/skip, GitHub README+PR (agent), LinkedIn/X prefill (owner clicks Post), Brand counters once per slug
+
+**Cross-cutting constraints** (truths appearing in 2+ plans):
+- Steward stays the SOLE `atlas-wire` consumer (Pillar 1); the gate Worker, Usher, and Envoy are Wire PRODUCERS only and write Calendar/GitHub DIRECTLY — no new `atlas-wire` consumer (a second is a hard CI failure).
+- Every outward action gates; gate fail-safe = deny on error; timeout = expired with NO action; payment is NEVER automatic (no override knob, D4-11); captcha is NEVER solved; a submit without an approved gate row = P1 self-flag.
+- The confirm page renders the LITERAL artifact (exact post text / form values + price), is served with the hardened AUTH_SECURITY_HEADERS, and never surfaces a 2FA code / reset link / login URL.
+- Structured idempotency keys (`usher:<event-id>:registered`, `envoy:<project-slug>`); replay through Steward leaves counters unchanged (`meta.changes === 0`); never `crypto.randomUUID()`.
+- No platform credential ever leaves the owner's machine — the browser action runs locally in the owner's already-logged-in session (D4-00/D4-05), outbound-only, no inbound port. Phase 4 stays on Workers Free (D4-06).
+
+**Owner go-live gates** (cannot be set from code; mirror the Phase-1/2/3 gate discipline): add the GitHub App `pull_requests:write` permission + re-install (04-02 checkpoint); install Playwright + Chromium in the daemon and log into LinkedIn/X/Meetup/Eventbrite once in the persistent profile at `ATLAS_BROWSER_PROFILE` (04-04); seed the CONFIG knobs (`gate.confirm_base_url`, `gates.timeout_usher_ms`=86400000, `gates.timeout_envoy_ms`=604800000, `envoy.portfolio_repo`/`portfolio_path`/`profile_repo`); seed the `GATE_CONFIRM_TOKEN` secret into Secrets Store.
+
 **UI hint**: yes
 
 ### Phase 5: Meta / Polish
@@ -175,5 +198,5 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
-| 4. Outward (Gated) | 0/TBD | Not started | - |
+| 4. Outward (Gated) | 0/7 | Planned | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
