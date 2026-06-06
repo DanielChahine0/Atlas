@@ -289,4 +289,28 @@ describe("Scout heartbeat", () => {
     expect(hb!.severity_hint).toBe("P4");
     expect(hb!.run_id).toBe(date);
   });
+
+  it("M9: weekly() still resolves when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // weekly() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful scout run into a failure (M9 regression test).
+    const { testEnv } = makeEnv();
+    const rejectingSend = vi.fn(async (_incident: RawIncident) => {
+      throw new Error("transient queue error");
+    });
+    const rejectingEnv: Env = {
+      ...testEnv,
+      INCIDENTS: { send: rejectingSend } as unknown as Queue<RawIncident>,
+    };
+
+    const sources = makeStubSources([]);
+    const date = "2026-10-01";
+
+    const scout = new Scout({} as ExecutionContext, rejectingEnv);
+    // Must resolve normally even though INCIDENTS.send rejects
+    const result = await scout.weekly({ date, sources });
+    expect(result).toBeDefined();
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
+  });
 });

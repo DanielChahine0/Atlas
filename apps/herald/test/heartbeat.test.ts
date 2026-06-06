@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { env } from "cloudflare:test";
 import type { RawIncident } from "@atlas/shared";
 import { runDaily, runWeekly, type Env, type HeraldGmailTools } from "../src/index.js";
@@ -62,6 +62,29 @@ describe("Herald heartbeat — daily()", () => {
     const heartbeats = incidents.filter((i) => i.kind === "heartbeat");
     expect(heartbeats.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("M9: runDaily() still resolves when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // runDaily() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful daily run into a failure or halt the MorningChain (M9 regression test).
+    const rejectingSend = vi.fn(async (_incident: RawIncident) => {
+      throw new Error("transient queue error");
+    });
+    const rejectingEnv: Env = {
+      ...(env2 as Env),
+      INCIDENTS: {
+        send: rejectingSend,
+        sendBatch: async () => {},
+      } as unknown as Queue<RawIncident>,
+    };
+
+    // Must resolve normally even though INCIDENTS.send rejects
+    const result = await runDaily(rejectingEnv, "2026-06-06", cleanThreads, okTools);
+    expect(result).toBeDefined();
+    expect(typeof result.drafted).toBe("boolean");
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
+  });
 });
 
 describe("Herald heartbeat — weekly()", () => {
@@ -75,6 +98,29 @@ describe("Herald heartbeat — weekly()", () => {
     expect(heartbeats[0]?.title).toMatch(/Herald/);
     expect(heartbeats[0]?.title).toContain("2026-06-06");
     expect(heartbeats[0]?.run_id).toBe("2026-06-06");
+  });
+
+  it("M9: runWeekly() still resolves when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // runWeekly() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful weekly run into a failure (M9 regression test).
+    const rejectingSend = vi.fn(async (_incident: RawIncident) => {
+      throw new Error("transient queue error");
+    });
+    const rejectingEnv: Env = {
+      ...(env2 as Env),
+      INCIDENTS: {
+        send: rejectingSend,
+        sendBatch: async () => {},
+      } as unknown as Queue<RawIncident>,
+    };
+
+    // Must resolve normally even though INCIDENTS.send rejects
+    const result = await runWeekly(rejectingEnv, "2026-06-06", cleanThreads, okTools);
+    expect(result).toBeDefined();
+    expect(typeof result.drafted).toBe("boolean");
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
   });
 });
 

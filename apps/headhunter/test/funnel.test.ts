@@ -326,4 +326,48 @@ describe("Headhunter heartbeat", () => {
     expect(hb!.severity_hint).toBe("P4");
     expect(hb!.run_id).toBe(BASE_DATE);
   });
+
+  it("M9: full() still resolves when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // full() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful full scan into a failure (M9 regression test).
+    const { testEnv } = makeEnv();
+    const rejectingSend = vi.fn(async (_incident: RawIncident) => {
+      throw new Error("transient queue error");
+    });
+    const rejectingEnv: Env = {
+      ...testEnv,
+      INCIDENTS: { send: rejectingSend } as unknown as Queue<RawIncident>,
+    };
+
+    const headhunter = new Headhunter({} as ExecutionContext, rejectingEnv);
+    // Must resolve normally even though INCIDENTS.send rejects
+    const result = await headhunter.full({ date: BASE_DATE, windows: [] });
+    expect(result).toBeDefined();
+    expect(typeof result.scanned).toBe("number");
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
+  });
+
+  it("M9: deadlines() still resolves when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // deadlines() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful deadlines pass into a failure (M9 regression test).
+    const { testEnv } = makeEnv();
+    const rejectingSend = vi.fn(async (_incident: RawIncident) => {
+      throw new Error("transient queue error");
+    });
+    const rejectingEnv: Env = {
+      ...testEnv,
+      INCIDENTS: { send: rejectingSend } as unknown as Queue<RawIncident>,
+    };
+
+    const headhunter = new Headhunter({} as ExecutionContext, rejectingEnv);
+    // Must resolve normally even though INCIDENTS.send rejects
+    const result = await headhunter.deadlines({ date: BASE_DATE, windows: [] });
+    expect(result).toBeDefined();
+    expect(typeof result.promoted).toBe("number");
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
+  });
 });

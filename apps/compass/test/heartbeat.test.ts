@@ -84,4 +84,29 @@ describe("Compass heartbeat", () => {
     expect(result).toBeDefined();
     expect(typeof result.overcommitted).toBe("boolean");
   });
+
+  it("M9: plan() still resolves when INCIDENTS.send rejects (best-effort heartbeat)", async () => {
+    // Simulate a transient queue error on INCIDENTS.send AFTER the real work succeeds.
+    // plan() must resolve normally — a heartbeat enqueue failure must never convert a
+    // successful plan into a failure or halt the MorningChain (M9 regression test).
+    const wireEvents: WireEvent[] = [];
+    const rejectingSend = vi.fn(async (_incident: RawIncident) => {
+      throw new Error("transient queue error");
+    });
+    const testEnv: Env = {
+      ...(env as unknown as Env),
+      WIRE: { send: vi.fn(async (event: WireEvent) => { wireEvents.push(event); }) } as unknown as Queue<WireEvent>,
+      INCIDENTS: { send: rejectingSend } as unknown as Queue<RawIncident>,
+      CONFIG: { get: vi.fn(async () => null) } as unknown as KVNamespace,
+    };
+
+    const compass = new Compass({} as ExecutionContext, testEnv);
+    const emptyCalendar: BusyInterval[] = [];
+    const result = await compass.plan({ date: "2026-06-05", tasks: [], calendar: emptyCalendar });
+    // Must resolve normally even though INCIDENTS.send rejects
+    expect(result).toBeDefined();
+    expect(typeof result.overcommitted).toBe("boolean");
+    // INCIDENTS.send was called (heartbeat was attempted, just rejected)
+    expect(rejectingSend).toHaveBeenCalledOnce();
+  });
 });
