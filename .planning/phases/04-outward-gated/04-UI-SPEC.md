@@ -1,10 +1,11 @@
 ---
 phase: 4
 slug: outward-gated
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-06
+reviewed_at: 2026-06-06
 ---
 
 # Phase 4 — UI Design Contract
