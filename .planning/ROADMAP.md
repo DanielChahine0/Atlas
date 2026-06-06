@@ -114,7 +114,31 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
   2. Per-session consent is captured before Echo records, and two-party-consent jurisdictions are honored; no session records without consent (consent capture = 100%).
   3. Raw audio uploads via presigned URL direct from the daemon (never proxied through a Worker) and expires at 7 days (`audio/raw/` prefix only; transcripts/exports persist); Echo/Quill outputs never leave the device except as owner-approved derived artifacts.
   4. Quill autofills an on-screen form from the Codex (hotkey-triggered, never autonomous), confirms before submit, and never writes the Codex back.
-**Plans**: TBD
+**Plans**: 6 plans
+
+**Wave 1** *(cloud substrate — runs alone; closes all 03-VALIDATION Wave-0 Gaps)*
+- [ ] 03-01-PLAN.md — `migrations/0006_meetings.sql` (D1 transcript index) + `apps/echo` & `apps/archivist` package/wrangler/test shells + the named Wave-0 test stubs (CAPTURE-01-a..-j)
+
+**Wave 2** *(cloud Echo + Archivist — parallel, no file overlap; blocked on 03-01)*
+- [ ] 03-02-PLAN.md — Echo cloud: EchoSession DO (WebSocket Hibernation, reconnect-finalize) + OAuth-scope-gated R2 presign endpoint (prefix-locked) + `transcript.ready` Wire producer
+- [ ] 03-03-PLAN.md — Archivist Workflow (durable steps, one explicit-effort Opus pass, Steward upsert + counters, owner action items via `Forge.createTask`, idempotent on session_id) + Steward `transcript.ready`→`ARCHIVIST_WF.create` trigger + Atlas service bindings
+
+**Wave 3** *(native daemon shell + privacy boundary — blocked on 03-02; autonomous:false / owner-UAT)*
+- [ ] 03-04-PLAN.md — Swift capture-app shell (menubar, launchd, ZERO inbound port) + Keychain OAuth + outbound poll/drain/ack channel + value-stripped IncidentRelay + local Codex cache (XCTest + lsof gating proof)
+
+**Wave 4** *(native capture features — parallel, no file overlap; blocked on 03-04; autonomous:false / owner-UAT)*
+- [ ] 03-05-PLAN.md — Echo capture pipeline: Core Audio process tap (two channels + silent-zeros watchdog) + WhisperKit STT + FluidAudio loopback diarization + consent gate / non-dismissable indicator + EventKit auto-arm + outbound EchoSession WS client (reconnect-finalize, presigned audio upload on approval, transcript.ready emit)
+- [ ] 03-06-PLAN.md — Quill: hotkey-triggered AX-first read + on-device OCR fallback + local Codex field map (secret refusal P2, EEO blank, voice snippet) + locked review panel (confirm-before-submit, never submits, never writes Codex/Vault/Wire)
+
+**Cross-cutting constraints** (truths appearing in 2+ plans):
+- No new `atlas-wire` consumer — Steward stays the SOLE consumer + sole Vault writer (Pillar 1). Echo + Archivist are Wire PRODUCERS only; the Archivist trigger fires from WITHIN Steward's existing consumer.
+- Archivist writes the Vault ONLY via Steward `upsert`; owner action items go through `Forge.createTask` RPC (NOT a direct D1 tasks write) — the same path Headhunter uses.
+- Structured idempotency keys (`echo:<sid>:ready`, `archivist:<sid>:note`, `archivist:<series>:<date>:ai-NN`); replay through Steward leaves counters unchanged (`meta.changes === 0`); NEVER `crypto.randomUUID()`.
+- The privacy boundary is mechanical, not promised: outbound-only daemon with NO inbound port (`lsof` proof), on-device STT/OCR, R2 prefix-split (`audio/raw/` 7d, `transcripts/` persist), consent before any capture (100%), screen/audio never leave the device except as an owner-approved derived artifact.
+- The capture OAuth token lives in macOS Keychain (daemon) / Secrets Store (cloud) — never `[vars]`/KV/Vault/Codex; incident flags carry form + field labels only, never screen content/values.
+
+**Owner go-live gates** (cannot be set from code; mirror the Phase-1/2 gate discipline): enable R2 on the account (`wrangler r2 bucket create atlas-blobs` currently fails CF err 10042) + create the `audio/raw/` 7-day lifecycle rule; an Apple Developer account ($99/yr) for Developer-ID signing + notarization; the Xcode/Swift toolchain; the OS permission grants (Microphone, audio-capture, Accessibility, Screen Recording); seed the capture app's OAuth client + token into Keychain + Secrets Store; sign off the Manual-Only UAT checklist (consent gate 100%, non-dismissable indicator, no-inbound-port `lsof`, TCC persistence, reconnect-finalize, long-session watchdog, real-meeting capture, Quill on a real form, presigned-upload staging integration).
+
 **UI hint**: yes
 
 ### Phase 4: Outward (Gated)
@@ -150,6 +174,6 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
-| 3. Capture (Local) | 0/TBD | Not started | - |
+| 3. Capture (Local) | 0/6 | Planned | - |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
