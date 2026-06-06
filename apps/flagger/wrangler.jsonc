@@ -68,8 +68,15 @@
 
   "observability": { "enabled": true },
 
+  // H4: self-tick cron — Flagger writes flagger:last_seen every 10 min independent of
+  // incident volume. The watchdog reads this key; idle-healthy Flagger no longer triggers
+  // false-positive P1 watchdog alerts. */10 is interval-based (no DST forms needed).
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+
   "env": {
-    // Staging fires NO crons (Flagger has no scheduled triggers — event-driven only).
+    // Staging fires NO crons (Flagger self-tick cron should not run in staging).
     "staging": {
       "triggers": { "crons": [] }
     }

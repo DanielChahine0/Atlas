@@ -98,8 +98,8 @@ export default {
   // RawIncident here is not assignable to ExportedHandlerQueueHandler's body parameter.
   // safeParse below is the single source of truth for the incident shape.
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
-    // Update KV last_seen FIRST (best-effort — watchdog depends on this)
-    await env.CONFIG.put("flagger:last_seen", String(Date.now())).catch(() => {});
+    // I1: removed per-batch flagger:last_seen hot-KV write. The H4 self-tick cron
+    // (*/10 * * * *) is now the authoritative liveness source for the watchdog.
 
     for (const msg of batch.messages) {
       // SERIAL for...of — never Promise.all (single-writer discipline through the DO)
@@ -211,5 +211,16 @@ export default {
     }
 
     return new Response("Not found", { status: 404 });
+  },
+
+  /**
+   * H4: self-tick cron handler. Fires every 10 min (every-10-min cron in wrangler.jsonc).
+   * Writes flagger:last_seen to KV so the watchdog sees a liveness signal independent
+   * of incident volume. An idle-but-healthy Flagger no longer triggers false P1 alerts.
+   *
+   * This is a scheduled() handler — NOT a queue consumer. Pillar 1 preserved.
+   */
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await env.CONFIG.put("flagger:last_seen", String(Date.now())).catch(() => {});
   },
 } satisfies ExportedHandler<Env>;
