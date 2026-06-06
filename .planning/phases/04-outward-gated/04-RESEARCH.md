@@ -951,27 +951,35 @@ for (const row of expired.results) {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Browser profile initial setup**
    - What we know: `launchPersistentContext(userDataDir)` uses a Chromium profile; the owner logs in manually on first use.
    - What's unclear: Whether the daemon should manage profile creation automatically or the owner is guided through it as a go-live gate (similar to OAuth round-trip gates).
    - Recommendation: Treat browser profile seed as a go-live gate (same pattern as Secrets Store seed). The plan should include a "ATLAS_BROWSER_PROFILE: owner logs into LinkedIn/X/Meetup/Eventbrite once" go-live checklist item.
+   - **RESOLVED:** go-live gate. Plan 04-04 (`autonomous: false`) carries the Playwright/profile owner-setup checkpoint alongside the existing Secrets Store / OAuth go-live gates.
 
 2. **Gate Worker co-location**
    - What we know: D4-01 requires a token-gated confirm page; the gate Worker serves GET + POST /confirm and the scheduled sweep.
    - What's unclear: Whether to add the expiry cron to the gate Worker's `wrangler.jsonc` (adding a cron to a Worker that also handles fetch) or to a thin separate cron Worker.
    - Recommendation: Add the expiry `scheduled()` to `apps/gate/src/index.ts` — it already has D1 + INCIDENTS bindings needed for the sweep. One Worker, two handlers. This is exactly the Flagger pattern (`queue()` + `fetch()` + `scheduled()` in one Worker).
+   - **RESOLVED:** single `apps/gate` Worker with `fetch` + `scheduled` (Flagger pattern). Plan 04-03 implements both handlers in one Worker.
 
 3. **Confirm page token URL length**
    - What we know: The confirm link carries the plaintext token as a query param (`?t=<token>`). Tokens should be long enough to be unguessable (≥32 bytes random hex = 64 chars).
    - What's unclear: ntfy push body URL length limits (ntfy allows long URLs in action button URLs; not a concern).
    - Recommendation: Use `crypto.randomBytes(32).toString('hex')` (64-char hex); store `SHA-256(token)` in D1. No length concern.
+   - **RESOLVED:** 64-char hex plaintext token in the link; `SHA-256(token)` stored as `gate_pending.token_hash` in D1 (plaintext never persisted). Plan 04-01 implements this.
 
 4. **Envoy partial fan-out state**
    - What we know: D4-12 ships all four targets; Envoy reports exactly which targets succeeded (from envoy.md failure modes).
    - What's unclear: Whether the gate_pending.artifact stores all four drafts as one JSON blob or whether there are four separate gate rows (one per target).
    - Recommendation: One gate row per Envoy invocation with a JSON `artifact` containing all four drafts. The confirm page renders all four as cards (per UI-SPEC.md). Per-target approve/skip is tracked via hidden checkbox inputs in the form POST body (per UI-SPEC.md). The gate row's `edited_artifact` field stores the owner's edits as a JSON patch. This keeps the single-gate-row-per-action model clean.
+   - **RESOLVED:** one gate row per Envoy invocation, all four drafts in the `artifact` JSON; per-target approve/skip via hidden checkbox inputs. Plan 04-07 implements the single-row model.
+
+5. **GitHub App `pull_requests` permission string** *(added during planning)*
+   - What's unclear: The exact GitHub App permission key for opening PRs (`pull_requests: "write"`) was [ASSUMED] from the REST docs, not verified against a live App manifest.
+   - **RESOLVED (deferred to a checkpoint):** Plan 04-02 is `autonomous: false` and carries an owner checkpoint to verify the `pull_requests: "write"` grant when re-installing the GitHub App at go-live, before the new mcp-github tools are exercised live.
 
 ---
 

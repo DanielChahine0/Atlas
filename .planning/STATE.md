@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 4 context gathered
-last_updated: "2026-06-06T18:54:32.320Z"
-last_activity: 2026-06-06 -- Phase 3 executed + verified
+status: executing
+stopped_at: Phase 4 UI-SPEC approved
+last_updated: "2026-06-06T20:11:02.244Z"
+last_activity: 2026-06-06 -- Phase 04 planning complete
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 29
+  total_plans: 36
   completed_plans: 29
   percent: 67
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 
 Phase: 03 (capture-local) — COMPLETE (code-complete + verified; owner UAT pending)
 Plan: 6 of 6 complete
-Status: Phase 3 verified 2026-06-06 (`.planning/phases/03-capture-local/03-VERIFICATION.md`): 12/12 must-haves green, 0 test failures, all privacy-boundary invariants enforced by construction. `human_needed` only for 13 owner go-live/UAT items (physical macOS device, Apple Developer account + codesigning, TCC grants, Keychain OAuth seeding, R2 enablement, real-device/real-form UAT) — all pre-documented in 03-VALIDATION.md, none are code gaps.
-Last activity: 2026-06-06 -- Phase 3 executed + verified
+Status: Ready to execute
+Last activity: 2026-06-06 -- Phase 04 planning complete
 Next action: Plan Phase 4 (Outward/gated — Usher, Envoy) with `/gsd-plan-phase 4`. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; Phase-3 capture gates above; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
 
 Milestone progress (phases): [███████░░░] 67% — 4 of 6 phases complete (Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅ · Phase 3 Capture/Local ✅ code-complete)
@@ -172,6 +172,6 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ## Session Continuity
 
-Last session: 2026-06-06T18:54:32.312Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-outward-gated/04-CONTEXT.md
+Last session: 2026-06-06T19:02:47.608Z
+Stopped at: Phase 4 UI-SPEC approved
+Resume file: .planning/phases/04-outward-gated/04-UI-SPEC.md
