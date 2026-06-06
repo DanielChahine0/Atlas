@@ -121,7 +121,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 
 **Wave 2** *(cloud Echo + Archivist — parallel, no file overlap; blocked on 03-01)*
 - [x] 03-02-PLAN.md — Echo cloud: EchoSession DO (WebSocket Hibernation, reconnect-finalize) + OAuth-scope-gated R2 presign endpoint (prefix-locked) + `transcript.ready` Wire producer
-- [ ] 03-03-PLAN.md — Archivist Workflow (durable steps, one explicit-effort Opus pass, Steward upsert + counters, owner action items via `Forge.createTask`, idempotent on session_id) + Steward `transcript.ready`→`ARCHIVIST_WF.create` trigger + Atlas service bindings
+- [x] 03-03-PLAN.md — Archivist Workflow (durable steps, one explicit-effort Opus pass, Steward upsert + counters, owner action items via `Forge.createTask`, idempotent on session_id) + Steward `transcript.ready`→`ARCHIVIST_WF.create` trigger + Atlas service bindings
 
 **Wave 3** *(native daemon shell + privacy boundary — blocked on 03-02; autonomous:false / owner-UAT)*
 - [ ] 03-04-PLAN.md — Swift capture-app shell (menubar, launchd, ZERO inbound port) + Keychain OAuth + outbound poll/drain/ack channel + value-stripped IncidentRelay + local Codex cache (XCTest + lsof gating proof)
@@ -174,6 +174,6 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
-| 3. Capture (Local) | 2/6 | In Progress|  |
+| 3. Capture (Local) | 3/6 | In Progress|  |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
