@@ -2,11 +2,22 @@
 /**
  * Atlas PreToolUse hook (matcher: Write|Edit|MultiEdit).
  * Enforces Pillar 1 — ONE writer per resource — at the moment a Worker config is written:
- * only **Steward** may consume the Wire (`atlas-wire`). A `queues.consumers` block on `atlas-wire`
- * in any other Worker creates a second Vault writer and is a hard CI fail (CLAUDE.md / DoD).
  *
- * Only fires for a `apps/<name>/wrangler.{jsonc,json,toml}` whose <name> is not Steward. The DLQ
- * consumer (`atlas-wire-dlq`) is excluded. Pure Node, no deps.
+ *   - only **Steward** may consume `atlas-wire`.
+ *   - only **Flagger** may consume `atlas-incidents`.
+ *
+ * A `queues.consumers` block on `atlas-wire` in any other Worker creates a second Vault
+ * writer (hard CI fail). A `queues.consumers` block on `atlas-incidents` in any other
+ * Worker violates the single-consumer contract (also hard CI fail).
+ *
+ * DLQ consumers are explicitly excluded:
+ *   - `atlas-wire-dlq`     → dlq-sink is the legitimate consumer (different queue).
+ *   - `atlas-incidents-dlq` → dlq-sink is the legitimate consumer (different queue).
+ *
+ * Producer bindings (`{ "binding": "INCIDENTS", "queue": "atlas-incidents" }`) are
+ * allowed on any Worker — they live in the `producers` block, not `consumers`.
+ *
+ * Only fires for `apps/<name>/wrangler.{jsonc,json,toml}`. Pure Node, no deps.
  */
 let raw = "";
 process.stdin.on("data", (d) => (raw += d));
@@ -21,7 +32,6 @@ process.stdin.on("end", () => {
   const m = file.match(/(?:^|\/)apps\/([^/]+)\/wrangler\.(?:jsonc?|toml)$/);
   const app = m ? m[1] : "";
   if (!app) process.exit(0);
-  if (/steward/i.test(app)) process.exit(0); // Steward is the one allowed consumer
 
   const parts = [];
   if (typeof ti.content === "string") parts.push(ti.content);
@@ -33,40 +43,67 @@ process.stdin.on("end", () => {
 
   const declaresConsumer = /"consumers"|\[\[\s*queues\.consumers\s*\]\]|queues\.consumers/.test(text);
 
-  // Pillar 1 only cares whether a CONSUMER binds the live `atlas-wire` bus. A
-  // `producers` reference to `atlas-wire` (every agent except Steward is a WIRE
-  // producer — e.g. dlq-sink emitting Flagger incidents back onto the bus) is allowed
-  // and must NOT trip this guard. So we look at the CONSUMER queue declarations only,
-  // not a bare `atlas-wire` anywhere in the file, for a queue that is not the `-dlq`
-  // dead-letter queue.
+  // Isolate the consumer region only (producers live in a sibling array/block and
+  // must NOT be matched — a bare `atlas-wire` or `atlas-incidents` in a producer
+  // binding is allowed on every Worker).
   //
-  // JSONC: isolate the `"consumers": [ ... ]` array region (producers live in a
-  // sibling array, so the bare producer queue is outside this slice). TOML: isolate
-  // the `[[queues.consumers]]` table(s). Then look for an `atlas-wire` queue (sans
-  // `-dlq`) inside that region only.
+  // JSONC: isolate the `"consumers": [ ... ]` array region.
+  // TOML:  isolate each `[[queues.consumers]]` table.
   let consumerRegion = "";
   const jsoncCons = text.match(/"consumers"\s*:\s*\[([\s\S]*?)\]/);
   if (jsoncCons) consumerRegion += jsoncCons[1];
   const tomlCons = text.match(/\[\[\s*queues\.consumers\s*\]\][\s\S]*?(?=\n\s*\[\[|\n\s*\[(?!\[)|$)/g);
   if (tomlCons) consumerRegion += "\n" + tomlCons.join("\n");
 
-  const consumesAtlasWire =
-    /"queue"\s*:\s*"atlas-wire(?!-dlq)\b/.test(consumerRegion) ||
-    /\bqueue\s*=\s*"atlas-wire(?!-dlq)\b/.test(consumerRegion);
+  // ── atlas-wire consumer guard ─────────────────────────────────────────────
+  // Steward is the ONLY allowed consumer. DLQ (`atlas-wire-dlq`) is a different
+  // queue and is allowed on dlq-sink.
+  if (!(/steward/i.test(app))) {
+    const consumesAtlasWire =
+      /"queue"\s*:\s*"atlas-wire(?!-dlq)\b/.test(consumerRegion) ||
+      /\bqueue\s*=\s*"atlas-wire(?!-dlq)\b/.test(consumerRegion);
 
-  if (declaresConsumer && consumesAtlasWire) {
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason:
-          `Atlas Pillar 1 (one writer per resource): only Steward may consume the Wire. '${app}' must ` +
-          `not declare a queues.consumers block on 'atlas-wire' — that creates a second Vault writer ` +
-          `(a hard CI fail). Producers use the WIRE binding (queues.producers); the consumer lives ONLY ` +
-          `in apps/steward. If '${app}' needs its own queue, give it a different queue name, not atlas-wire.`,
-      },
-    }));
-    process.exit(0);
+    if (declaresConsumer && consumesAtlasWire) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `Atlas Pillar 1 (one writer per resource): only Steward may consume the Wire. '${app}' must ` +
+            `not declare a queues.consumers block on 'atlas-wire' — that creates a second Vault writer ` +
+            `(a hard CI fail). Producers use the WIRE binding (queues.producers); the consumer lives ONLY ` +
+            `in apps/steward. If '${app}' needs its own queue, give it a different queue name, not atlas-wire.`,
+        },
+      }));
+      process.exit(0);
+    }
+  }
+
+  // ── atlas-incidents consumer guard ───────────────────────────────────────
+  // Flagger is the ONLY allowed consumer. DLQ (`atlas-incidents-dlq`) is a different
+  // queue and is allowed on dlq-sink. Producer bindings (the INCIDENTS binding used
+  // by all other agents to enqueue incidents) are NOT consumers and must not be flagged.
+  if (!(/flagger/i.test(app))) {
+    // Match `atlas-incidents` but NOT `atlas-incidents-dlq` (the DLQ is a different queue).
+    const consumesAtlasIncidents =
+      /"queue"\s*:\s*"atlas-incidents(?!-dlq)\b/.test(consumerRegion) ||
+      /\bqueue\s*=\s*"atlas-incidents(?!-dlq)\b/.test(consumerRegion);
+
+    if (declaresConsumer && consumesAtlasIncidents) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `Atlas Pillar 1 (one writer per resource): only Flagger may consume atlas-incidents. '${app}' ` +
+            `must not declare a queues.consumers block on 'atlas-incidents' — that creates a second consumer ` +
+            `(a hard CI fail). Other Workers enqueue incidents via the INCIDENTS producer binding ` +
+            `(queues.producers); the consumer lives ONLY in apps/flagger. The DLQ (atlas-incidents-dlq) ` +
+            `is consumed by dlq-sink and is a distinct queue — that is allowed.`,
+        },
+      }));
+      process.exit(0);
+    }
   }
 
   process.exit(0);
