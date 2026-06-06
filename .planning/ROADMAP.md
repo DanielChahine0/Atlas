@@ -117,7 +117,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 **Plans**: 6 plans
 
 **Wave 1** *(cloud substrate — runs alone; closes all 03-VALIDATION Wave-0 Gaps)*
-- [ ] 03-01-PLAN.md — `migrations/0006_meetings.sql` (D1 transcript index) + `apps/echo` & `apps/archivist` package/wrangler/test shells + the named Wave-0 test stubs (CAPTURE-01-a..-j)
+- [x] 03-01-PLAN.md — `migrations/0006_meetings.sql` (D1 transcript index) + `apps/echo` & `apps/archivist` package/wrangler/test shells + the named Wave-0 test stubs (CAPTURE-01-a..-j)
 
 **Wave 2** *(cloud Echo + Archivist — parallel, no file overlap; blocked on 03-01)*
 - [ ] 03-02-PLAN.md — Echo cloud: EchoSession DO (WebSocket Hibernation, reconnect-finalize) + OAuth-scope-gated R2 presign endpoint (prefix-locked) + `transcript.ready` Wire producer
@@ -174,6 +174,6 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
-| 3. Capture (Local) | 0/6 | Planned | - |
+| 3. Capture (Local) | 1/6 | In Progress|  |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
