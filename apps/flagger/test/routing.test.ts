@@ -152,6 +152,10 @@ describe("Flagger queue() â€” routing (P1/P2 push; P3/P4 board-only; malformed â
     expect(flagEvent?.agent).toBe("Flagger");
     expect(flagEvent?.type).toBe("flag");
 
+    // I3: assert the structured idempotencyKey (format: flg:<date>:<agent>:<hash>:r<n>)
+    // With M7, the key now includes the recurrence suffix `:r<n>`.
+    expect(flagEvent?.idempotencyKey).toMatch(/^flg:\d{4}-\d{2}-\d{2}:[A-Za-z]+:.+:r\d+$/);
+
     // ntfy push was called (fetch to ntfy.sh)
     expect(fetchMock).toHaveBeenCalledOnce();
     const fetchCall = fetchMock.mock.calls[0];
