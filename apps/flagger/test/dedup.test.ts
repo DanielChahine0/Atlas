@@ -3,6 +3,8 @@
  *
  * Verifies that upsertFlag with the same signature returns ONE flag id with recurrence
  * incremented on the second call, and that getBySignature returns that single row.
+ *
+ * Also covers L3 gap-closure: resolveFlag/muteFlag mirror status to D1 (same as ackFlag).
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -123,5 +125,54 @@ describe("FlaggerState.upsertFlag — signature-based deduplication", () => {
     const fetched = await state.getBySignature("forge:chain_halted:x4");
 
     expect(fetched!.status).toBe("ack");
+  });
+
+  // L3 gap-closure: resolveFlag and muteFlag must mirror status to D1 (not just DO storage)
+  it("L3: resolveFlag mirrors resolved status to D1 flags table", async () => {
+    const e = makeEnv();
+    const state = e.FLAGGER_STATE.getByName("fleet") as unknown as FlaggerState;
+
+    const partial = {
+      source_agent: "Scout",
+      kind: "model_error",
+      severity: "P3" as const,
+      trust: 60,
+      title: "Scout model error resolved",
+      status: "open" as const,
+    };
+
+    const flag = await state.upsertFlag("scout:model_error:l3resolve", partial);
+    await state.resolveFlag(flag.id);
+
+    // Verify D1 row reflects resolved status
+    const row = await e.DB.prepare("SELECT status FROM flags WHERE id = ?")
+      .bind(flag.id)
+      .first<{ status: string }>();
+    expect(row).not.toBeNull();
+    expect(row!.status).toBe("resolved");
+  });
+
+  it("L3: muteFlag mirrors muted status to D1 flags table", async () => {
+    const e = makeEnv();
+    const state = e.FLAGGER_STATE.getByName("fleet") as unknown as FlaggerState;
+
+    const partial = {
+      source_agent: "Compass",
+      kind: "overcommit",
+      severity: "P4" as const,
+      trust: 70,
+      title: "Compass overcommit muted",
+      status: "open" as const,
+    };
+
+    const flag = await state.upsertFlag("compass:overcommit:l3mute", partial);
+    await state.muteFlag(flag.id);
+
+    // Verify D1 row reflects muted status
+    const row = await e.DB.prepare("SELECT status FROM flags WHERE id = ?")
+      .bind(flag.id)
+      .first<{ status: string }>();
+    expect(row).not.toBeNull();
+    expect(row!.status).toBe("muted");
   });
 });
