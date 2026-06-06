@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
 stopped_at: Phase 02 complete (7/7) — ready to discuss Phase 3
-last_updated: 2026-06-06T00:47:08.606Z
-last_activity: 2026-06-05
+last_updated: 2026-06-06T12:40:56.976Z
+last_activity: 2026-06-06
 progress:
   total_phases: 6
   completed_phases: 3
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 Phase: 3
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-06-06
-Next action: Verify Phase 02 (weekly-value). Separately, clear the four Phase-1 go-live gates (see Blockers) before flipping the morning chain live + setting `filer.push_enabled=true`. Hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (the scheduled() switch already routes both forms).
+Last activity: 2026-06-06 - Completed quick task 260606-c24 (closed milestone v1.0 integration gaps: Forge.createTask + 5× database_id)
+Next action: Phase 3 (capture/local) — `/gsd-discuss-phase 3`. Milestone v1.0 audited 2026-06-06 (`.planning/v1.0-MILESTONE-AUDIT.md`): 3/6 phases built; the two code-level integration gaps it found are now closed. Separately, clear the four Phase-1 go-live gates (see Blockers) before flipping the morning chain live + setting `filer.push_enabled=true`. Hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (the scheduled() switch already routes both forms).
 
 Milestone progress (phases): [█████░░░░░] 50% — 3 of 6 phases complete (Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅)
 
@@ -153,6 +153,12 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 **Owner-judgment calls** deliberately left open (not conflicts) — surface at the relevant phase: heartbeat staleness threshold (5 min), DST operational burden, morning-chain success-rate window (D1-07: rolling 30 days), the two manual measurement commitments (pre-launch baseline + ~1-min daily review).
 
 **Infra note:** no GitHub-Actions CI yet — the single-`atlas-wire`-consumer Pillar-1 guard is currently only a Claude Code PreToolUse hook (`.claude/hooks/guard-wire-consumer.js`), not a CI gate. Consider wiring it into CI before the fleet grows.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260606-c24 | Close milestone v1.0 integration gaps: `Forge.createTask` (fix WEEKLY-01 Headhunter→Forge runtime break) + shared `database_id` on 5 Phase-1 wranglers | 2026-06-06 | b9883dd | [260606-c24-close-milestone-v1-0-integration-gaps-im](./quick/260606-c24-close-milestone-v1-0-integration-gaps-im/) |
 
 ## Deferred Items
 
