@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import type { Env, HeraldGmailTools } from "../src/index.js";
 import { runWeekly, buildWeeklyDigestEvent } from "../src/weekly.js";
+import { guardDigestOutput } from "../src/guardrail.js";
 import type { DigestThread } from "../src/bucket.js";
+import type { RawIncident } from "@atlas/shared";
 
 // DoD: Wire-contract test (herald:weekly digest shape) + redaction-block path
 // (a planted secret must NOT reach the draft).
@@ -152,5 +154,73 @@ describe("runWeekly — no send method", () => {
     // The tools object must not have a 'send' method.
     expect((tools as unknown as Record<string, unknown>)["send"]).toBeUndefined();
     expect(typeof tools.createDraft).toBe("function");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M11 gap closure — DoD #3: weekly guardrail-trip path must emit a P2 incident.
+//
+// The guardrail src calls flag(env, "P2", "herald digest redaction tripped", ...,
+// { kind: "security_leak_blocked" }) when a secret survives into the synthesized
+// digest output. The existing tests prove the secret is blocked/redacted but NEVER
+// assert the P2 incident. A regression dropping the flag() call would still pass.
+//
+// Fix: capture INCIDENTS, drive guardDigestOutput with a poisoned body, assert the
+// P2/security_leak_blocked incident is enqueued.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Capture incidents sent to INCIDENTS. Mirrors makeEnvWithIncidentCapture in heartbeat.test.ts. */
+function makeGuardrailEnv(): { guardrailEnv: { INCIDENTS: Queue<RawIncident> }; incidents: RawIncident[] } {
+  const incidents: RawIncident[] = [];
+  const guardrailEnv = {
+    INCIDENTS: {
+      send: async (msg: RawIncident) => {
+        incidents.push(msg);
+      },
+      sendBatch: async () => {},
+    } as unknown as Queue<RawIncident>,
+  };
+  return { guardrailEnv, incidents };
+}
+
+describe("runWeekly — guardrail-trip emits P2 incident (M11 DoD gap closure)", () => {
+  it("guardDigestOutput emits severity_hint P2 / kind security_leak_blocked when a secret survives into the body", async () => {
+    // Use a body that trips guardDigestOutput: a cue-adjacent 6-digit code (always
+    // trips the proximity-gated branch of containsSecret / the `verification code`
+    // always-on phrase). This is the SAME path runWeekly calls (weekly.ts:163).
+    const poisonedBody = "Weekly digest — your verification code is 482913, do not share.";
+    const { guardrailEnv, incidents } = makeGuardrailEnv();
+
+    const result = await guardDigestOutput(guardrailEnv, poisonedBody);
+
+    // The draft must be blocked.
+    expect(result.blocked).toBe(true);
+    // The secret must be redacted in the returned text.
+    expect(result.text).not.toContain("482913");
+    expect(result.text).not.toContain("verification code");
+
+    // The P2 security_leak_blocked incident MUST have been enqueued (DoD #3 assertion).
+    // A regression that drops the flag() call would cause this assertion to fail.
+    expect(incidents.length).toBeGreaterThanOrEqual(1);
+    const p2 = incidents.find(
+      (i) => i.severity_hint === "P2" && i.kind === "security_leak_blocked",
+    );
+    expect(p2).toBeDefined();
+    expect(p2?.source_agent).toBe("Herald");
+    // The detail must NEVER carry the leaked secret (neutral detail invariant).
+    expect(p2?.title ?? "").not.toContain("482913");
+    expect(p2?.detail ?? "").not.toContain("482913");
+  });
+
+  it("guardDigestOutput does NOT emit an incident when output is clean (no over-flagging)", async () => {
+    const cleanBody = "Weekly digest — Q3 action items: status update, review notes, schedule sync.";
+    const { guardrailEnv, incidents } = makeGuardrailEnv();
+
+    const result = await guardDigestOutput(guardrailEnv, cleanBody);
+
+    expect(result.blocked).toBe(false);
+    expect(result.text).toBe(cleanBody);
+    // No incident emitted on a clean body.
+    expect(incidents).toHaveLength(0);
   });
 });
