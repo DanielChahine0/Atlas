@@ -36,7 +36,7 @@ Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = S
 ### Capture — Local (Phase 3)
 
 - [x] **CAPTURE-01**: Echo captures audio in a local macOS daemon (DO + WebSocket live stream) → diarized transcript → Archivist structures context-aware meeting notes (action items, cross-meeting threading) → Steward → Vault; per-session consent is captured before Echo records, two-party-consent jurisdictions are honored, and raw audio uploads via presigned URL direct from the daemon (expires at 7 days, `audio/raw/` only). _(docs/agents/echo.md, docs/agents/archivist.md, SPEC-CANON §4/§12)_
-- [ ] **CAPTURE-02**: Quill autofills on-screen forms from the Codex (Accessibility API + OCR fallback), hotkey-triggered and never autonomous, confirming before submit and never writing the Codex back; outputs never leave the device except as owner-approved derived artifacts. _(docs/agents/quill.md, SPEC-CANON §12)_
+- [x] **CAPTURE-02**: Quill autofills on-screen forms from the Codex (Accessibility API + OCR fallback), hotkey-triggered and never autonomous, confirming before submit and never writing the Codex back; outputs never leave the device except as owner-approved derived artifacts. _(docs/agents/quill.md, SPEC-CANON §12)_
 
 ### Outward — Gated (Phase 4)
 
@@ -87,7 +87,7 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | WEEKLY-01 | Phase 2 | Complete |
 | WEEKLY-02 | Phase 2 | Complete |
 | CAPTURE-01 | Phase 3 | Complete |
-| CAPTURE-02 | Phase 3 | Pending |
+| CAPTURE-02 | Phase 3 | Complete |
 | OUTWARD-01 | Phase 4 | Pending |
 | OUTWARD-02 | Phase 4 | Pending |
 | META-01 | Phase 5 | Pending |

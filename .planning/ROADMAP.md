@@ -16,7 +16,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] **Phase 0: Spine** - Infrastructure substrate (Atlas, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth); zero user-visible features. _[MVP]_ (code-complete 2026-06-05; owner go-live gates pending — see `.planning/STATE.md` → Blockers)
 - [x] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_ (code-complete + review-remediated 2026-06-05; owner go-live gates pending)
 - [x] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog). (completed 2026-06-05)
-- [ ] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first.
+- [x] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first. (completed 2026-06-06)
 - [ ] **Phase 4: Outward (Gated)** - Usher (gated registration), Envoy (gated public posts); confirmation-gate UX is the real work, gate hardest.
 - [ ] **Phase 5: Meta / Polish** - Switchboard (design-time capability router), Librarian (prompt library).
 
@@ -128,7 +128,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 
 **Wave 4** *(native capture features — parallel, no file overlap; blocked on 03-04; autonomous:false / owner-UAT)*
 - [x] 03-05-PLAN.md — Echo capture pipeline: Core Audio process tap (two channels + silent-zeros watchdog) + WhisperKit STT + FluidAudio loopback diarization + consent gate / non-dismissable indicator + EventKit auto-arm + outbound EchoSession WS client (reconnect-finalize, presigned audio upload on approval, transcript.ready emit)
-- [ ] 03-06-PLAN.md — Quill: hotkey-triggered AX-first read + on-device OCR fallback + local Codex field map (secret refusal P2, EEO blank, voice snippet) + locked review panel (confirm-before-submit, never submits, never writes Codex/Vault/Wire)
+- [x] 03-06-PLAN.md — Quill: hotkey-triggered AX-first read + on-device OCR fallback + local Codex field map (secret refusal P2, EEO blank, voice snippet) + locked review panel (confirm-before-submit, never submits, never writes Codex/Vault/Wire)
 
 **Cross-cutting constraints** (truths appearing in 2+ plans):
 - No new `atlas-wire` consumer — Steward stays the SOLE consumer + sole Vault writer (Pillar 1). Echo + Archivist are Wire PRODUCERS only; the Archivist trigger fires from WITHIN Steward's existing consumer.
@@ -174,6 +174,6 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
-| 3. Capture (Local) | 5/6 | In Progress|  |
+| 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
