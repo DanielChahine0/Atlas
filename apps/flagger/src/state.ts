@@ -185,23 +185,63 @@ export class FlaggerState extends DurableObject<Env> {
     }
   }
 
-  /** Mark a flag as resolved (auto-clear). */
+  /** Mark a flag as resolved (auto-clear). L3: mirrors status to D1 (same as ackFlag). */
   async resolveFlag(id: string): Promise<void> {
     const all = await this.ctx.storage.list<OpenFlag>({ prefix: "flag:" });
     for (const [key, flag] of all.entries()) {
       if (flag.id === id) {
-        await this.ctx.storage.put(key, { ...flag, status: "resolved", updated_at: Date.now() });
+        const updatedAt = Date.now();
+        await this.ctx.storage.put(key, { ...flag, status: "resolved", updated_at: updatedAt });
+        // L3: mirror resolved status to D1 flags table (same INSERT OR REPLACE as ackFlag)
+        await this.env.DB.prepare(
+          "INSERT OR REPLACE INTO flags(id, signature, source_agent, kind, severity, trust, title, detail, status, recurrence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        )
+          .bind(
+            flag.id,
+            flag.signature,
+            flag.source_agent,
+            flag.kind ?? null,
+            flag.severity,
+            flag.trust,
+            flag.title,
+            flag.detail ?? null,
+            "resolved",
+            flag.recurrence,
+            flag.created_at,
+            updatedAt,
+          )
+          .run();
         return;
       }
     }
   }
 
-  /** Mute a flag (suppress future re-push). */
+  /** Mute a flag (suppress future re-push). L3: mirrors status to D1 (same as ackFlag). */
   async muteFlag(id: string): Promise<void> {
     const all = await this.ctx.storage.list<OpenFlag>({ prefix: "flag:" });
     for (const [key, flag] of all.entries()) {
       if (flag.id === id) {
-        await this.ctx.storage.put(key, { ...flag, status: "muted", updated_at: Date.now() });
+        const updatedAt = Date.now();
+        await this.ctx.storage.put(key, { ...flag, status: "muted", updated_at: updatedAt });
+        // L3: mirror muted status to D1 flags table (same INSERT OR REPLACE as ackFlag)
+        await this.env.DB.prepare(
+          "INSERT OR REPLACE INTO flags(id, signature, source_agent, kind, severity, trust, title, detail, status, recurrence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        )
+          .bind(
+            flag.id,
+            flag.signature,
+            flag.source_agent,
+            flag.kind ?? null,
+            flag.severity,
+            flag.trust,
+            flag.title,
+            flag.detail ?? null,
+            "muted",
+            flag.recurrence,
+            flag.created_at,
+            updatedAt,
+          )
+          .run();
         return;
       }
     }
