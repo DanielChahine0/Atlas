@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 3 context gathered
+status: executing
+stopped_at: Phase 3 verified — code-complete, owner UAT/go-live gates pending
 last_updated: "2026-06-06T17:32:34.089Z"
-last_activity: 2026-06-06
+last_activity: 2026-06-06 -- Phase 3 (capture/local) executed + verified
 progress:
   total_phases: 6
   completed_phases: 4
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-01)
 
 **Core value:** Every morning the owner sees a trustworthy digest, deadline-safe tasks/calendar, and a day plan — automatically, with zero missed deadlines and zero 2FA codes/reset links ever surfaced.
-**Current focus:** Phase 03 — capture-local
+**Current focus:** Phase 4 — outward (gated) is next; Phase 3 (capture/local) is code-complete + verified
 
 ## Current Position
 
-Phase: 03 (capture-local) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
-Last activity: 2026-06-06
-Next action: Phase 3 (capture/local) — `/gsd-discuss-phase 3`. Milestone v1.0 audited 2026-06-06 (`.planning/v1.0-MILESTONE-AUDIT.md`): 3/6 phases built; the two code-level integration gaps it found are now closed. Separately, clear the four Phase-1 go-live gates (see Blockers) before flipping the morning chain live + setting `filer.push_enabled=true`. Hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (the scheduled() switch already routes both forms).
+Phase: 03 (capture-local) — COMPLETE (code-complete + verified; owner UAT pending)
+Plan: 6 of 6 complete
+Status: Phase 3 verified 2026-06-06 (`.planning/phases/03-capture-local/03-VERIFICATION.md`): 12/12 must-haves green, 0 test failures, all privacy-boundary invariants enforced by construction. `human_needed` only for 13 owner go-live/UAT items (physical macOS device, Apple Developer account + codesigning, TCC grants, Keychain OAuth seeding, R2 enablement, real-device/real-form UAT) — all pre-documented in 03-VALIDATION.md, none are code gaps.
+Last activity: 2026-06-06 -- Phase 3 executed + verified
+Next action: Plan Phase 4 (Outward/gated — Usher, Envoy) with `/gsd-plan-phase 4`. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; Phase-3 capture gates above; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
 
-Milestone progress (phases): [█████░░░░░] 50% — 3 of 6 phases complete (Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅)
+Milestone progress (phases): [███████░░░] 67% — 4 of 6 phases complete (Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅ · Phase 3 Capture/Local ✅ code-complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 30 (Phase 0: 8 · Phase 1: 8 · Phase 2: 7)
+- Total plans completed: 29 (Phase 0: 8 · Phase 1: 8 · Phase 2: 7 · Phase 3: 6)
 - Average duration: not instrumented
 - Total execution time: not instrumented
 
@@ -48,11 +48,12 @@ Milestone progress (phases): [█████░░░░░] 50% — 3 of 6 pha
 | 00 — Spine | 8/8 | Complete (2026-06-05) |
 | 01 — Core Loop / Morning Pipeline | 8/8 | Complete (2026-06-05) |
 | 02 — Weekly Value | 7/7 | Complete (2026-06-05) |
+| 03 — Capture / Local | 6/6 | Code-complete + verified (2026-06-06); owner UAT pending |
 
 **Recent Trend:**
 
-- Last 5 plans: 02-03 → 02-04 → 02-05 → 02-06 → 02-07 (all complete)
-- Trend: Phase 2 (Weekly Value) closed out — Scout/Headhunter/Flagger + Herald-weekly + Atlas cadence integration all landed
+- Last 5 plans: 03-02 → 03-03 → 03-04 → 03-05 → 03-06 (all complete)
+- Trend: Phase 3 (Capture/Local) executed wave-by-wave — Echo cloud (EchoSession DO + presign + /echo/ws) + Archivist Workflow on Cloudflare; Swift capture app (shell/privacy-boundary → Echo native pipeline + Quill) all green (514 pnpm + 106 swift tests). A background security review caught a fail-open auth bypass in the presign endpoint mid-run; hardened to a constant-time capture-token gate before continuing.
 
 *Per-plan detail — Tasks counted from each PLAN's `Task N` headings; Files = unique files touched across that plan's commits (git). The `Δ` column is the Phase-0 execution deviation log as originally recorded; Phase-1 plans were not separately deviation-instrumented (`-`).*
 
