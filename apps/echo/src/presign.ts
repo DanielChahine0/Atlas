@@ -1,21 +1,33 @@
 // apps/echo/src/presign.ts
 //
-// R2 presigned PUT URL endpoint — OAuth-scope-gated, prefix-locked.
+// R2 presigned PUT URL endpoint — capture-token-gated, scope-gated, session-bound.
 //
 // Security model (T-03-02-02, T-03-02-03, T-03-02-04):
-//   - Scope gate: bearer token must carry echo:presign scope (403 fail-closed if absent)
-//   - Prefix lock: only transcripts/ and audio/raw/ keys allowed (400 for anything else)
+//   - Authentication: the presented Bearer is CONSTANT-TIME verified against the seeded
+//     ECHO_CAPTURE_TOKEN (Secrets Store) — never trusted from a client-supplied header
+//     (401 fail-closed on missing/wrong token). See ./auth.ts (mirrors the Obsidian bridge).
+//   - Scope gate: the verified capture client must hold the echo:presign scope, derived
+//     SERVER-SIDE (403 fail-closed if absent).
+//   - Key binding + prefix lock: the key must start with transcripts/<session_id> or
+//     audio/raw/<session_id> — the key is bound to the caller's session so a verified
+//     daemon cannot presign a PUT over another session's blob (IDOR), and arbitrary
+//     prefixes are refused (400).
 //   - Credentials: R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY via Secrets Store only
 //   - Session check: session_id must exist in D1 meetings before minting
 //   - Expiry: 3600 seconds (1 hour) — scoped to one exact key
 //
 // NOTE (Pitfall 5 from 03-RESEARCH): presigned URLs CANNOT be tested via the actual
 // R2 round-trip in wrangler dev / workerd — the unit tests mock the S3 client and
-// assert the scope gate + prefix lock behavior. Real upload is staging-integration UAT.
+// assert the auth + scope + key-binding behavior. Real upload is staging-integration UAT.
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Env } from "./env.js";
+import {
+  authenticateCapture,
+  grantedCaptureScopes,
+  ECHO_PRESIGN_SCOPE,
+} from "./auth.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -24,44 +36,16 @@ import type { Env } from "./env.js";
 /** Presigned URL expiry in seconds (1 hour). */
 const PRESIGN_EXPIRY_SECONDS = 3600;
 
-/** Allowed R2 key prefixes. Any other prefix → 400 (prefix locked). */
+/**
+ * Allowed R2 key prefixes. The minted key must start with one of these IMMEDIATELY
+ * followed by the caller's own session_id (`<prefix><session_id>…`), so a verified
+ * daemon can only presign blobs under its own session (mitigates IDOR) and only under
+ * the two approved prefixes (the "leaked presigned URL" / arbitrary-key mitigation).
+ */
 const ALLOWED_PREFIXES = ["transcripts/", "audio/raw/"] as const;
 
 /** The target R2 bucket (atlas-blobs). */
 const R2_BUCKET = "atlas-blobs";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Scope helper
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Extract the Bearer token from the Authorization header.
- * Returns null if the header is absent or malformed.
- */
-function extractBearer(request: Request): string | null {
-  const auth = request.headers.get("Authorization");
-  if (!auth || !auth.startsWith("Bearer ")) return null;
-  return auth.slice(7).trim() || null;
-}
-
-/**
- * Validate that the request carries a valid OAuth bearer token with the
- * `echo:presign` scope. In production the Atlas OAuthProvider attaches the
- * granted scopes to ctx.props.scopes (getMcpAuthContext pattern from mcp-google).
- *
- * For the Echo Worker (non-MCP), we validate the bearer token against the
- * expected capture-app token and check the scope claim. The scope is embedded
- * in the token's payload (Atlas OAuthProvider sets ctx.props.scopes on the request).
- *
- * Fail-closed: missing scope → 403 (not 401 — token is valid, scope is absent).
- *
- * NOTE: In the unit test environment we mock this via a custom header
- * X-Test-Scopes to simulate the OAuthProvider context.
- */
-function grantedScopes(scopeHeader: string | null): Set<string> {
-  if (!scopeHeader) return new Set();
-  return new Set(scopeHeader.split(" ").filter(Boolean));
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Presign URL minting
@@ -117,35 +101,40 @@ interface PresignRequest {
  * Handle POST /echo/presign — mint an R2 presigned PUT URL.
  *
  * Security checks (fail-closed throughout):
- * 1. Bearer token must be present (else 401)
- * 2. echo:presign scope must be granted (else 403 — scope absent, not auth error)
- * 3. session_id must exist in D1 meetings table (else 404)
- * 4. key must start with transcripts/ or audio/raw/ (else 400 — prefix locked)
+ * 1. Bearer must constant-time match the seeded ECHO_CAPTURE_TOKEN (else 401)
+ * 2. echo:presign scope must be granted SERVER-SIDE (else 403 — token valid, scope absent)
+ * 3. key must start with transcripts/<session_id> or audio/raw/<session_id> (else 400 —
+ *    prefix lock + session binding; a verified daemon cannot presign another session's blob)
+ * 4. session_id must exist in D1 meetings table (else 404)
  */
 export async function handlePresign(
   request: Request,
   env: Env,
   _ctx: ExecutionContext,
 ): Promise<Response> {
-  // ── 1. Extract bearer token ─────────────────────────────────────────────
-  const bearer = extractBearer(request);
-  if (!bearer) {
+  // ── 1. Authenticate the capture-app bearer (constant-time vs ECHO_CAPTURE_TOKEN) ──
+  // Fail-closed: missing binding, missing bearer, or wrong bearer all → 401. The token
+  // is verified cryptographically server-side — NO client-supplied scope/identity header
+  // is ever trusted (T-03-02-03; mirrors the Obsidian bridge token gate).
+  if (!(await authenticateCapture(request, env))) {
     return new Response(
-      JSON.stringify({ error: "Unauthorized: missing bearer token" }),
-      { status: 401, headers: { "Content-Type": "application/json" } },
+      JSON.stringify({ error: "Unauthorized: invalid or missing capture token" }),
+      {
+        status: 401,
+        headers: {
+          "Content-Type": "application/json",
+          "WWW-Authenticate": "Bearer",
+          "Cache-Control": "no-store",
+        },
+      },
     );
   }
 
   // ── 2. Scope gate (fail-closed: 403 if echo:presign absent) ─────────────
-  // In production, the Atlas OAuthProvider attaches scopes to the request context.
-  // We read from the X-Granted-Scopes header (set by the OAuthProvider middleware)
-  // or the X-Test-Scopes header in the test environment.
-  const scopeHeader =
-    request.headers.get("X-Granted-Scopes") ??
-    request.headers.get("X-Test-Scopes");
-  const scopes = grantedScopes(scopeHeader);
-
-  if (!scopes.has("echo:presign")) {
+  // Scopes are derived SERVER-SIDE from the verified capture identity (ECHO_CAPTURE_SCOPES),
+  // never from the request — a client cannot grant itself a scope.
+  const scopes = grantedCaptureScopes(env);
+  if (!scopes.has(ECHO_PRESIGN_SCOPE)) {
     return new Response(
       JSON.stringify({ error: "Forbidden: echo:presign scope required" }),
       { status: 403, headers: { "Content-Type": "application/json" } },
@@ -171,13 +160,19 @@ export async function handlePresign(
     );
   }
 
-  // ── 4. Prefix lock (400 if key prefix not allowed) ───────────────────────
-  // Mitigates T-03-02-02: "leaked presigned URL" — never mint an arbitrary key.
-  const prefixAllowed = ALLOWED_PREFIXES.some((prefix) => key.startsWith(prefix));
-  if (!prefixAllowed) {
+  // ── 4. Prefix lock + session binding (400 if key not under caller's own session) ──
+  // Mitigates T-03-02-02 ("leaked / arbitrary presigned URL") AND IDOR: the key must be
+  // under transcripts/<session_id> or audio/raw/<session_id>, so a verified daemon can
+  // ONLY presign a PUT over its own session's blobs — never an arbitrary key or another
+  // session's. The session_id is the D1 PRIMARY KEY, so this is an exact owner binding.
+  const keyAllowed = ALLOWED_PREFIXES.some((prefix) =>
+    key.startsWith(`${prefix}${session_id}`),
+  );
+  if (!keyAllowed) {
     return new Response(
       JSON.stringify({
-        error: `Bad Request: key must start with transcripts/ or audio/raw/ (got: ${key})`,
+        error:
+          "Bad Request: key must be under transcripts/<session_id> or audio/raw/<session_id>",
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
@@ -214,11 +209,11 @@ export async function handlePresign(
   } catch (err) {
     // R2 not yet enabled on the account (err 10042) or credentials not seeded.
     // This is an expected go-live gate (03-CONTEXT owner gates) — return 503.
+    // Log the full error server-side for observability, but NEVER echo SDK/credential
+    // detail back to the client (a presign/AWS-SDK error can carry internal hints).
+    console.error("[echo:presign] mintPresignedPut failed", err);
     return new Response(
-      JSON.stringify({
-        error: "Service Unavailable: R2 presign failed (go-live gate: enable R2 + seed credentials)",
-        detail: String(err),
-      }),
+      JSON.stringify({ error: "Service Unavailable" }),
       { status: 503, headers: { "Content-Type": "application/json" } },
     );
   }

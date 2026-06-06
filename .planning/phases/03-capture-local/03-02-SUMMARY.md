@@ -33,7 +33,7 @@ key_files:
     - pnpm-lock.yaml
 decisions:
   - "D-03-02-01: Replay test uses applyEvent from @atlas/steward-core directly (same pattern as sundial) — avoids spinning up a full StewardWriter DO in the echo test pool"
-  - "D-03-02-02: Presign scope injected via X-Test-Scopes header in tests (Atlas OAuthProvider attaches scopes via X-Granted-Scopes in production)"
+  - "D-03-02-02: [SUPERSEDED by post-review hardening] Originally read presign scopes from an X-Granted-Scopes/X-Test-Scopes request header — that was an auth bypass (client could grant itself the scope) and the bearer was never validated. Hardened to constant-time verify the bearer against the Secrets-Store ECHO_CAPTURE_TOKEN (mirrors mcp-obsidian-bridge) with scopes derived SERVER-SIDE (ECHO_CAPTURE_SCOPES). See the Security Hardening addendum."
   - "D-03-02-03: ws.accept() appears only in comments as the anti-pattern; ctx.acceptWebSocket() is the ONLY actual call (Hibernation enforced)"
 metrics:
   duration: "~25 minutes"
@@ -122,7 +122,18 @@ None. Plan executed as written.
 
 1. The plan marks presign as Task 2 with its own TDD cycle, but since `presign.ts` was created during Task 1's GREEN phase (index.ts imports it), the file was committed as part of Task 1. The presign tests were still written as a separate RED→GREEN cycle with the commit at b45d7ab.
 
-2. The presign tests use `X-Test-Scopes` header to inject scope in the test environment (the Atlas OAuthProvider sets `X-Granted-Scopes` in production). This is the same pattern mcp-google uses for its scope tests.
+2. ~~The presign tests use `X-Test-Scopes` header to inject scope...~~ **CORRECTED (post-review):** this was wrong on two counts — (a) it was *not* the mcp-google pattern (mcp-google reads server-validated `ctx.props.scopes` from the OAuthProvider, never a client header), and (b) trusting a request header for scope + never validating the bearer was a critical auth bypass. See the Security Hardening addendum below.
+
+## Security Hardening (post-review)
+
+A background commit security review flagged the presign endpoint with 2 CRITICAL + 2 HIGH + 1 MEDIUM findings. All addressed before continuing the phase:
+
+- **Auth bypass / unvalidated bearer (CRITICAL ×2) → fixed.** New `apps/echo/src/auth.ts` constant-time (HMAC-SHA-256) verifies the presented bearer against the Secrets-Store `ECHO_CAPTURE_TOKEN` — mirroring the reviewed `apps/mcp-obsidian-bridge/src/auth.ts` token gate (the other outbound-daemon door). Missing binding / missing / wrong bearer all fail closed → 401.
+- **Client-trusted scope header / test backdoor (HIGH ×2) → fixed.** The `X-Granted-Scopes`/`X-Test-Scopes` paths are deleted from production code. Granted scopes are derived SERVER-SIDE via `ECHO_CAPTURE_SCOPES` (default `echo:presign`); a client cannot grant itself a scope. Tests inject auth via a mocked secret binding + server env, not a magic header.
+- **IDOR — unbound key (HIGH) → fixed.** The key must now start with `transcripts/<session_id>` or `audio/raw/<session_id>`, binding every presigned PUT to the caller's own D1-primary-key session — a verified daemon cannot presign over another session's blob.
+- **Error-detail leak (MEDIUM) → fixed.** The 503 path logs the full error server-side (`console.error`) and returns a generic `{ error: "Service Unavailable" }` — no AWS-SDK/credential detail to the client.
+
+New regression coverage: presign tests now assert 401 (missing bearer), 401 (wrong token), 403 (scope absent server-side), 400 (disallowed prefix), and 400 (cross-session key). `pnpm --filter @atlas/echo typecheck` + `test` green (10/10).
 
 ## Threat Flags
 

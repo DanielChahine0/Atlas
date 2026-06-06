@@ -45,6 +45,16 @@ export interface Env {
   R2_ACCESS_KEY_ID: SecretsStoreBinding;
   R2_SECRET_ACCESS_KEY: SecretsStoreBinding;
 
+  // Capture-app bearer (Secrets Store). The LOCAL macOS daemon presents this OUTBOUND;
+  // the presign endpoint + EchoSession WS constant-time verify it (see src/auth.ts).
+  // Fail-closed: a missing binding ⇒ no access. NEVER a literal value in [vars].
+  ECHO_CAPTURE_TOKEN: SecretsStoreBinding;
+
+  // Server-side granted scopes for the verified capture client (space-delimited).
+  // NEVER client-supplied — a client cannot grant itself a scope. Defaults to the
+  // capture client's sole capability (echo:presign) when unset. Plaintext non-secret.
+  ECHO_CAPTURE_SCOPES?: string;
+
   // Non-secret plaintext var: Cloudflare account id for R2 S3-compat endpoint.
   // Format: `https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com`
   CF_ACCOUNT_ID: string;

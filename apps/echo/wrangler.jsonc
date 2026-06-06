@@ -58,6 +58,14 @@
       "binding": "R2_SECRET_ACCESS_KEY",
       "store_id": "<atlas-store-id>",
       "secret_name": "r2-secret-access-key"
+    },
+    // Capture-app bearer the LOCAL daemon presents OUTBOUND; the presign endpoint + WS
+    // constant-time verify it (src/auth.ts). Fail-closed: unset binding ⇒ no access.
+    // `store_id` placeholder + secret seeding are owner go-live gates (Plan 00-06).
+    {
+      "binding": "ECHO_CAPTURE_TOKEN",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "echo-capture-token"
     }
   ],
 
@@ -65,7 +73,10 @@
   "vars": {
     "AIG_ACCOUNT_ID": "<set-before-phase-1>",
     "AIG_GATEWAY_ID": "atlas-reasoning",
-    "CF_ACCOUNT_ID": "<set-before-phase-3>"
+    "CF_ACCOUNT_ID": "<set-before-phase-3>",
+    // Server-side granted scopes for the verified capture client (NOT client-supplied).
+    // The capture daemon's sole least-privilege capability.
+    "ECHO_CAPTURE_SCOPES": "echo:presign"
   },
 
   "observability": { "enabled": true },
