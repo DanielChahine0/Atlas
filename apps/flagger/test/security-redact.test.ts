@@ -78,7 +78,8 @@ function makeTestEnv(opts: { pushEnabled?: boolean; ntfyTopicSet?: boolean } = {
 
 describe("M3 — ntfy push redacts flag.title before external egress", () => {
   it("flag.title containing a login URL is masked in the ntfy POST body", async () => {
-    const e = makeTestEnv({ pushEnabled: false }); // pushEnabled via env; we call pushFlag directly
+    // We call pushFlag directly so pushEnabled/WIRE don't matter; ntfyTopicSet must be true
+    const e = makeTestEnv({ pushEnabled: false, ntfyTopicSet: true });
 
     // A flag with a login URL in the title
     const flag: FlagRecord = {
@@ -111,7 +112,7 @@ describe("M3 — ntfy push redacts flag.title before external egress", () => {
   });
 
   it("flag.title containing a 2FA code is masked in the ntfy POST body", async () => {
-    const e = makeTestEnv({ pushEnabled: false });
+    const e = makeTestEnv({ pushEnabled: false, ntfyTopicSet: true });
 
     const flag: FlagRecord = {
       id: "flg:2026-06-05:Herald:def",

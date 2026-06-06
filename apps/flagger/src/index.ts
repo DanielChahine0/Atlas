@@ -14,6 +14,7 @@ import { RawIncidentSchema } from "@atlas/shared";
 import type { RawIncident, FlagRecord } from "@atlas/shared";
 import type { Env as SharedEnv } from "@atlas/shared";
 import { send } from "@atlas/wire";
+import { redact } from "@atlas/security";
 import type { WireEvent } from "@atlas/wire";
 import { FlaggerState } from "./state.js";
 import { score } from "./score.js";
@@ -68,7 +69,7 @@ function buildMalformedFlagEvent(msgId: string, body: unknown): WireEvent {
     severity: "P3",
     trust: 50,
     title: "malformed incident on atlas-incidents",
-    detail: JSON.stringify(body).slice(0, 500),
+    detail: redact(JSON.stringify(body)).slice(0, 500),
     status: "open",
   };
   return buildFlagWireEvent(flag);

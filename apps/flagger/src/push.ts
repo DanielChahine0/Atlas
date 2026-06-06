@@ -12,6 +12,7 @@
  */
 
 import type { FlagRecord } from "@atlas/shared";
+import { redact } from "@atlas/security";
 import type { Env } from "./index.js";
 
 /**
@@ -30,10 +31,14 @@ export async function pushFlag(env: Env, flag: FlagRecord, ackUrl: string): Prom
 
   const ackToken = await env.ACK_TOKEN?.get();
 
+  // M3: redact flag.title before the external ntfy egress (security invariant — NEVER surface
+  // 2FA codes / reset links / login URLs to third-party services unredacted).
+  const safeTitle = redact(flag.title);
+
   const payload = {
     topic,
     title: `[${flag.severity}] ${flag.source_agent}`,
-    message: flag.title,
+    message: safeTitle,
     priority: flag.severity === "P1" ? 5 : 4,
     actions: ackToken
       ? [
