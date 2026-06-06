@@ -18,6 +18,7 @@ import { describe, it, expect, vi } from "vitest";
 import { env } from "cloudflare:test";
 import type { Env } from "../src/index.js";
 import type { RawIncident } from "@atlas/shared";
+import type { WireEvent } from "@atlas/wire";
 import flaggerDefault from "../src/index.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -211,5 +212,74 @@ describe("Flagger fetch() — /ack token-gated inbound route (T-02-ack)", () => 
     // Empty body: `id` is missing (undefined), should be rejected with 400
     expect(resp.status).toBe(400);
     expect(ackFlag).not.toHaveBeenCalled();
+  });
+});
+
+// ── L4 tests ─────────────────────────────────────────────────────────────────
+
+describe("L4 — ackUrl is read from ACK_BASE_URL config (not hardcoded placeholder)", () => {
+  it("L4: P1 push uses ACK_BASE_URL from [vars]/CONFIG when set", async () => {
+    // Test that pushFlag uses a configurable base URL (not hardcoded flagger.workers.dev)
+    // We spy on the ntfy fetch and verify the ackUrl in the actions body.
+
+    // Build a full env with NTFY_TOPIC set and ACK_BASE_URL configured
+    const CONFIGURED_BASE = "https://flagger.myname.workers.dev";
+
+    const fullEnv: Env = {
+      ...(env as unknown as Env),
+      WIRE: { send: vi.fn(async () => {}) } as unknown as Queue<WireEvent>,
+      INCIDENTS: { send: vi.fn(async () => {}) } as unknown as Queue<RawIncident>,
+      FLAGGER_STATE: (env as unknown as Env).FLAGGER_STATE,
+      CONFIG: {
+        get: vi.fn(async (key: string) => {
+          if (key === "flagger.push_enabled") return "true";
+          if (key === "flagger:ack_base_url") return CONFIGURED_BASE;
+          return null;
+        }),
+        put: vi.fn(async () => {}),
+        delete: vi.fn(async () => {}),
+        list: vi.fn(async () => ({ keys: [], list_complete: true, cursor: "" })),
+        getWithMetadata: vi.fn(async () => ({ value: null, metadata: null })),
+      } as unknown as KVNamespace,
+      NTFY_TOPIC: { get: vi.fn(async () => "my-topic") } as unknown as SecretsStoreSecret,
+      NTFY_TOKEN: { get: vi.fn(async () => "my-token") } as unknown as SecretsStoreSecret,
+      ACK_TOKEN: { get: vi.fn(async () => CORRECT_TOKEN) } as unknown as SecretsStoreSecret,
+      ACK_BASE_URL: CONFIGURED_BASE,
+    } as unknown as Env;
+
+    const ntfyBodies: Array<{ actions?: Array<{ url?: string }> }> = [];
+    const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      ntfyBodies.push(JSON.parse(init?.body as string));
+      return new Response("OK");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Send a P1 incident
+    const p1: RawIncident = {
+      source_agent: "Forge",
+      kind: "chain_halted",
+      severity_hint: "P1",
+      title: "Forge chain halted",
+    };
+    const ack = vi.fn();
+    const batch = {
+      queue: "atlas-incidents",
+      messages: [{
+        id: "l4-1", timestamp: new Date(), attempts: 1,
+        body: p1, ack, retry: vi.fn(),
+      }],
+      ackAll: vi.fn(), retryAll: vi.fn(),
+    };
+
+    await flaggerDefault.queue(batch as unknown as MessageBatch<unknown>, fullEnv);
+
+    vi.unstubAllGlobals();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    // The ntfy action url must use the configured base, not the hardcoded placeholder
+    const body = ntfyBodies[0];
+    const ackActionUrl = body?.actions?.[0]?.url ?? "";
+    expect(ackActionUrl).toContain(CONFIGURED_BASE);
+    expect(ackActionUrl).not.toContain("flagger.workers.dev");
   });
 });
