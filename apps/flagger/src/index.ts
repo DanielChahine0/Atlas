@@ -46,14 +46,17 @@ export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
  * shared FlagRecord type). We cast the FlagRecord into the wire payload locally at the
  * emit boundary; we do NOT weaken FlagRecord or the WireEvent contract.
  */
-function buildFlagWireEvent(flag: FlagRecord): WireEvent {
+function buildFlagWireEvent(flag: FlagRecord & { recurrence: number }): WireEvent {
+  // M7: vary the idempotencyKey by recurrence so Steward renders each escalation update
+  // (frozen flag.id deduplicated every recurrence at Steward, keeping board row frozen).
+  // Keep payload entity/id = flag.id so the board overwrites the SAME Vault row.
   return {
     agent: "Flagger",
     type: "flag",
     entity: "flag",
     op: "upsert",
     payload: flag as unknown as Record<string, unknown>,
-    idempotencyKey: flag.id,
+    idempotencyKey: `${flag.id}:r${flag.recurrence}`,
   };
 }
 
@@ -62,7 +65,8 @@ function buildMalformedFlagEvent(msgId: string, body: unknown): WireEvent {
   const hash = simpleHash(String(msgId));
   const date = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
   const id = `flg:${date}:Flagger:${hash}`;
-  const flag: FlagRecord = {
+  // Malformed events are always first occurrence (recurrence 0).
+  const flag: FlagRecord & { recurrence: number } = {
     id,
     ts: new Date().toISOString(),
     source_agent: "Flagger",
@@ -71,6 +75,7 @@ function buildMalformedFlagEvent(msgId: string, body: unknown): WireEvent {
     title: "malformed incident on atlas-incidents",
     detail: redact(JSON.stringify(body)).slice(0, 500),
     status: "open",
+    recurrence: 0,
   };
   return buildFlagWireEvent(flag);
 }
@@ -126,9 +131,11 @@ export default {
         // Score the incident (pure function — no LLM)
         const scored = score(incident, 0);
 
-        // Upsert flag (dedup by signature, recurrence bump)
+        // Upsert flag (dedup by signature, recurrence bump).
+        // Pass kind so the DO stores it for recurrence re-scoring (M6).
         const flag = await stateStub.upsertFlag(signature, {
           source_agent: incident.source_agent,
+          kind: incident.kind,
           severity: scored.severity,
           trust: scored.trust,
           title: incident.title,

@@ -29,6 +29,8 @@ export interface OpenFlag {
   trust: number;
   status: "open" | "ack" | "resolved" | "muted";
   recurrence: number;
+  /** M6: incident kind persisted so recurrence re-scores use the real kind (not "unknown"). */
+  kind: string;
   title: string;
   detail?: string;
   source_agent: string;
@@ -56,6 +58,8 @@ export class FlaggerState extends DurableObject<Env> {
     signature: string,
     partial: {
       source_agent: string;
+      /** M6: incident kind passed through so it can be stored on the flag for recurrence re-scoring. */
+      kind: string;
       severity: Severity;
       trust: number;
       title: string;
@@ -69,12 +73,12 @@ export class FlaggerState extends DurableObject<Env> {
     let flag: OpenFlag;
 
     if (existing) {
-      // Re-score with bumped recurrence
+      // Re-score with bumped recurrence, using the stored kind (M6 fix — previously "unknown")
       const recurrence = existing.recurrence + 1;
       const scored = score(
         {
           source_agent: existing.source_agent,
-          kind: "unknown", // kind isn't stored on OpenFlag; trust bump via recurrence
+          kind: existing.kind, // M6: use the persisted kind, not "unknown"
           severity_hint: partial.severity,
           title: partial.title,
         },
@@ -91,7 +95,7 @@ export class FlaggerState extends DurableObject<Env> {
         updated_at: Date.now(),
       };
     } else {
-      // Create new flag
+      // Create new flag — store kind for future recurrence re-scoring (M6)
       const date = localDate();
       const hash = contentHash(
         `${partial.severity}|${partial.title}|${partial.detail ?? ""}`,
@@ -104,6 +108,7 @@ export class FlaggerState extends DurableObject<Env> {
         trust: partial.trust,
         status: "open",
         recurrence: 0,
+        kind: partial.kind,
         title: partial.title,
         detail: partial.detail,
         source_agent: partial.source_agent,
@@ -115,14 +120,16 @@ export class FlaggerState extends DurableObject<Env> {
 
     await this.ctx.storage.put(`flag:${signature}`, flag);
 
-    // Mirror to D1 flags audit table (positional ? only — matches 0004 migration schema)
+    // Mirror to D1 flags audit table (positional ? only — matches 0004+0005 migration schema).
+    // 0005_flags_kind.sql adds the nullable `kind` column.
     await this.env.DB.prepare(
-      "INSERT OR REPLACE INTO flags(id, signature, source_agent, severity, trust, title, detail, status, recurrence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT OR REPLACE INTO flags(id, signature, source_agent, kind, severity, trust, title, detail, status, recurrence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         flag.id,
         signature,
         flag.source_agent,
+        flag.kind,
         flag.severity,
         flag.trust,
         flag.title,
@@ -156,12 +163,13 @@ export class FlaggerState extends DurableObject<Env> {
       if (flag.id === id) {
         await this.ctx.storage.put(key, { ...flag, status: "ack", updated_at: Date.now() });
         await this.env.DB.prepare(
-          "INSERT OR REPLACE INTO flags(id, signature, source_agent, severity, trust, title, detail, status, recurrence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT OR REPLACE INTO flags(id, signature, source_agent, kind, severity, trust, title, detail, status, recurrence, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         )
           .bind(
             flag.id,
             flag.signature,
             flag.source_agent,
+            flag.kind ?? null,
             flag.severity,
             flag.trust,
             flag.title,

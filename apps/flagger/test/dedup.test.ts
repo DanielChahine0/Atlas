@@ -38,6 +38,7 @@ describe("FlaggerState.upsertFlag — signature-based deduplication", () => {
 
     const partial = {
       source_agent: "Forge",
+      kind: "model_error",
       severity: "P2" as const,
       trust: 90,
       title: "Forge task extraction failed",
@@ -62,6 +63,7 @@ describe("FlaggerState.upsertFlag — signature-based deduplication", () => {
     // Use different titles so the content hash differs (different content = different flag id)
     const partialA = {
       source_agent: "Herald",
+      kind: "model_error",
       severity: "P3" as const,
       trust: 50,
       title: "Herald model error occurred",
@@ -69,6 +71,7 @@ describe("FlaggerState.upsertFlag — signature-based deduplication", () => {
     };
     const partialB = {
       source_agent: "Herald",
+      kind: "calendar_sync_failed",
       severity: "P3" as const,
       trust: 50,
       title: "Herald calendar sync failed",
@@ -87,6 +90,7 @@ describe("FlaggerState.upsertFlag — signature-based deduplication", () => {
 
     const partial = {
       source_agent: "Sundial",
+      kind: "calendar_sync_failed",
       severity: "P2" as const,
       trust: 80,
       title: "Sundial calendar sync failed",
@@ -107,6 +111,7 @@ describe("FlaggerState.upsertFlag — signature-based deduplication", () => {
 
     const partial = {
       source_agent: "Forge",
+      kind: "chain_halted",
       severity: "P1" as const,
       trust: 100,
       title: "Critical Forge failure",
