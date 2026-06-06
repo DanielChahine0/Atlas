@@ -36,6 +36,12 @@ export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   NTFY_TOKEN?: SecretsStoreSecret;
   /** Ack endpoint Bearer token (Secrets Store async binding). */
   ACK_TOKEN?: SecretsStoreSecret;
+  /**
+   * L4: Configurable base URL for the /ack endpoint. Read from [vars] ACK_BASE_URL.
+   * Falls back to the CONFIG key `flagger:ack_base_url`, then to the placeholder.
+   * Example: https://flagger.myname.workers.dev
+   */
+  ACK_BASE_URL?: string;
 }
 
 /**
@@ -150,8 +156,13 @@ export default {
         // P1/P2: route to ntfy push (fire-and-forget, board fallback on failure)
         const pushEnabled = (await env.CONFIG.get("flagger.push_enabled")) === "true";
         if (pushEnabled && (finalSeverity === "P1" || finalSeverity === "P2")) {
-          // Build ack URL: we don't know our own hostname here; use a placeholder
-          const ackUrl = `https://flagger.workers.dev/ack`;
+          // L4: derive ackUrl from env.ACK_BASE_URL ([vars]) or CONFIG flagger:ack_base_url,
+          // falling back to the placeholder. This avoids the hardcoded hostname bug.
+          const ackBase =
+            env.ACK_BASE_URL ??
+            (await env.CONFIG.get("flagger:ack_base_url")) ??
+            "https://flagger.workers.dev";
+          const ackUrl = `${ackBase}/ack`;
           await pushFlag(env, flag, ackUrl).catch(() => {});
         }
 
