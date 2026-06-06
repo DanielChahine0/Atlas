@@ -58,6 +58,25 @@
     { "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }
   ],
 
+  // Phase 3 (03-03): cross-script Workflows binding for the Archivist Worker.
+  // Steward triggers ArchivistWorkflow instances on transcript.ready events via:
+  //   env.ARCHIVIST_WF.create({ id: `archivist-${session_id}`, params: { session_id } })
+  // All four keys are required for a cross-script binding (Wrangler v4 WorkflowBinding):
+  //   - binding: the env field name
+  //   - name: the Workflow name (matches apps/archivist/wrangler.jsonc "name")
+  //   - class_name: the exported Workflow class (matches ArchivistWorkflow in archivist.ts)
+  //   - script_name: the Worker script name that exports ArchivistWorkflow ("archivist")
+  // This is NOT a second atlas-wire consumer — the binding is a private cross-script
+  // Workflow trigger, not a queue consumer (Pillar 1 preserved; T-03-03-06 mitigated).
+  "workflows": [
+    {
+      "binding": "ARCHIVIST_WF",
+      "name": "atlas-archivist",
+      "class_name": "ArchivistWorkflow",
+      "script_name": "archivist"
+    }
+  ],
+
   "observability": { "enabled": true },
 
   "env": {

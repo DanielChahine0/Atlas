@@ -40,4 +40,10 @@
     }
   ],
   "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }]
+  // Note: the ARCHIVIST_WF cross-script workflows binding is NOT declared in the test
+  // config because the workerd test pool cannot resolve a cross-script binding to an
+  // external Worker ("archivist") that is not co-loaded. Instead, the archivist-trigger
+  // tests inject ARCHIVIST_WF as a spy via makeSpyEnv() (the same pattern as INCIDENTS
+  // for the D2-05 rework). The production wrangler.jsonc declares all four cross-script
+  // binding keys as required by Wrangler v4 (binding/name/class_name/script_name).
 }

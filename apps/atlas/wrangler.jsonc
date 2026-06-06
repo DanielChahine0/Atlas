@@ -85,7 +85,12 @@
     // producer only — these are private Worker-to-Worker RPCs, never a queue consumer.
     { "binding": "SCOUT", "service": "scout" },
     { "binding": "HEADHUNTER", "service": "headhunter" },
-    { "binding": "STEWARD", "service": "steward" }
+    { "binding": "STEWARD", "service": "steward" },
+    // Phase 3 (03-03): service bindings for Echo + Archivist (following Phase-2 pattern).
+    // Atlas reaches Archivist (cloud Workflow Worker) + EchoSession (per-meeting DO Worker)
+    // via these private Worker-to-Worker service bindings (never public HTTP endpoints).
+    { "binding": "ARCHIVIST", "service": "archivist" },
+    { "binding": "ECHO_SESSION", "service": "echo" }
   ],
 
   // Phase 1 (CORE-01): the MorningChain Workflow binding. ONE 07:45 cron creates a

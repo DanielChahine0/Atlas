@@ -16,6 +16,25 @@ export interface Env extends Omit<SharedEnv, "STEWARD_LOCK" | "INCIDENTS"> {
   STEWARD_LOCK: DurableObjectNamespace<StewardWriter>;
   /** INCIDENTS producer (atlas-incidents): Steward enqueues RawIncidents when emitting flags (D2-05). */
   INCIDENTS: Queue<import("@atlas/shared").RawIncident>;
+  /**
+   * Cross-script Workflows binding for the Archivist Worker.
+   * Steward triggers the Archivist Workflow on transcript.ready via
+   * env.ARCHIVIST_WF.create({ id: `archivist-${session_id}`, params: { session_id } }).
+   * The instance id `archivist-<session_id>` is the idempotency handle — re-trigger
+   * swallows the benign collision (mirroring morning-<date> in apps/atlas).
+   * Optional to support graceful degradation when not yet wired (pre-go-live).
+   */
+  ARCHIVIST_WF?: Workflow;
+}
+
+/**
+ * True iff `err` is the benign "instance already exists" collision from a Workflow
+ * re-create on the same id. Swallowed silently — the re-trigger is a no-op (the
+ * existing instance owns the run). Mirrors `isInstanceExistsError` in apps/atlas/src/index.ts.
+ */
+function isInstanceExistsError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /already exists|instance.*exists|duplicate/i.test(message);
 }
 
 /**
@@ -34,7 +53,7 @@ export interface Env extends Omit<SharedEnv, "STEWARD_LOCK" | "INCIDENTS"> {
  *     retry — a malformed event can never become valid, so retrying would
  *     poison-loop. The write never reaches `apply()` (a payload-less event would
  *     otherwise throw a TypeError inside `apply()` and be mis-routed to the
- *     transient-retry path → DLQ).
+ *     transient-retry path → DLQ instead of an immediate ack).
  *   - `NonRetryableError` from `apply()` (e.g. a non-integer counter delta — C2) →
  *     same treatment as malformed: flag P3 + `msg.ack()`. It is a permanent
  *     contract violation; retrying would poison-loop, so it never reaches the DLQ.
@@ -47,6 +66,16 @@ export interface Env extends Omit<SharedEnv, "STEWARD_LOCK" | "INCIDENTS"> {
  * (GLOBAL DECISION 2). The helper builds the full flag record and emits the
  * canonical Flagger event (op:"upsert" / entity:"flag" / idempotencyKey===flag.id,
  * GLOBAL DECISION 1) — the consumer NEVER hand-builds a Flagger event.
+ *
+ * Archivist trigger (Phase 3 — T-03-03-06):
+ *   After a successful steward.apply(e) for a `transcript.ready` event with
+ *   consent:"granted", Steward triggers the Archivist Workflow via the cross-script
+ *   `workflows` binding: env.ARCHIVIST_WF.create({ id:`archivist-${session_id}`,
+ *   params:{ session_id } }). The instance id is itself the idempotency handle —
+ *   a re-trigger swallows the benign collision silently (mirroring MorningChain).
+ *   This fires OUTSIDE the DO write critical path (AFTER steward.apply() returns and
+ *   AFTER msg.ack()). The trigger is NOT a second atlas-wire consumer (Pillar 1) — it
+ *   fires from WITHIN the existing sole consumer via the private cross-script binding.
  */
 export const stewardConsumer = {
   async queue(batch: MessageBatch<WireEvent>, env: Env): Promise<void> {
@@ -104,6 +133,51 @@ export const stewardConsumer = {
         }
         // Redelivery is safe — the ledger dedups; exhausted retries → atlas-wire-dlq.
         msg.retry({ delaySeconds: 60 });
+        continue;
+      }
+
+      // ─── Archivist Workflow trigger (Phase 3) ────────────────────────────────
+      // After a successful apply() + ack(), check if this is a transcript.ready
+      // event with consent:"granted". If so, trigger the Archivist Workflow via
+      // the cross-script binding. This runs OUTSIDE the DO write critical path.
+      // CRITICAL: this is NOT a second atlas-wire consumer — it fires from WITHIN
+      // the existing sole consumer via the private cross-script binding (Pillar 1).
+      if (
+        e.type === "transcript.ready" &&
+        typeof e.payload === "object" &&
+        e.payload !== null &&
+        (e.payload as Record<string, unknown>).consent === "granted" &&
+        env.ARCHIVIST_WF
+      ) {
+        const session_id = (e.payload as Record<string, unknown>).session_id as string;
+        if (session_id) {
+          const instanceId = `archivist-${session_id}`;
+          await env.ARCHIVIST_WF.create({
+            id: instanceId,
+            params: { session_id },
+          }).catch(async (createErr: unknown) => {
+            // DISCRIMINATE: a same-session re-fire collides on the instance id — that
+            // is the BENIGN idempotency no-op (the existing instance owns the run).
+            // Swallow silently (mirroring the MorningChain pattern in apps/atlas/src/index.ts).
+            // ANY OTHER create error is NOT benign: surface it via console.error + P2.
+            if (isInstanceExistsError(createErr)) return;
+            const message = createErr instanceof Error ? createErr.message : String(createErr);
+            console.error(`Archivist Workflow create failed for ${instanceId}: ${message}`);
+            await flag(
+              env,
+              "P2",
+              "archivist.create-failed",
+              `Archivist Workflow instance ${instanceId} failed to start. The meeting note will not be generated automatically.`,
+              {
+                sourceAgent: "Steward",
+                kind: "workflow_create_failed",
+                suggestedAction: `Investigate the Workflow create failure (error: ${message}); manually trigger archivist-${session_id} to recover.`,
+              },
+            ).catch(() => {
+              // Best-effort: a Flagger failure must never throw out of the consumer.
+            });
+          });
+        }
       }
     }
   },
