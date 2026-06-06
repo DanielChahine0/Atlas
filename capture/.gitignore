@@ -1,0 +1,16 @@
+# Swift build artifacts
+.build/
+*.o
+*.d
+
+# SPM-resolved dependency lockfile — COMMITTED for reproducible builds.
+# Package.resolved is intentionally tracked (pins exact SPM dependency versions).
+# Do not add Package.resolved to this file.
+
+# Xcode
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+
+# OS
+.DS_Store
