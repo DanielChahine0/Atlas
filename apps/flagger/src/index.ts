@@ -178,7 +178,23 @@ export default {
         return new Response("Unauthorized", { status: 401 });
       }
 
-      const { id } = await request.json<{ id: string }>();
+      // L2: wrap JSON parse in try/catch — malformed body must return 400, not throw 500.
+      // Validate `id` is a non-empty string before passing to ackFlag.
+      let id: string;
+      try {
+        const body = await request.json<unknown>();
+        if (
+          typeof body !== "object" ||
+          body === null ||
+          typeof (body as Record<string, unknown>).id !== "string" ||
+          (body as Record<string, unknown>).id === ""
+        ) {
+          return new Response("Bad Request: `id` must be a non-empty string", { status: 400 });
+        }
+        id = (body as { id: string }).id;
+      } catch {
+        return new Response("Bad Request: malformed JSON", { status: 400 });
+      }
       await env.FLAGGER_STATE.getByName("fleet").ackFlag(id);
       return new Response("OK");
     }
