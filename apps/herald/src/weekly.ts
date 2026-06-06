@@ -170,6 +170,8 @@ export async function runWeekly(
   }
 
   // Heartbeat: emit after a successful (non-blocked) run.
+  // Best-effort: a transient queue reject must never convert a successful weekly run into
+  // a failure. Optional-chaining: absent binding is a no-op.
   if (!guard.blocked) {
     await env.INCIDENTS?.send({
       source_agent: "Herald",
@@ -177,7 +179,7 @@ export async function runWeekly(
       severity_hint: "P4",
       title: `Herald heartbeat ${date}`,
       run_id: date,
-    } as RawIncident);
+    } as RawIncident).catch(() => {});
   }
 
   return { drafted, draftId, counts, actionRequiredRefs, blocked: guard.blocked };

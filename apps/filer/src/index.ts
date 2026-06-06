@@ -146,14 +146,15 @@ export class Filer extends WorkerEntrypoint<Env> {
       await send(this.env, buildSweepEvent(date, summary));
     }
     // Heartbeat: inform FlaggerState's alarm scheduler this slot ran successfully (D2-07).
-    // Optional-chaining: a Worker without the INCIDENTS binding still runs.
+    // Best-effort: a transient queue reject must NEVER convert a successful sweep into a
+    // failure or halt the MorningChain. Optional-chaining: absent binding is a no-op.
     await this.env.INCIDENTS?.send({
       source_agent: "Filer",
       kind: "heartbeat",
       severity_hint: "P4",
       title: `Filer heartbeat ${date}`,
       run_id: date,
-    });
+    }).catch(() => {});
     return summary;
   }
 }

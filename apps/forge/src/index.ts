@@ -281,14 +281,15 @@ export class Forge extends WorkerEntrypoint<Env> {
       );
     }
     // Heartbeat: inform FlaggerState's alarm scheduler this slot ran successfully (D2-07).
-    // Optional-chaining: a Worker without the INCIDENTS binding still runs.
+    // Best-effort: a transient queue reject must NEVER convert a successful morning run into
+    // a failure or halt the MorningChain. Optional-chaining: absent binding is a no-op.
     await this.env.INCIDENTS?.send({
       source_agent: "Forge",
       kind: "heartbeat",
       severity_hint: "P4",
       title: `Forge heartbeat ${today}`,
       run_id: today,
-    });
+    }).catch(() => {});
     return result;
   }
 }

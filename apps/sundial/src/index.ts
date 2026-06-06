@@ -174,14 +174,15 @@ export class Sundial extends WorkerEntrypoint<Env> {
       result = await runSync(this.env, db, date, params.tools, params.tasks);
     }
     // Heartbeat: inform FlaggerState's alarm scheduler this slot ran successfully (D2-07).
-    // Optional-chaining: a Worker without the INCIDENTS binding still runs.
+    // Best-effort: a transient queue reject must NEVER convert a successful sync into a
+    // failure or halt the MorningChain. Optional-chaining: absent binding is a no-op.
     await this.env.INCIDENTS?.send({
       source_agent: "Sundial",
       kind: "heartbeat",
       severity_hint: "P4",
       title: `Sundial heartbeat ${date}`,
       run_id: date,
-    });
+    }).catch(() => {});
     return result;
   }
 }

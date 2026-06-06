@@ -82,6 +82,7 @@ export function buildDigestEvent(
 /**
  * Emit a kind:heartbeat incident on a successful run. Severity P4 (informational).
  * Source: D2-05 incident substrate; structured run_id = date (stable, never randomUUID).
+ * Best-effort: a transient queue reject must never convert a successful run into a failure.
  */
 async function emitHeartbeat(env: Env, date: string): Promise<void> {
   await env.INCIDENTS?.send({
@@ -90,7 +91,7 @@ async function emitHeartbeat(env: Env, date: string): Promise<void> {
     severity_hint: "P4",
     title: `Herald heartbeat ${date}`,
     run_id: date,
-  } as RawIncident);
+  } as RawIncident).catch(() => {});
 }
 
 /**

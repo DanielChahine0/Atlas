@@ -234,14 +234,15 @@ export async function runFull(
   // Emit scan summary (idempotencyKey: headhunter:scan:<date>)
   await send(env, buildScanSummaryEvent(date, openWindows.length, taskCount));
 
-  // Heartbeat (D2-07)
-  await env.INCIDENTS.send({
+  // Heartbeat (D2-07). Best-effort: a transient queue reject must NEVER convert a successful
+  // full scan into a failure. Optional-chaining: absent binding is a no-op.
+  await env.INCIDENTS?.send({
     source_agent: "Headhunter",
     kind: "heartbeat",
     severity_hint: "P4",
     title: `Headhunter full heartbeat ${date}`,
     run_id: date,
-  });
+  }).catch(() => {});
 
   return { date, scanned: openWindows.length, tasks: taskCount, flagged: flaggedCount };
 }
@@ -324,14 +325,15 @@ export async function runDeadlines(
     }
   }
 
-  // Heartbeat
-  await env.INCIDENTS.send({
+  // Heartbeat. Best-effort: a transient queue reject must NEVER convert a successful
+  // deadlines pass into a failure. Optional-chaining: absent binding is a no-op.
+  await env.INCIDENTS?.send({
     source_agent: "Headhunter",
     kind: "heartbeat",
     severity_hint: "P4",
     title: `Headhunter deadlines heartbeat ${date}`,
     run_id: date,
-  });
+  }).catch(() => {});
 
   return { date, promoted: promotedCount, tasks: taskCount };
 }

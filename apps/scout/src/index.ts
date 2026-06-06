@@ -314,13 +314,15 @@ export class Scout extends WorkerEntrypoint<Env> {
       const result = await runWeekly(this.env, date, params?.sources);
 
       // Heartbeat: inform FlaggerState alarm scheduler this slot ran (D2-07).
+      // Best-effort: a transient queue reject must NEVER convert a successful weekly run
+      // into a failure. Optional-chaining: absent binding is a no-op.
       await this.env.INCIDENTS?.send({
         source_agent: "Scout",
         kind: "heartbeat",
         severity_hint: "P4",
         title: `Scout heartbeat ${date}`,
         run_id: date,
-      });
+      }).catch(() => {});
 
       return result;
     } catch (err) {
