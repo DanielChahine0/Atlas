@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@atlas/codex": "workspace:*",
+    "@atlas/security": "workspace:*",
     "@atlas/shared": "workspace:*",
     "@atlas/wire": "workspace:*",
     "cheerio": "1.2.0",
