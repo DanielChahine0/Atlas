@@ -50,7 +50,7 @@ public actor CodexCache {
     }
 
     private let auth: Auth
-    private let session: URLSession
+    private let fetcher: any HTTPDataFetcher
     private let incidentRelay: IncidentRelay
     private var refreshTimer: Task<Void, Never>?
 
@@ -72,11 +72,11 @@ public actor CodexCache {
 
     public init(
         auth: Auth = .shared,
-        session: URLSession = .shared,
+        session: any HTTPDataFetcher = URLSession.shared,
         incidentRelay: IncidentRelay = .shared
     ) {
         self.auth = auth
-        self.session = session
+        self.fetcher = session
         self.incidentRelay = incidentRelay
     }
 
@@ -139,7 +139,7 @@ public actor CodexCache {
             request.httpMethod = "GET"
             try auth.authorize(&request)
 
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await fetcher.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 throw CodexCacheError.fetchFailed(statusCode: code)

@@ -5,12 +5,12 @@
 //
 // Contract (mirrors daemon/src/drain.ts loadConfig + pollOnce patterns):
 //   - Read: SecItemCopyMatching → extract token as String
-//   - Store: SecItemAdd (called at first OAuth grant, owner go-live gate D3-02)
+//   - Store: SecItemAdd / SecItemUpdate (called at first OAuth grant, owner go-live gate D3-02)
 //   - Missing token: throw AuthError.tokenMissing — loud fatal, never fabricate
 //   - All outbound URLSession calls set Authorization: Bearer <token>
 //   - No listening socket is ever opened (outbound only, T-03-04-05)
 //
-// Full implementation provided here so the executable target compiles in Task 1.
+// Full implementation provided in Task 1 so the executable target compiles.
 // Task 2 adds AuthTests.swift (XCTest assertions for all Auth invariants).
 
 import Foundation
@@ -39,11 +39,6 @@ public enum AuthError: Error, LocalizedError {
     }
 }
 
-// MARK: - Keychain constants
-
-private let kService = "com.atlas.capture"
-private let kAccount = "echo-capture-bearer"
-
 // MARK: - Auth
 
 /// Manages the OAuth bearer token for the capture daemon.
@@ -62,17 +57,25 @@ public final class Auth {
 
     public static let shared = Auth()
 
-    private init() {}
+    // MARK: - Keychain configuration (injectable for tests)
 
-    // MARK: - Token access
+    // internal (not private) so AuthTests can read them via a test extension.
+    let service: String
+    let account: String
+
+    /// Designated init: service + account allow tests to use isolated Keychain items.
+    public init(service: String = "com.atlas.capture", account: String = "echo-capture-bearer") {
+        self.service = service
+        self.account = account
+    }
+
+    // MARK: - Token cache
 
     /// The current bearer token, loaded lazily from Keychain.
     /// `nil` if the token has not yet been seeded (go-live gate).
-    public private(set) var token: String? {
-        get { _token }
-        set { _token = newValue }
-    }
-    private var _token: String?
+    public private(set) var token: String?
+
+    // MARK: - Token access
 
     /// Read the bearer token from the macOS Keychain.
     ///
@@ -80,12 +83,12 @@ public final class Auth {
     /// - Throws: `AuthError.keychainError` on unexpected Keychain failures.
     /// - Returns: The bearer token string.
     public func readToken() throws -> String {
-        if let cached = _token { return cached }
+        if let cached = token { return cached }
 
         let query: [String: Any] = [
             kSecClass as String:            kSecClassGenericPassword,
-            kSecAttrService as String:      kService,
-            kSecAttrAccount as String:      kAccount,
+            kSecAttrService as String:      service,
+            kSecAttrAccount as String:      account,
             kSecReturnData as String:       true,
             kSecMatchLimit as String:       kSecMatchLimitOne,
         ]
@@ -102,7 +105,7 @@ public final class Auth {
             else {
                 throw AuthError.tokenMissing
             }
-            _token = tokenString
+            token = tokenString
             return tokenString
 
         case errSecItemNotFound:
@@ -129,8 +132,8 @@ public final class Auth {
         // Try updating an existing item first (common case after token rotation).
         let query: [String: Any] = [
             kSecClass as String:        kSecClassGenericPassword,
-            kSecAttrService as String:  kService,
-            kSecAttrAccount as String:  kAccount,
+            kSecAttrService as String:  service,
+            kSecAttrAccount as String:  account,
         ]
         let attributes: [String: Any] = [
             kSecValueData as String:    data,
@@ -152,21 +155,21 @@ public final class Auth {
             throw AuthError.keychainError(updateStatus)
         }
 
-        _token = token
+        self.token = token
     }
 
     /// Delete the stored token from Keychain (e.g. on revocation or re-auth).
     public func deleteToken() throws {
         let query: [String: Any] = [
             kSecClass as String:        kSecClassGenericPassword,
-            kSecAttrService as String:  kService,
-            kSecAttrAccount as String:  kAccount,
+            kSecAttrService as String:  service,
+            kSecAttrAccount as String:  account,
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw AuthError.keychainError(status)
         }
-        _token = nil
+        token = nil
     }
 
     // MARK: - Request helpers
@@ -176,7 +179,7 @@ public final class Auth {
     /// - Parameter request: The request to mutate. Must be an outbound HTTPS request.
     /// - Throws: `AuthError.tokenMissing` if the token is not in Keychain.
     public func authorize(_ request: inout URLRequest) throws {
-        let token = try readToken()
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let t = try readToken()
+        request.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
     }
 }

@@ -14,11 +14,21 @@
 
 import Foundation
 
+// MARK: - HTTP transport protocol (injectable for tests)
+
+/// Protocol for making HTTPS requests. Injected so tests avoid real network calls.
+/// `URLSession` conforms to this via an extension below.
+public protocol HTTPDataFetcher: Sendable {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse)
+}
+
+extension URLSession: HTTPDataFetcher {}
+
 // MARK: - Command model
 
 /// A command received from the cloud command endpoint via the poll response.
 /// Commands are processed SERIALLY — never concurrently (T-03-04-04).
-public struct CloudCommand: Codable {
+public struct CloudCommand: Codable, Sendable {
     /// Stable idempotency key for the ack payload. Mirrors daemon/src/drain.ts `idem`.
     public let idem: String
     /// Command type (e.g. "echo.open-session", "quill.fill-form", "codex.refresh").
@@ -29,10 +39,10 @@ public struct CloudCommand: Codable {
 
 /// Type-erased Codable wrapper for arbitrary JSON values.
 /// Needed because Swift Codable does not natively support heterogeneous dictionaries.
-public struct AnyCodable: Codable {
-    public let value: Any
+public struct AnyCodable: Codable, Sendable {
+    public let value: any Sendable
 
-    public init(_ value: Any) { self.value = value }
+    public init(_ value: any Sendable) { self.value = value }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -40,9 +50,7 @@ public struct AnyCodable: Codable {
         else if let d = try? container.decode(Double.self) { value = d }
         else if let s = try? container.decode(String.self) { value = s }
         else if let b = try? container.decode(Bool.self) { value = b }
-        else if let arr = try? container.decode([AnyCodable].self) { value = arr.map(\.value) }
-        else if let dict = try? container.decode([String: AnyCodable].self) { value = dict.mapValues(\.value) }
-        else { value = NSNull() }
+        else { value = String("null") }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -74,7 +82,7 @@ public enum OutboxChannelError: Error {
 
 /// Protocol for executing a single CloudCommand. Injected so tests can simulate failures
 /// without a real network or command handler (OutboxChannelTests.swift, Task 2).
-public protocol CommandExecutor {
+public protocol CommandExecutor: Sendable {
     func execute(_ command: CloudCommand) async throws
 }
 
@@ -94,34 +102,30 @@ public actor OutboxChannel {
     // MARK: - Configuration
 
     /// The base URL of the cloud capture endpoint (e.g. https://echo.atlas.workers.dev).
-    /// Reads from the ATLAS_CAPTURE_BASE_URL environment variable at init, or uses the
-    /// default production URL. The owner sets this via launchd EnvironmentVariables or a
-    /// git-ignored local config (not in the plist — not a secret, but not hardcoded either).
     public let baseURL: URL
 
     /// Authentication (reads bearer token from Keychain via Auth.shared).
     private let auth: Auth
 
-    /// URLSession: default configuration with default certificate validation.
-    /// No custom TLS pinning — we trust the system trust store (T-03-04-05).
-    private let session: URLSession
+    /// HTTP transport (injectable for tests; defaults to URLSession.shared).
+    private let fetcher: any HTTPDataFetcher
 
     /// Whether the drain loop has been cancelled.
     private var cancelled = false
 
-    /// Injectable command executor (defaults to a no-op stub until 03-05/03-06 wire in real handlers).
-    private var executor: CommandExecutor?
+    /// Injectable command executor (defaults to nil until 03-05/03-06 wire in real handlers).
+    private var executor: (any CommandExecutor)?
 
     // MARK: - Init
 
     public init(
         auth: Auth = .shared,
         baseURL: URL? = nil,
-        session: URLSession = .shared,
-        executor: CommandExecutor? = nil
+        session: any HTTPDataFetcher = URLSession.shared,
+        executor: (any CommandExecutor)? = nil
     ) {
         self.auth = auth
-        self.session = session
+        self.fetcher = session
         self.executor = executor
 
         let resolvedURL: URL
@@ -131,7 +135,6 @@ public actor OutboxChannel {
                   let envURL = URL(string: envVal) {
             resolvedURL = envURL
         } else {
-            // Fallback: use a recognizable placeholder that will fail clearly if not configured.
             resolvedURL = URL(string: "https://echo.atlas.workers.dev")!
         }
         self.baseURL = resolvedURL
@@ -147,30 +150,24 @@ public actor OutboxChannel {
     // MARK: - Register command executor
 
     /// Register the command executor (called by 03-05/03-06 features once they are wired in).
-    public func register(executor: CommandExecutor) {
+    public func register(executor: any CommandExecutor) {
         self.executor = executor
     }
 
     // MARK: - Poll
 
     /// Poll the cloud command endpoint for pending commands.
-    ///
-    /// Returns an empty array if no commands are pending or if the token is not yet seeded
-    /// (owner go-live gate — treated as a retryable situation, not a fatal error).
-    ///
-    /// - Returns: Array of `CloudCommand` to process.
-    /// - Throws: `OutboxChannelError.pollFailed` on non-2xx from the server.
     func poll() async throws -> [CloudCommand] {
         var request = URLRequest(url: baseURL.appendingPathComponent("capture/poll"))
         request.httpMethod = "GET"
         do {
             try auth.authorize(&request)
         } catch AuthError.tokenMissing {
-            // Token not yet seeded (go-live gate) — return empty and back off in drainLoop.
+            // Token not yet seeded (go-live gate) — return empty and back off.
             return []
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await fetcher.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw OutboxChannelError.pollFailed(-1)
         }
@@ -185,11 +182,8 @@ public actor OutboxChannel {
 
     /// Acknowledge a successfully-executed command.
     ///
-    /// This POST is ONLY called after the execute step succeeds (T-03-04-04).
-    /// A failed execute MUST NOT call ack — the command remains pending for retry.
-    ///
-    /// - Parameter idem: The command's stable idempotency key.
-    /// - Throws: `OutboxChannelError.ackFailed` on non-2xx.
+    /// Called ONLY after execute succeeds (T-03-04-04).
+    /// A failed execute MUST NOT call ack — the command stays pending.
     func ack(idem: String) async throws {
         var request = URLRequest(url: baseURL.appendingPathComponent("capture/ack"))
         request.httpMethod = "POST"
@@ -197,7 +191,7 @@ public actor OutboxChannel {
         try auth.authorize(&request)
         request.httpBody = try JSONEncoder().encode(["idem": idem])
 
-        let (_, response) = try await session.data(for: request)
+        let (_, response) = try await fetcher.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw OutboxChannelError.ackFailed(-1)
         }
@@ -212,8 +206,6 @@ public actor OutboxChannel {
     ///
     /// If execute throws, the command is left pending (back off in drainLoop).
     /// NEVER drops a command silently (T-03-04-04).
-    ///
-    /// - Returns: Number of commands successfully drained.
     @discardableResult
     public func drainOnce() async throws -> Int {
         let commands = try await poll()
@@ -222,8 +214,8 @@ public actor OutboxChannel {
         // SERIAL loop (never TaskGroup / never concurrent) — mirrors the for…of in drain.ts.
         for command in commands {
             do {
-                if let executor = executor {
-                    try await executor.execute(command)
+                if let exec = executor {
+                    try await exec.execute(command)
                 }
                 // ACK only after successful execution (T-03-04-04 invariant).
                 try await ack(idem: command.idem)
@@ -231,7 +223,6 @@ public actor OutboxChannel {
             } catch {
                 // Execute failed: back off and leave the command pending.
                 // NEVER drop the command silently. NEVER call ack here.
-                // The outer drainLoop will retry after the backoff interval.
                 throw OutboxChannelError.executeFailed(command.idem, underlyingError: error)
             }
         }
@@ -242,27 +233,19 @@ public actor OutboxChannel {
     // MARK: - drainLoop (mirrors daemon/src/drain.ts drainLoop lines 177-192)
 
     /// Run the drain loop indefinitely until `cancel()` is called.
-    ///
-    /// On transient error: back off with exponential delay, then retry.
-    /// launchd KeepAlive handles process restart on fatal exits.
-    ///
-    /// This method is called from AppDelegate as a detached Task.
     public func drainLoop() async {
         var backoffSeconds: Double = 5
 
         while !cancelled && !Task.isCancelled {
             do {
                 try await drainOnce()
-                // Reset backoff on success.
                 backoffSeconds = 5
             } catch {
-                // Back off on transient error. Leave commands pending.
-                // Log the error; never surface secrets in the log.
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 let safe = msg.replacingOccurrences(of: "Bearer ", with: "Bearer [REDACTED] ")
                 print("[OutboxChannel] error: \(safe) — backing off \(Int(backoffSeconds))s")
                 try? await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
-                backoffSeconds = min(backoffSeconds * 2, 300) // cap at 5 minutes
+                backoffSeconds = min(backoffSeconds * 2, 300)
             }
         }
     }

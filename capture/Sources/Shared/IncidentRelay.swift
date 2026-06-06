@@ -92,7 +92,7 @@ public final class IncidentRelay {
     public static let shared = IncidentRelay()
 
     private let auth: Auth
-    private let session: URLSession
+    private let fetcher: any HTTPDataFetcher
 
     /// Base URL for the incidents endpoint. Set via ATLAS_CAPTURE_BASE_URL env var.
     private var baseURL: URL {
@@ -103,9 +103,9 @@ public final class IncidentRelay {
         return URL(string: "https://echo.atlas.workers.dev")!
     }
 
-    public init(auth: Auth = .shared, session: URLSession = .shared) {
+    public init(auth: Auth = .shared, session: any HTTPDataFetcher = URLSession.shared) {
         self.auth = auth
-        self.session = session
+        self.fetcher = session
     }
 
     // MARK: - Emit
@@ -125,7 +125,7 @@ public final class IncidentRelay {
             try auth.authorize(&request)
             request.httpBody = try JSONEncoder().encode(incident)
 
-            let (_, response) = try await session.data(for: request)
+            let (_, response) = try await fetcher.data(for: request)
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                 print("[IncidentRelay] warning: incident POST returned \(http.statusCode) (kind=\(incident.kind))")
             }
