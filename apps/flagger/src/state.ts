@@ -279,7 +279,7 @@ export class FlaggerState extends DurableObject<Env> {
     try {
       const now = Date.now();
       const allSlots = await this.ctx.storage.list<HeartbeatSlot>({ prefix: "hb:" });
-      for (const [, slot] of allSlots.entries()) {
+      for (const [key, slot] of allSlots.entries()) {
         if (now > slot.expected_by + slot.grace_ms && slot.last_seen < slot.expected_by) {
           await this.env.INCIDENTS.send({
             source_agent: slot.agent,
@@ -287,6 +287,16 @@ export class FlaggerState extends DurableObject<Env> {
             severity_hint: "P1",
             title: `${slot.agent} heartbeat stale — no ${slot.cron_utc} run detected`,
           });
+          // H3: advance the slot BEFORE refreshAlarm() so the same overdue window does
+          // not re-emit on the next alarm fire (incident storm). Bump expected_by to
+          // now + grace_ms so the staleness condition is false until the next window.
+          // A real heartbeat from the agent (recordHeartbeat) will reset expected_by to
+          // the actual run time; this is only the "fired" marker.
+          const advanced: HeartbeatSlot = {
+            ...slot,
+            expected_by: now + slot.grace_ms,
+          };
+          await this.ctx.storage.put(key, advanced);
         }
       }
     } finally {

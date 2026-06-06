@@ -103,6 +103,19 @@ export default {
 
         const incident = parsed.data;
 
+        // H1: heartbeat incidents seed the alarm scheduler — never become flags.
+        // Heartbeats carry run_id (e.g. "filer:sweep:2026-06-05") as the cron_utc key.
+        // recordHeartbeat writes hb:<agent> slot and refreshes the DO alarm.
+        if (incident.kind === "heartbeat") {
+          await env.FLAGGER_STATE.getByName("fleet").recordHeartbeat(
+            incident.source_agent,
+            Date.now(),
+            incident.run_id ?? "",
+          );
+          msg.ack();
+          continue;
+        }
+
         // Build signature: source_agent + kind + hash of title+detail
         const fingerprint = simpleHash(`${incident.title}|${incident.detail ?? ""}`);
         const signature = `${incident.source_agent}:${incident.kind}:${fingerprint}`;
