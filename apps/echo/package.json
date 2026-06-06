@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@atlas/shared": "workspace:*",
+    "@atlas/steward-core": "workspace:*",
     "@atlas/wire": "workspace:*"
   },
   "devDependencies": {

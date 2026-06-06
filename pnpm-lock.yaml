@@ -154,6 +154,9 @@ importers:
       '@atlas/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@atlas/steward-core':
+        specifier: workspace:*
+        version: link:../../packages/steward-core
       '@atlas/wire':
         specifier: workspace:*
         version: link:../../packages/wire
