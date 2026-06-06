@@ -2,7 +2,7 @@
 phase: 03
 slug: capture-local
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-06
 ---
@@ -58,6 +58,7 @@ created: 2026-06-06
 | CAPTURE-01-h | `consent:"discarded"` transcript → `NonRetryableError`, no note produced | unit (workerd) | `pnpm test --filter @atlas/archivist -- consent-discarded` | ❌ W0 | ⬜ pending |
 | CAPTURE-01-i | Presign Worker: valid OAuth scope → 200 + presigned URL; invalid scope → 403 | unit (workerd) | `pnpm test --filter @atlas/echo -- presign` | ❌ W0 | ⬜ pending |
 | CAPTURE-01-j | Failure path: transcript not in R2 → Flagger P2 incident via `atlas-incidents` | unit (workerd) | `pnpm test --filter @atlas/archivist -- failure-path` | ❌ W0 | ⬜ pending |
+| CAPTURE-01-k | **DoD replay-through-Steward:** re-applying Archivist's `meeting.note` upsert + `meetings-this-week` increment through Steward `apply()` → `meta.changes === 0`, counter unchanged | integration (workerd) | `pnpm test --filter @atlas/archivist -- steward-replay` | ❌ W0 | ⬜ pending |
 | CAPTURE-02 | Quill never submits / never writes Wire/Vault/Codex; refuses secrets | manual-only | — (Swift app; see Manual-Only) | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -68,10 +69,10 @@ created: 2026-06-06
 
 - [ ] `apps/echo/vitest.config.ts` — new Worker test config
 - [ ] `apps/archivist/vitest.config.ts` — new Worker test config
-- [ ] `apps/echo/src/__tests__/echo-session.test.ts` — CAPTURE-01-a, -b, -c, -d
-- [ ] `apps/echo/src/__tests__/presign.test.ts` — CAPTURE-01-i
-- [ ] `apps/archivist/src/__tests__/archivist.test.ts` — CAPTURE-01-e, -f, -g, -h, -j
-- [ ] `migrations/0005_meetings.sql` — D1 `meetings` table for the transcript index (apply via per-test `applyD1Migrations` provide/inject — pool does not auto-apply)
+- [ ] `apps/echo/test/echo-session.test.ts` — CAPTURE-01-a, -b, -c, -d
+- [ ] `apps/echo/test/presign.test.ts` — CAPTURE-01-i
+- [ ] `apps/archivist/test/archivist.test.ts` — CAPTURE-01-e, -f, -g, -h, -j, -k
+- [ ] `migrations/0006_meetings.sql` — D1 `meetings` table for the transcript index (0005 slot is taken by `0005_flags_kind.sql`; apply via per-test `applyD1Migrations` provide/inject — pool does not auto-apply)
 
 ---
 
