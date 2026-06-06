@@ -58,11 +58,11 @@ describe("echo-session", () => {
     const stored = await session.getSessionSegments(SESSION_ID);
     expect(stored).toHaveLength(3);
     // Ordered by idx ascending
-    expect(stored[0].idx).toBe(0);
-    expect(stored[1].idx).toBe(1);
-    expect(stored[2].idx).toBe(2);
-    expect(stored[0].speaker).toBe("Owner");
-    expect(stored[2].text).toBe("Good to meet you");
+    expect(stored[0]!.idx).toBe(0);
+    expect(stored[1]!.idx).toBe(1);
+    expect(stored[2]!.idx).toBe(2);
+    expect(stored[0]!.speaker).toBe("Owner");
+    expect(stored[2]!.text).toBe("Good to meet you");
   });
 });
 
@@ -112,9 +112,9 @@ describe("reconnect", () => {
     // Same getByName = same instance — all 3 segments should be present
     const after = await sessionReconnect.getSessionSegments(SESSION_ID);
     expect(after).toHaveLength(3);
-    expect(after[0].text).toBe("Segment A");
-    expect(after[1].text).toBe("Segment B");
-    expect(after[2].text).toBe("Segment C");
+    expect(after[0]!.text).toBe("Segment A");
+    expect(after[1]!.text).toBe("Segment B");
+    expect(after[2]!.text).toBe("Segment C");
   });
 });
 

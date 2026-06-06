@@ -4,66 +4,51 @@
 // The EchoSession DO handles WebSocket Hibernation (one DO per meeting).
 // The presign endpoint mints R2 presigned PUT URLs for approved audio uploads.
 //
-// Feature implementation lands in Plan 03-02 (EchoSession DO) and 03-03 (presign).
-// This shell establishes the Worker entrypoint + DO export for the test pool.
+// Re-exports EchoSession from echo-session.ts so the wrangler DO binding resolves.
+// Presign implementation ships in Plan 03-02 (this plan).
 
-import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import { WorkerEntrypoint } from "cloudflare:workers";
 import type { Env } from "./env.js";
+import { handlePresign } from "./presign.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EchoSession — per-meeting WebSocket Hibernation DO.
-//
-// One instance per meeting, addressed as:
-//   env.ECHO_SESSION.getByName("echo-<ISO-timestamp>")
-//
-// DO SQLite stores transcript segments (`seg:<sessionId>:<idx>`) and finalization
-// state. Implementation ships in Plan 03-02.
+// EchoSession — re-exported so wrangler.jsonc class_name binding resolves.
+// Full implementation in apps/echo/src/echo-session.ts
 // ─────────────────────────────────────────────────────────────────────────────
-export class EchoSession extends DurableObject<Env> {
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    // Auto-reply to ping/pong WITHOUT waking the DO from hibernation.
-    // compatibility_date >= 2026-04-25 satisfies web_socket_auto_reply_to_close.
-    this.ctx.setWebSocketAutoResponse(
-      new WebSocketRequestResponsePair("ping", "pong"),
-    );
-  }
-
-  override async fetch(_request: Request): Promise<Response> {
-    // Stub — full WebSocket Hibernation implementation in Plan 03-02.
-    return new Response("EchoSession stub — feature implementation in 03-02", {
-      status: 503,
-    });
-  }
-}
+export { EchoSession } from "./echo-session.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Echo WorkerEntrypoint — RPC surface for Atlas coordination.
-// Atlas calls Echo.finalize(sessionId) after meeting end to trigger handoff.
-// Implementation in Plan 03-02.
+// Atlas may call Echo.finalizeSession(sessionId) to initiate transcript handoff.
 // ─────────────────────────────────────────────────────────────────────────────
 export class Echo extends WorkerEntrypoint<Env> {
-  // Stub — RPC methods implemented in Plan 03-02.
+  // RPC methods for Atlas to call (e.g. session state queries).
+  // The primary finalize flow is event-driven (transcript.ready Wire event).
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 // Default fetch handler — routes presign + health check endpoints.
-// Presign implementation in Plan 03-03.
+// ─────────────────────────────────────────────────────────────────────────────
 export default {
   async fetch(
     request: Request,
-    _env: Env,
-    _ctx: ExecutionContext,
+    env: Env,
+    ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+
     if (url.pathname === "/health") {
       return new Response("Echo is running", { status: 200 });
     }
-    // /echo/presign — presign endpoint (Plan 03-03)
+
+    // /echo/presign — OAuth-scope-gated R2 presigned URL minting.
     if (url.pathname === "/echo/presign") {
-      return new Response("Presign endpoint stub — implementation in 03-03", {
-        status: 503,
-      });
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405 });
+      }
+      return handlePresign(request, env, ctx);
     }
+
     return new Response("Not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
