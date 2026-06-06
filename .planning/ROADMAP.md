@@ -127,7 +127,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 03-04-PLAN.md — Swift capture-app shell (menubar, launchd, ZERO inbound port) + Keychain OAuth + outbound poll/drain/ack channel + value-stripped IncidentRelay + local Codex cache (XCTest + lsof gating proof)
 
 **Wave 4** *(native capture features — parallel, no file overlap; blocked on 03-04; autonomous:false / owner-UAT)*
-- [ ] 03-05-PLAN.md — Echo capture pipeline: Core Audio process tap (two channels + silent-zeros watchdog) + WhisperKit STT + FluidAudio loopback diarization + consent gate / non-dismissable indicator + EventKit auto-arm + outbound EchoSession WS client (reconnect-finalize, presigned audio upload on approval, transcript.ready emit)
+- [x] 03-05-PLAN.md — Echo capture pipeline: Core Audio process tap (two channels + silent-zeros watchdog) + WhisperKit STT + FluidAudio loopback diarization + consent gate / non-dismissable indicator + EventKit auto-arm + outbound EchoSession WS client (reconnect-finalize, presigned audio upload on approval, transcript.ready emit)
 - [ ] 03-06-PLAN.md — Quill: hotkey-triggered AX-first read + on-device OCR fallback + local Codex field map (secret refusal P2, EEO blank, voice snippet) + locked review panel (confirm-before-submit, never submits, never writes Codex/Vault/Wire)
 
 **Cross-cutting constraints** (truths appearing in 2+ plans):
@@ -174,6 +174,6 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 0. Spine | 8/8 | Complete   | 2026-06-05 |
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
-| 3. Capture (Local) | 4/6 | In Progress|  |
+| 3. Capture (Local) | 5/6 | In Progress|  |
 | 4. Outward (Gated) | 0/TBD | Not started | - |
 | 5. Meta / Polish | 0/TBD | Not started | - |
