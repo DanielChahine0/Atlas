@@ -38,9 +38,28 @@
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 3
+      },
+      {
+        // M1 gap closure: consume the Flagger DLQ so dead incidents are never silently
+        // dropped. The handler emits a P1 flag DIRECTLY to atlas-wire (bypassing
+        // atlas-incidents — Flagger is the consumer that just failed).
+        "queue": "atlas-incidents-dlq",
+        "max_concurrency": 1,
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 0
       }
     ]
   },
+
+  // Per-consumer retry-delay key is intentionally omitted (invalid consumer-level
+  // config key). This sink never retries anyway.
+  //
+  // Note on the atlas-incidents-dlq consumer: this is a DIFFERENT queue from atlas-wire,
+  // so adding it here does NOT violate Pillar 1 (Steward remains the sole atlas-wire
+  // consumer). The handler branches on batch.queue and emits DIRECTLY to atlas-wire
+  // (not via flag()/atlas-incidents) for the dead-incident path — Flagger is the
+  // atlas-incidents consumer that just exhausted retries and cannot be used.
 
   // D1 system-of-record — the audit_log forensic-record write target (records
   // scope_used + outcome='dlq'; NEVER a token). Positional `?` binds only at the

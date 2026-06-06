@@ -39,7 +39,7 @@
  * (Pillar 1; Steward alone reads the bus).
  */
 
-import { WireEvent } from "@atlas/wire";
+import { WireEvent, send } from "@atlas/wire";
 import { flag, localDate } from "@atlas/shared";
 import type { Env as SharedEnv, Severity, RawIncident } from "@atlas/shared";
 
@@ -77,6 +77,99 @@ function auditId(dedupeKey: string): string {
   return `dlq:${localDate()}:${contentHash(dedupeKey)}`;
 }
 
+/**
+ * Build a DIRECT atlas-wire flag upsert event for a dead `atlas-incidents-dlq` message.
+ *
+ * This path BYPASSES flag()/atlas-incidents — Flagger is the atlas-incidents consumer
+ * that just exhausted its retries; routing through it would be circular. Instead we emit
+ * directly to atlas-wire, exactly as flagger-watchdog does for its self-P1 alert.
+ *
+ * Shape: §6.4 canonical WireEvent (op:"upsert", entity:"flag", agent:"dlq-sink",
+ * payload.severity:"P1", structured + stable idempotencyKey).
+ */
+function buildDeadIncidentFlagEvent(dedupeKey: string, sourceAgent: string): WireEvent {
+  const idempotencyKey = `flg:${localDate()}:dlq-sink:${contentHash(`incidents-dlq:${dedupeKey}`)}`;
+  const title = `dead incident on atlas-incidents-dlq (P1)`;
+  const detail = `A RawIncident from '${sourceAgent}' exhausted Flagger's retries and landed on the DLQ. ` +
+    `Flagger could not process it. Direct atlas-wire alert (no atlas-incidents enqueue — Flagger is the failing consumer).`;
+  return {
+    agent: "dlq-sink",
+    type: "flag",
+    entity: "flag",
+    op: "upsert",
+    payload: {
+      id: idempotencyKey,
+      source_agent: sourceAgent,
+      severity: "P1",
+      trust: 100,
+      title,
+      detail,
+      status: "open",
+    },
+    idempotencyKey,
+  };
+}
+
+/**
+ * Handle a dead message from `atlas-incidents-dlq`.
+ *
+ * Writes an audit_log row + emits a DIRECT atlas-wire flag upsert (P1). Does NOT call
+ * flag() (which enqueues to atlas-incidents — Flagger is the failing consumer).
+ * Always acks (try/finally) — never retries, no poison-loop.
+ */
+async function handleDeadIncident(msg: Message<unknown>, env: Env): Promise<void> {
+  try {
+    // Extract source_agent from the dead incident if parseable; fall back to "unknown".
+    let sourceAgent = "unknown";
+    let dedupeKey: string;
+    if (
+      msg.body !== null &&
+      typeof msg.body === "object" &&
+      "source_agent" in msg.body &&
+      typeof (msg.body as Record<string, unknown>)["source_agent"] === "string"
+    ) {
+      sourceAgent = (msg.body as Record<string, unknown>)["source_agent"] as string;
+      dedupeKey = `${sourceAgent}:${safeBodyString(msg.body)}`;
+    } else {
+      dedupeKey = safeBodyString(msg.body);
+    }
+
+    const flagEvent = buildDeadIncidentFlagEvent(dedupeKey, sourceAgent);
+    const flagId = flagEvent.idempotencyKey;
+
+    // (1) Durable forensic record FIRST — outcome="dlq", scope_used="" (NEVER a token).
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO audit_log(id, ts, agent, action, target, scope_used, gated, decision, outcome, trust, consent_flag, flag_id) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    )
+      .bind(
+        `dlq:inc:${localDate()}:${contentHash(dedupeKey)}`, // id (stable, structured — not random)
+        Date.now(),                // ts
+        sourceAgent,               // agent
+        "dlq.incidents_dead_letter", // action
+        "atlas-incidents-dlq",     // target
+        "",                        // scope_used — NEVER a token; queue failure has no scope
+        0,                         // gated
+        "flagged",                 // decision
+        "dlq",                     // outcome
+        TRUST["P1"],               // trust — P1 is the highest-consequence substrate
+        0,                         // consent_flag
+        flagId,                    // flag_id ties this row to the direct Wire alert
+      )
+      .run();
+
+    // (2) DIRECT atlas-wire flag upsert — bypasses atlas-incidents (Flagger failed).
+    // Uses send() (validates §6.4 shape + 128 KB cap before Queue.send).
+    await send(env, flagEvent);
+  } catch (err) {
+    // Sink error must NOT lose the message and must NOT poison-loop.
+    console.error("dlq-sink: failed to record dead incident", msg.id, err);
+  } finally {
+    // ALWAYS ack — never retry(). A message that exhausted retries must not re-loop.
+    msg.ack();
+  }
+}
+
 export const dlqSink = {
   async queue(
     batch: MessageBatch<unknown>,
@@ -86,6 +179,17 @@ export const dlqSink = {
     for (const msg of batch.messages) {
       // SERIAL for…of — never a parallel fan-out (matches the Steward-consumer
       // convention; max_concurrency:1 + this loop keep load/ordering bounded).
+
+      // Branch on the queue that delivered this batch. The two DLQ paths have different
+      // alert strategies: atlas-wire-dlq → flag() (Flagger is healthy, can process it);
+      // atlas-incidents-dlq → DIRECT atlas-wire emit (Flagger is the failing consumer,
+      // so we must bypass it).
+      if (batch.queue === "atlas-incidents-dlq") {
+        await handleDeadIncident(msg, env);
+        continue;
+      }
+
+      // atlas-wire-dlq path (default — existing behavior).
       try {
         const parsed = WireEvent.safeParse(msg.body);
 

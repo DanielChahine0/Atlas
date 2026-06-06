@@ -8,8 +8,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-04-25",
   "compatibility_flags": ["nodejs_compat"],
-  // Consumes the dead-letter queue (atlas-wire-dlq), produces Flagger incidents onto
-  // the live bus (atlas-wire). NOT an atlas-wire consumer — Pillar 1 holds.
+  // Consumes BOTH dead-letter queues (atlas-wire-dlq + atlas-incidents-dlq) and produces
+  // onto the live bus (atlas-wire + atlas-incidents). NOT an atlas-wire consumer — Pillar 1 holds.
   "queues": {
     "producers": [
       { "binding": "WIRE", "queue": "atlas-wire" },
@@ -22,6 +22,13 @@
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 3
+      },
+      {
+        "queue": "atlas-incidents-dlq",
+        "max_concurrency": 1,
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 0
       }
     ]
   },
