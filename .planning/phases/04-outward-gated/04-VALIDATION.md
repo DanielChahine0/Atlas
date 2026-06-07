@@ -68,6 +68,8 @@ created: 2026-06-06
 | OUTWARD-02 | Browser block (LinkedIn/X) → abort target, keep draft, P2 | unit | `pnpm test --filter apps/envoy -- --grep dom-block` |
 | OUTWARD-02 | Per-target approve/skip: approved subset only published | unit | `pnpm test --filter apps/envoy -- --grep per-target` |
 | OUTWARD-01+02 | Dual audit_log rows per gated action (pending + terminal) | unit | `pnpm test --filter @atlas/gate -- --grep audit-log` |
+| OUTWARD-01+02 | Gate sweep: approve-vs-expire mutual exclusion + idempotent re-sweep (no double-terminal-state, no spurious P3) | unit | `pnpm test --filter @atlas/gate -- --grep race` |
+| OUTWARD-01+02 | `openGate()` dispatches ntfy push (best-effort; push-send failure is non-fatal, gate still opens) | unit | `pnpm test --filter @atlas/gate -- --grep push` |
 | OUTWARD-01+02 | Sundial retrofit: propose-removal calls gate primitive | unit | `pnpm test --filter apps/sundial -- --grep gate-retrofit` |
 | OUTWARD-01+02 | Pillar 1: no second `atlas-wire` consumer | integration | hook `guard-wire-consumer.js` (existing) |
 | OUTWARD-01+02 | Security: no 2FA codes/reset links in confirm page or push body | unit | `pnpm test --filter @atlas/gate -- --grep security` |
