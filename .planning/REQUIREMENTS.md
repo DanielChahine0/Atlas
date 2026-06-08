@@ -40,8 +40,8 @@ Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = S
 
 ### Outward — Gated (Phase 4)
 
-- [ ] **OUTWARD-01**: Usher does on-demand event search + gated registration (browser automation) + Google Calendar add and bumps the Steward `events-registered` counter; no outward action fires without explicit owner confirm (gate adherence = 100%); captcha/payment are hard stops handed back to the human. _(docs/agents/usher.md, SPEC-CANON §12, 11-security-privacy.md)_
-- [ ] **OUTWARD-02**: Envoy fans one owner intent out to LinkedIn / GitHub README / X / portfolio, drafts each (reading the Codex, GitHub via GitHub MCP), and ships only on confirmation; a public post / payment is never silent and a post can't be un-posted. _(docs/agents/envoy.md, SPEC-CANON §4/§12)_
+- [x] **OUTWARD-01**: Usher does on-demand event search + gated registration (browser automation) + Google Calendar add and bumps the Steward `events-registered` counter; no outward action fires without explicit owner confirm (gate adherence = 100%); captcha/payment are hard stops handed back to the human. _(docs/agents/usher.md, SPEC-CANON §12, 11-security-privacy.md)_
+- [x] **OUTWARD-02**: Envoy fans one owner intent out to LinkedIn / GitHub README / X / portfolio, drafts each (reading the Codex, GitHub via GitHub MCP), and ships only on confirmation; a public post / payment is never silent and a post can't be un-posted. _(docs/agents/envoy.md, SPEC-CANON §4/§12)_
 
 ### Meta / Polish (Phase 5)
 
@@ -88,8 +88,8 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | WEEKLY-02 | Phase 2 | Complete |
 | CAPTURE-01 | Phase 3 | Complete |
 | CAPTURE-02 | Phase 3 | Complete |
-| OUTWARD-01 | Phase 4 | Pending |
-| OUTWARD-02 | Phase 4 | Pending |
+| OUTWARD-01 | Phase 4 | Complete |
+| OUTWARD-02 | Phase 4 | Complete |
 | META-01 | Phase 5 | Pending |
 | META-02 | Phase 5 | Pending |
 

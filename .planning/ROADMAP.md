@@ -153,7 +153,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 **Plans**: 7 plans
 
 **Wave 1** *(foundation — parallel, no file overlap)*
-- [ ] 04-01-PLAN.md — `packages/gate` shared confirmation-gate primitive (D4-04) + `migrations/0007_gate.sql` (gate_pending + browser_action_outbox) + dual audit rows + constant-time token + all Wave-0 test stubs
+- [x] 04-01-PLAN.md — `packages/gate` shared confirmation-gate primitive (D4-04) + `migrations/0007_gate.sql` (gate_pending + browser_action_outbox) + dual audit rows + constant-time token + all Wave-0 test stubs
 - [ ] 04-02-PLAN.md — mcp-github `github_create_branch` + `github_open_pr` tools (pull_requests:write) for Envoy's portfolio PR (+ owner App-permission checkpoint)
 
 **Wave 2** *(consumers of the gate — parallel, each owns its own dir; blocked on 04-01)*
@@ -198,5 +198,5 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
-| 4. Outward (Gated) | 0/7 | Planned | - |
+| 4. Outward (Gated) | 1/7 | In Progress|  |
 | 5. Meta / Polish | 0/TBD | Not started | - |
