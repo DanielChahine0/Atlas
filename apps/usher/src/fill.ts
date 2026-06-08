@@ -95,22 +95,40 @@ export function buildRegistrationFields(codex: CodexRegistrationFields): Registr
 
 /**
  * Serialize the registration fields to JSON for storage in browser_action_outbox.
- * Runs a final redaction pass: any value that looks like a password or 2FA code
- * is replaced with an empty string (defense-in-depth, T-04-34).
+ * Runs a final redaction pass: any string value that contains a 2FA-like code
+ * (6–8 consecutive digits not surrounded by other digits) is replaced with an
+ * empty string (defense-in-depth, T-04-34).
  *
- * Pattern: 6-digit numeric strings are typically 2FA codes → strip them.
+ * Coverage (after trimming the value):
+ *   - Bare codes:    "123456"          → stripped (whole-string match)
+ *   - Embedded codes: "code 123456"    → stripped (embedded match)
+ *   - Trailing space: "123456 "        → stripped (after trim)
+ *   - NOT stripped: "phone: +14165550123" (10-digit phone — bounded by more digits)
+ *
+ * TRIPWIRE: When stripping fires, `stripped` is set to true in the return value.
+ * The caller should flag a P2 incident (defense-in-depth; the structural guarantee
+ * is that only known Codex keys are ever serialized into this map). A fired tripwire
+ * does NOT abort the registration — it signals an unexpected value in the field set.
+ *
+ * Returns { json, stripped } where `stripped` is true if any value was blanked.
  * Passwords are NEVER in the Codex registration section, but we guard regardless.
  */
-export function serializeFields(fields: RegistrationFields): string {
+export function serializeFields(fields: RegistrationFields): { json: string; stripped: boolean } {
   // Deep-copy to avoid mutation
   const safe = JSON.parse(JSON.stringify(fields)) as Record<string, unknown>;
+  let anyStripped = false;
 
-  // Strip any value that looks like a 2FA code (6–8 digit numeric strings)
-  // This is a belt-and-suspenders guard — the Codex section should never contain them.
+  // 2FA tripwire: matches 6–8 digits NOT bounded by other digits on either side.
+  // Applied after trimming to catch trailing-space variants like "123456 ".
+  const CODE_PATTERN = /(?<!\d)\d{6,8}(?!\d)/;
+
   function stripSensitive(obj: unknown): unknown {
     if (typeof obj === "string") {
-      // 6-8 digit numeric string = likely 2FA code → strip
-      if (/^\d{6,8}$/.test(obj)) return "";
+      const trimmed = obj.trim();
+      if (CODE_PATTERN.test(trimmed)) {
+        anyStripped = true;
+        return "";
+      }
       return obj;
     }
     if (Array.isArray(obj)) return obj.map(stripSensitive);
@@ -124,5 +142,6 @@ export function serializeFields(fields: RegistrationFields): string {
     return obj;
   }
 
-  return JSON.stringify(stripSensitive(safe));
+  const stripped = stripSensitive(safe);
+  return { json: JSON.stringify(stripped), stripped: anyStripped };
 }

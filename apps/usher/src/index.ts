@@ -324,7 +324,20 @@ async function runContinuation(
   };
 
   const registrationFields = buildRegistrationFields(codexFields);
-  const fieldsJson = serializeFields(registrationFields);
+  const { json: fieldsJson, stripped } = serializeFields(registrationFields);
+
+  // WR-07: serializeFields is a tripwire for 2FA-like codes in registration fields.
+  // A fired tripwire indicates an unexpected value reached this function — flag P2.
+  // This does NOT abort the registration (the strip is defense-in-depth).
+  if (stripped) {
+    await flag(
+      env,
+      "P2",
+      `Usher: serializeFields stripped a 2FA-like value from registration fields (eventId=${eventId})`,
+      "A field value matching /(?<!\\d)\\d{6,8}(?!\\d)/ was blanked. Verify Codex field mappings.",
+      { sourceAgent: "Usher", kind: "usher_2fa_strip_tripwire", runId: date },
+    ).catch(() => {});
+  }
 
   // INSERT browser_action_outbox event_fill_submit row (positional ? params — D1 rule)
   const workItemId = ulid();

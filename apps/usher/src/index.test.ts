@@ -24,6 +24,7 @@ import {
   type RegisterParams,
   type OutcomeParams,
 } from "./index.js";
+import { serializeFields, buildRegistrationFields } from "./fill.js";
 import type { CalendarTools } from "./calendar.js";
 
 // ─── Test env setup ──────────────────────────────────────────────────────────
@@ -885,5 +886,80 @@ describe("hard-stop-severity-table", () => {
     expect(HARD_STOP_SEVERITY["login_wall"]).toBe("P3");
     expect(HARD_STOP_SEVERITY["tos_block"]).toBe("P2");
     expect(HARD_STOP_SEVERITY["no_confirmation"]).toBe("P2");
+  });
+});
+
+// ─── WR-07: serializeFields 2FA tripwire — embedded-code detection ────────────
+
+describe("WR-07: serializeFields 2FA tripwire — tightened embedded-code detection", () => {
+  it("bare 6-digit code → stripped, stripped=true", () => {
+    const { json, stripped } = serializeFields(buildRegistrationFields({
+      full_name: "Daniel Chahine",
+      email: "123456",
+    }));
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed.email).toBe("");
+    expect(stripped).toBe(true);
+  });
+
+  it("bare 8-digit code → stripped, stripped=true", () => {
+    const { json, stripped } = serializeFields(buildRegistrationFields({
+      full_name: "Daniel Chahine",
+      email: "12345678",
+    }));
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed.email).toBe("");
+    expect(stripped).toBe(true);
+  });
+
+  it("embedded code 'code 123456' → stripped, stripped=true (WR-07: was missed by old regex)", () => {
+    const { json, stripped } = serializeFields(buildRegistrationFields({
+      full_name: "Daniel Chahine",
+      email: "code 123456",
+    }));
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed.email).toBe("");
+    expect(stripped).toBe(true);
+  });
+
+  it("trailing-space variant '123456 ' → stripped after trim, stripped=true", () => {
+    const { json, stripped } = serializeFields(buildRegistrationFields({
+      full_name: "Daniel Chahine",
+      email: "123456 ",
+    }));
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed.email).toBe("");
+    expect(stripped).toBe(true);
+  });
+
+  it("normal email is NOT stripped, stripped=false", () => {
+    const { json, stripped } = serializeFields(buildRegistrationFields({
+      full_name: "Daniel Chahine",
+      email: "chahinedaniel0@gmail.com",
+    }));
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed.email).toBe("chahinedaniel0@gmail.com");
+    expect(stripped).toBe(false);
+  });
+
+  it("phone number with 10+ digits is NOT stripped (digits bounded by other digits)", () => {
+    const { json, stripped } = serializeFields(buildRegistrationFields({
+      full_name: "Daniel Chahine",
+      email: "chahinedaniel0@gmail.com",
+      phone: "+14165550123",
+    }));
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed.phone).toBe("+14165550123");
+    expect(stripped).toBe(false);
+  });
+
+  it("normal name is NOT stripped, stripped=false", () => {
+    const { json, stripped } = serializeFields(buildRegistrationFields({
+      full_name: "Daniel Chahine",
+      email: "test@example.com",
+    }));
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed.name).toBe("Daniel Chahine");
+    expect(stripped).toBe(false);
   });
 });
