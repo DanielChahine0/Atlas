@@ -162,7 +162,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 04-05-PLAN.md — Sundial retrofit: route the existing propose-removal proposal through `packages/gate` (D4-04 gate-UX maturity proof); reconcile.ts unchanged
 
 **Wave 3** *(the outward agents — parallel, each owns its own dir; blocked on the gate Worker + daemon + mcp-github)*
-- [ ] 04-06-PLAN.md — `apps/usher` (OUTWARD-01): on-demand gated registration, price disclosed, ~24h gate, auto-submit free path, captcha/payment hard stops, Calendar add + events-registered++ only on a scraped confirmation #
+- [x] 04-06-PLAN.md — `apps/usher` (OUTWARD-01): on-demand gated registration, price disclosed, ~24h gate, auto-submit free path, captcha/payment hard stops, Calendar add + events-registered++ only on a scraped confirmation #
 - [ ] 04-07-PLAN.md — `apps/envoy` (OUTWARD-02): fan one intent into 4 Codex-sourced drafts, ~7d gate per-target approve/edit/skip, GitHub README+PR (agent), LinkedIn/X prefill (owner clicks Post), Brand counters once per slug
 
 **Cross-cutting constraints** (truths appearing in 2+ plans):
@@ -198,5 +198,5 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
-| 4. Outward (Gated) | 5/7 | In Progress|  |
+| 4. Outward (Gated) | 6/7 | In Progress|  |
 | 5. Meta / Polish | 0/TBD | Not started | - |
