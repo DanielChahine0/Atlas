@@ -17,6 +17,7 @@ import type { WireEvent } from "@atlas/wire";
 import { localDate } from "@atlas/shared";
 import type { Env as SharedEnv, RawIncident } from "@atlas/shared";
 import { readOpenDeadlineTasks, type TaskRow } from "@atlas/tasks";
+import { openGate } from "@atlas/gate";
 import { reconcile, type CalendarTools, type ReconcileResult } from "./reconcile.js";
 import { isDateOnly } from "./block.js";
 
@@ -25,6 +26,28 @@ export interface Env extends Omit<SharedEnv, "INCIDENTS"> {
   SUNDIAL_STATE?: DurableObjectNamespace;
   /** INCIDENTS producer (atlas-incidents): Sundial enqueues RawIncidents via flag() (D2-05). */
   INCIDENTS: Queue<RawIncident>;
+  /**
+   * GATE_BASE_URL — the confirm page base URL for openGate() confirm push links.
+   * A plaintext [vars] string (not a secret). Passed through to openGate confirmBaseUrl.
+   */
+  GATE_BASE_URL: string;
+  /**
+   * NTFY_TOPIC / NTFY_TOKEN — Secrets Store bindings (async get()).
+   * Required so openGate() can dispatch the owner confirm push (04-01).
+   * Never log these values; never read them directly in Sundial — passed through to openGate.
+   */
+  NTFY_TOPIC?: SecretsStoreSecret;
+  NTFY_TOKEN?: SecretsStoreSecret;
+}
+
+/**
+ * The calendar tool surface required for a gate-approved removal re-invoke.
+ * Defined here (NOT in reconcile.ts, which is byte-unchanged — Pillar 2 Pitfall 7).
+ * The live implementation calls `calendar.events.delete`; tests inject a stub.
+ */
+export interface RemovalTools {
+  /** Remove (delete) the calendar event with the given eventId. Throws on failure. */
+  removeEvent(eventId: string): Promise<void>;
 }
 
 /** Per-run state DO (run bookkeeping; the sync itself is stateless given the task input). */
@@ -130,6 +153,12 @@ export function buildSyncEvent(
 /**
  * Run the sync: read deadline tasks, reconcile against Sundial's own blocks, emit the
  * calendar.sync event. Network-pure via injected `tools`.
+ *
+ * After reconcile() returns, iterates `result.decisions` and for each `propose-removal`
+ * decision routes through openGate (packages/gate D4-04), using idempotencyKey
+ * `sundial:remove:<eventId>`. The gate is the SOLE consent point for a calendar removal —
+ * the removal itself runs only in `applyRemoval()` on an approved gate re-invoke (Pillar 2).
+ * The existing P2 flag inside reconcile() is UNCHANGED and still fires (the gate is additive).
  */
 export async function runSync(
   env: Env,
@@ -141,10 +170,87 @@ export async function runSync(
   const tasks = tasksOverride ?? (await readOpenDeadlineTasks(db));
   const summary = await reconcile(env, tasks, tools);
   await send(env, buildSyncEvent(date, summary, upcoming7d(tasks, date)));
+
+  // Route each propose-removal decision through openGate (D4-04).
+  // openGate handles the confirm push send (NTFY_TOPIC/NTFY_TOKEN) and the audit row.
+  // The calendar removal itself runs ONLY in applyRemoval() on an approved gate re-invoke.
+  // Duplicate idempotencyKey (re-run) → openGate returns the existing gate (no second push).
+  for (const decision of summary.decisions) {
+    if (decision.action === "propose-removal" && decision.eventId) {
+      await openGate(env, {
+        agent: "Sundial",
+        action: "calendar.remove",
+        target: decision.eventId,
+        artifact: JSON.stringify({
+          atlasTaskId: decision.atlasTaskId,
+          eventId: decision.eventId,
+        }),
+        idempotencyKey: `sundial:remove:${decision.eventId}`,
+        expiresInMs: 7 * 24 * 60 * 60 * 1000, // 7 days — calendar removal is not time-critical
+        confirmBaseUrl: env.GATE_BASE_URL,
+        scopeUsed: "calendar.events",
+      });
+    }
+  }
+
   return summary;
 }
 
 export class Sundial extends WorkerEntrypoint<Env> {
+  /**
+   * applyRemoval — the gate-approved re-invoke entrypoint.
+   *
+   * Called by the gate Worker (apps/gate) after the owner approves a `calendar.remove` gate.
+   * Performs the actual calendar block removal via the injected tools surface.
+   * This is the ONLY place Sundial removes a calendar block — never on the autonomous path.
+   *
+   * Fail-safe: on any failure, flags P2 and rethrows so the gate Worker can surface the error.
+   * On success, the removed event is gone from the owner's calendar.
+   *
+   * Pillar 2 invariant: the gate is the single consent point; this method is unreachable
+   * without a preceding approved decideGate() call from the gate Worker.
+   */
+  async applyRemoval(params: {
+    gateId: string;
+    eventId: string;
+    tools?: RemovalTools;
+  }): Promise<{ removed: true; eventId: string }> {
+    const { gateId, eventId, tools: injectedTools } = params;
+
+    if (!injectedTools) {
+      // No live removal tools wired — cannot execute removal. Flag P2 and throw.
+      // This case should not occur in production (the gate Worker must inject RemovalTools
+      // on the re-invoke), but fail-closed defensively rather than silently doing nothing.
+      const { flag } = await import("@atlas/shared");
+      await flag(
+        this.env,
+        "P2",
+        `Sundial applyRemoval: no removal tools injected (gateId=${gateId}, eventId=${eventId})`,
+        "The gate Worker must inject RemovalTools on the applyRemoval re-invoke.",
+        { sourceAgent: "Sundial", kind: "calendar_sync_failed" },
+      ).catch(() => {});
+      throw new Error(
+        `Sundial.applyRemoval: no removal tools provided for gateId=${gateId} eventId=${eventId}`,
+      );
+    }
+
+    try {
+      await injectedTools.removeEvent(eventId);
+      return { removed: true, eventId };
+    } catch (err) {
+      // Removal failed — flag P2 and rethrow so the gate Worker can surface the error.
+      const { flag } = await import("@atlas/shared");
+      await flag(
+        this.env,
+        "P2",
+        `Sundial applyRemoval failed for eventId=${eventId} (gateId=${gateId})`,
+        String(err),
+        { sourceAgent: "Sundial", kind: "calendar_sync_failed" },
+      ).catch(() => {});
+      throw err;
+    }
+  }
+
   /**
    * The `sundial-sync` Workflow-step RPC target. Reads deadline tasks from D1 and reconciles
    * them onto the calendar (own blocks only, no delete). Tests inject `tools` (+ optional

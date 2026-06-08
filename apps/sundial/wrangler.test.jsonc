@@ -17,5 +17,8 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "atlas-db", "migrations_dir": "../../migrations" }
   ],
-  "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }]
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }],
+  "vars": {
+    "GATE_BASE_URL": "https://gate.test.invalid"
+  }
 }

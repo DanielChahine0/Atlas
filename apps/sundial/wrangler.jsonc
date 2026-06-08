@@ -36,6 +36,22 @@
   // No AI binding — the task→block mapping is DETERMINISTic (no model required).
   // Sundial has NO cron — it runs as the `sundial-sync` MorningChain step (08:20).
 
+  // Vars — plaintext non-secrets only (never secrets here per CLAUDE.md).
+  // GATE_BASE_URL: the confirm page base URL for openGate() confirm push links.
+  "vars": {
+    "GATE_BASE_URL": "https://gate.atlas.workers.dev"
+  },
+
+  // Secrets Store — NTFY_TOPIC/NTFY_TOKEN read via async get().
+  // Required so openGate() can dispatch the owner confirm push (04-01).
+  // NEVER in [vars], KV, Vault, Codex, audit_log, or any tracked file.
+  // store_id placeholder: replace <atlas-store-id> with the real Cloudflare Secrets
+  // Store ID after provisioning (same store as flagger/mcp-google/atlas).
+  "secrets_store_secrets": [
+    { "binding": "NTFY_TOPIC", "store_id": "<atlas-store-id>", "secret_name": "ntfy-topic" },
+    { "binding": "NTFY_TOKEN", "store_id": "<atlas-store-id>", "secret_name": "ntfy-token" }
+  ],
+
   "observability": { "enabled": true },
 
   "env": {

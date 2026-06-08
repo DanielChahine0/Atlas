@@ -494,6 +494,9 @@ importers:
 
   apps/sundial:
     dependencies:
+      '@atlas/gate':
+        specifier: workspace:*
+        version: link:../../packages/gate
       '@atlas/shared':
         specifier: workspace:*
         version: link:../../packages/shared
