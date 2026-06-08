@@ -20,7 +20,7 @@
 
 import { loadConfig, drainLoop as obsidianDrainLoop, writeObsidian } from "./drain.ts";
 import { loadBrowserConfig, drainLoop as browserDrainLoop } from "./browser-drain.ts";
-import { runBrowserAction, withBrowserContext } from "./browser-runner.ts";
+import { runBrowserAction } from "./browser-runner.ts";
 
 async function main(): Promise<void> {
   // Load configs — both fail loud on missing env vars.
@@ -30,8 +30,7 @@ async function main(): Promise<void> {
   console.log("atlas-daemon: starting OUTBOUND-only drain loops (Obsidian + browser-action)");
 
   // Start both loops concurrently in ONE process — they run independently and never
-  // share state. The browser loop is wrapped in withBrowserContext so the Playwright
-  // persistent context is alive for the lifetime of the daemon.
+  // share state.
   await Promise.all([
     // Obsidian bridge drain loop
     obsidianDrainLoop(
@@ -40,22 +39,19 @@ async function main(): Promise<void> {
       { runForever: true },
     ),
 
-    // Browser-action drain loop — starts a persistent Chromium context (clears stale
-    // lock on startup) and runs the drain loop inside it. The context is NOT closed
-    // between items (single instance, Pitfall 2).
-    withBrowserContext(browserCfg.browserProfilePath, async (_ctx) => {
-      await browserDrainLoop(
-        browserCfg,
-        {
-          fetchCloud: fetch,
-          // Each call to runBrowserAction opens a new page within the persistent context
-          // via the default (no mock page injected). The context is shared across calls
-          // through the closure so each item gets a fresh page in the same logged-in session.
-          runBrowserAction: (item, cfg) => runBrowserAction(item, cfg),
-        },
-        { runForever: true },
-      );
-    }),
+    // Browser-action drain loop.
+    // Each call to runBrowserAction opens its own Playwright persistent context for the
+    // duration of that item and closes it after. This avoids SingletonLock contention that
+    // occurred when two launchPersistentContext calls targeted the same profile directory
+    // concurrently (WR-04: outer withBrowserContext + inner runBrowserAction = two contexts).
+    browserDrainLoop(
+      browserCfg,
+      {
+        fetchCloud: fetch,
+        runBrowserAction: (item, cfg) => runBrowserAction(item, cfg),
+      },
+      { runForever: true },
+    ),
   ]);
 }
 

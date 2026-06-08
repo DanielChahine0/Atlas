@@ -250,9 +250,15 @@ export async function runBrowserAction(
     console.warn(`browser runner unexpected error for item ${item.id}: ${String(err)}`);
     return { id: item.id, status: "error" };
   } finally {
-    // Close only the page we opened in this call (not the persistent context).
+    // Close the page we opened in this call, then the context.
+    // Each runBrowserAction call owns exactly one persistent context for its lifetime.
+    // Closing after the item ensures the profile is released before the next item's
+    // launchPersistentContext call, preventing SingletonLock contention (WR-04).
     if (ownedPage) {
       await ownedPage.close().catch(() => {});
+    }
+    if (ownedContext) {
+      await ownedContext.close().catch(() => {});
     }
   }
 }

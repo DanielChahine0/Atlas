@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { runBrowserAction, type MockPage } from "../src/browser-runner.ts";
 import type { BrowserActionWorkItem, BrowserActionOutcome } from "../../packages/gate/src/schema.ts";
 import type { BrowserDrainConfig } from "../src/browser-drain.ts";
@@ -246,5 +246,70 @@ describe("safety invariants", () => {
 
     const outcome = await runBrowserAction(makeUsherItem(), cfg, page);
     expect(outcome.status).toBe("error");
+  });
+});
+
+// ─── WR-04: single persistent context per item ───────────────────────────────
+//
+// When _page is NOT injected, runBrowserAction opens a Playwright persistent context.
+// Before WR-04 fix, main.ts wrapped the drain loop in withBrowserContext (which called
+// launchPersistentContext for the outer context) AND runBrowserAction called it again
+// inside (two contexts on the same profile → SingletonLock conflict).
+// After the fix, main.ts no longer calls withBrowserContext; each runBrowserAction call
+// owns exactly one context and closes it after the item.
+
+describe("WR-04: runBrowserAction opens exactly ONE context per item when no mock page injected", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("launchPersistentContext called once per item, context is closed after the item", async () => {
+    // Build a minimal mock page compatible with MockPage interface
+    const mockPage = makeMockPage();
+
+    // Stub the playwright chromium module dynamically
+    const mockClose = vi.fn(async () => {});
+    const mockCtx = {
+      newPage: async () => {
+        // Return a real-ish page object — but we wrap it via makePlaywrightPage internally.
+        // We need to satisfy BrowserContext.newPage. Return an object the internal wrapper uses.
+        return {
+          goto: vi.fn(async () => {}),
+          getByLabel: vi.fn(() => ({ fill: vi.fn(async () => {}), click: vi.fn(async () => {}) })),
+          getByRole: vi.fn(() => ({ fill: vi.fn(async () => {}), click: vi.fn(async () => {}) })),
+          locator: vi.fn(() => ({
+            count: vi.fn(async () => 0),
+            first: vi.fn(() => ({ textContent: vi.fn(async () => ""), click: vi.fn(async () => {}) })),
+            fill: vi.fn(async () => {}),
+          })),
+          waitForSelector: vi.fn(async () => {}),
+          close: vi.fn(async () => {}),
+        };
+      },
+      close: mockClose,
+    };
+
+    const launchSpy = vi.fn(async () => mockCtx);
+
+    // Mock playwright dynamic import
+    vi.doMock("playwright", () => ({
+      chromium: {
+        launchPersistentContext: launchSpy,
+      },
+    }));
+
+    // Re-import the module so the mock takes effect
+    const { runBrowserAction: runWithRealCtx } = await import("../src/browser-runner.ts?wr04=1");
+
+    const item = makeUsherItem("wr04-item-1");
+    // Run without injecting a mock page — triggers the real Playwright path
+    await runWithRealCtx(item, cfg);
+
+    // launchPersistentContext should have been called exactly once for one item
+    expect(launchSpy).toHaveBeenCalledTimes(1);
+    expect(launchSpy).toHaveBeenCalledWith(cfg.browserProfilePath, expect.objectContaining({ headless: false }));
+
+    // Context should have been closed after the item (WR-04: clean up after each item)
+    expect(mockClose).toHaveBeenCalledTimes(1);
   });
 });
