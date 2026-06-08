@@ -158,7 +158,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 
 **Wave 2** *(consumers of the gate — parallel, each owns its own dir; blocked on 04-01)*
 - [x] 04-03-PLAN.md — `apps/gate` Worker: token-gated confirm page (GET/POST /confirm, fail-closed, expired→410), expiry-sweep `scheduled()`, daemon browser poll/ack endpoints, approve→re-invoke
-- [ ] 04-04-PLAN.md — daemon browser-action runner: outbound poll/drain/ack + Playwright `launchPersistentContext` (owner's logged-in profile), captcha/payment hard stops, Usher auto-submit / Envoy prefill-no-submit
+- [x] 04-04-PLAN.md — daemon browser-action runner: outbound poll/drain/ack + Playwright `launchPersistentContext` (owner's logged-in profile), captcha/payment hard stops, Usher auto-submit / Envoy prefill-no-submit
 - [ ] 04-05-PLAN.md — Sundial retrofit: route the existing propose-removal proposal through `packages/gate` (D4-04 gate-UX maturity proof); reconcile.ts unchanged
 
 **Wave 3** *(the outward agents — parallel, each owns its own dir; blocked on the gate Worker + daemon + mcp-github)*
@@ -198,5 +198,5 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
-| 4. Outward (Gated) | 3/7 | In Progress|  |
+| 4. Outward (Gated) | 4/7 | In Progress|  |
 | 5. Meta / Polish | 0/TBD | Not started | - |
