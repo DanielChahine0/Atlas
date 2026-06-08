@@ -1,0 +1,63 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "usher",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Pillar 1: Usher is a Wire PRODUCER only — NO consumers block on atlas-wire.
+  // Usher is on-demand (invoked by Atlas or the gate Worker via service binding) — NO cron.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 system-of-record — Usher reads events, idempotency_keys, gate_pending,
+  // and writes browser_action_outbox + events.status.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // KV — CONFIG holds Usher knobs:
+  //   gates.timeout_usher_ms  — gate TTL (default 86400000 = 24h)
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // Service bindings:
+  //   GATE     — apps/gate (poll + ack transport for browser_action_outbox)
+  //   MCP_GOOGLE — mcp-google (calendar.events add after confirmed registration)
+  "services": [
+    { "binding": "GATE", "service": "gate" },
+    { "binding": "MCP_GOOGLE", "service": "mcp-google" }
+  ],
+
+  // Secrets Store — NTFY_TOPIC/NTFY_TOKEN passed through to openGate so the confirm
+  // push can be dispatched. Never read directly in Usher — openGate (04-01) owns the send.
+  // Replace <atlas-store-id> with the real Cloudflare Secrets Store ID at go-live.
+  "secrets_store_secrets": [
+    { "binding": "NTFY_TOPIC", "store_id": "<atlas-store-id>", "secret_name": "ntfy-topic" },
+    { "binding": "NTFY_TOKEN", "store_id": "<atlas-store-id>", "secret_name": "ntfy-token" }
+  ],
+
+  // GATE_BASE_URL — confirm page base URL, passed to openGate as confirmBaseUrl.
+  // Plaintext non-secret (per-env override possible).
+  "vars": {
+    "GATE_BASE_URL": "https://gate.atlas.workers.dev"
+  },
+
+  "observability": { "enabled": true },
+
+  // NO top-level triggers.crons — Usher is on-demand only (no own production cron).
+  "env": {
+    "staging": {
+      // Staging fires NO crons (CLAUDE.md constraint).
+      "triggers": { "crons": [] }
+    }
+  }
+}
