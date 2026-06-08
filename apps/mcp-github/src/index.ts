@@ -22,6 +22,7 @@ import { McpAgent } from "agents/mcp";
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { z } from "zod";
 import { installationToken, type GitHubAppEnv } from "./github-app.js";
 
 /** The mcp-github env surface (DO binding + OAuth KV + GitHub App secret/vars). */
@@ -94,6 +95,133 @@ export class GithubMcp extends McpAgent<Env, unknown, GitHubProps> {
         return { content: [{ type: "text", text: "(file written via the App installation)" }] };
       },
     );
+
+    // Create a new branch from a base branch (Envoy's portfolio PR flow). Requires github.write.
+    // REST sequence: GET /repos/{owner}/{repo}/git/ref/heads/{fromBranch} → read base SHA,
+    // then POST /repos/{owner}/{repo}/git/refs with { ref, sha }.
+    // Mints { contents: "write", metadata: "read", pull_requests: "write" } (T-04-10).
+    this.server.registerTool(
+      "github_create_branch",
+      {
+        title: "Create a GitHub branch",
+        description:
+          "Create a new branch in a repo from an existing base branch (Envoy portfolio PR). Requires github.write.",
+        inputSchema: {
+          owner: z.string().describe("Repository owner (user or org)"),
+          repo: z.string().describe("Repository name"),
+          branch: z.string().describe("Name of the new branch to create"),
+          fromBranch: z.string().describe("Base branch to branch from (e.g. 'main')"),
+        },
+      },
+      async (args) => {
+        if (!this.hasScope("github.write")) return this.forbidden();
+        const { owner, repo, branch, fromBranch } = args as {
+          owner: string;
+          repo: string;
+          branch: string;
+          fromBranch: string;
+        };
+        let token: string;
+        try {
+          token = await this.mintTokenForUse({
+            permissions: { contents: "write", metadata: "read", pull_requests: "write" },
+          });
+        } catch (err) {
+          return this.mintError(err);
+        }
+        // Step 1: read the base branch SHA.
+        const refRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${fromBranch}`,
+          {
+            method: "GET",
+            headers: this.githubHeaders(token),
+          },
+        );
+        if (!refRes.ok) {
+          return this.githubApiError("read base branch ref", refRes.status);
+        }
+        const refJson = (await refRes.json()) as { object: { sha: string } };
+        const sha = refJson.object.sha;
+
+        // Step 2: create the new branch ref.
+        const createRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/refs`,
+          {
+            method: "POST",
+            headers: this.githubHeaders(token),
+            body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }),
+          },
+        );
+        if (!createRes.ok) {
+          return this.githubApiError("create branch ref", createRes.status);
+        }
+        // Return only the branch name — the token stays server-side (T-04-09).
+        return {
+          content: [{ type: "text" as const, text: `Branch created: ${branch} (from ${fromBranch} @ ${sha})` }],
+        };
+      },
+    );
+
+    // Open a pull request (Envoy's portfolio PR). Requires github.write.
+    // D4-10: a PR is draft-by-nature and reversible — no extra gate inside the tool.
+    // REST: POST /repos/{owner}/{repo}/pulls with { title, body, head, base, draft: false }.
+    // Mints { contents: "write", metadata: "read", pull_requests: "write" } (T-04-10).
+    this.server.registerTool(
+      "github_open_pr",
+      {
+        title: "Open a GitHub pull request",
+        description:
+          "Open a non-draft pull request in a repo (Envoy portfolio PR). Requires github.write.",
+        inputSchema: {
+          owner: z.string().describe("Repository owner (user or org)"),
+          repo: z.string().describe("Repository name"),
+          title: z.string().describe("PR title"),
+          body: z.string().describe("PR body / description"),
+          head: z.string().describe("The branch containing the changes (head)"),
+          base: z.string().describe("The branch to merge into (base, e.g. 'main')"),
+        },
+      },
+      async (args) => {
+        if (!this.hasScope("github.write")) return this.forbidden();
+        const { owner, repo, title, body, head, base } = args as {
+          owner: string;
+          repo: string;
+          title: string;
+          body: string;
+          head: string;
+          base: string;
+        };
+        let token: string;
+        try {
+          token = await this.mintTokenForUse({
+            permissions: { contents: "write", metadata: "read", pull_requests: "write" },
+          });
+        } catch (err) {
+          return this.mintError(err);
+        }
+        const prRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/pulls`,
+          {
+            method: "POST",
+            headers: this.githubHeaders(token),
+            body: JSON.stringify({ title, body, head, base, draft: false }),
+          },
+        );
+        if (!prRes.ok) {
+          return this.githubApiError("open pull request", prRes.status);
+        }
+        const prJson = (await prRes.json()) as { html_url: string; number: number };
+        // Return only the PR URL and number — the token stays server-side (T-04-09).
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Pull request opened: #${prJson.number} — ${prJson.html_url}`,
+            },
+          ],
+        };
+      },
+    );
   }
 
   /** True iff the validated grant carries the required scope (least-privilege at the tool). */
@@ -143,6 +271,53 @@ export class GithubMcp extends McpAgent<Env, unknown, GitHubProps> {
     }
     // The opaque ghs_ token is consumed locally and intentionally not surfaced.
     await installationToken(this.env, installId, { permissions: opts.permissions });
+  }
+
+  /**
+   * Mint a short-lived installation token for immediate server-side GitHub API use.
+   * Like mintToken() but returns the opaque token string so the caller can issue
+   * GitHub REST calls. The token MUST stay server-side and MUST NOT appear in any
+   * tool result (T-00-32 / T-04-09). The installation id comes from [vars].
+   */
+  private async mintTokenForUse(opts: { permissions?: Record<string, string> }): Promise<string> {
+    const installId = this.env.GH_APP_INSTALLATION_ID;
+    if (!installId) {
+      throw new Error("GitHub App misconfigured: GH_APP_INSTALLATION_ID is not set in [vars]");
+    }
+    // The token is returned to this call-site only, consumed synchronously for the
+    // GitHub API call, and never stored, logged, or forwarded to the MCP client.
+    return await installationToken(this.env, installId, { permissions: opts.permissions });
+  }
+
+  /**
+   * Build the standard GitHub REST API request headers using the server-side
+   * installation token. The token is consumed here and never propagated further.
+   */
+  private githubHeaders(token: string): Record<string, string> {
+    return {
+      authorization: `Bearer ${token}`,
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+      "user-agent": "atlas-orchestrator",
+      "content-type": "application/json",
+    };
+  }
+
+  /**
+   * A structured MCP error result for a GitHub API non-2xx response. Surfaces only
+   * the HTTP status code — no response body (which could carry partial token / secrets
+   * data on misconfigured endpoints).
+   */
+  private githubApiError(operation: string, status: number) {
+    return {
+      isError: true as const,
+      content: [
+        {
+          type: "text" as const,
+          text: `502 Bad Gateway: GitHub API call failed (${operation}): HTTP ${status}.`,
+        },
+      ],
+    };
   }
 }
 

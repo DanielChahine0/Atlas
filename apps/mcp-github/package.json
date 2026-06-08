@@ -16,7 +16,8 @@
     "@cloudflare/workers-oauth-provider": "^0.7.2",
     "@modelcontextprotocol/sdk": "1.29.0",
     "agents": "^0.14.1",
-    "jose": "^6.2.3"
+    "jose": "^6.2.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.13",
