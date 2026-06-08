@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: "Phase 4 plan 04-07 (Envoy) complete — all 7 plans done; phase ready for verification"
-last_updated: "2026-06-08T17:38:31.346Z"
+status: ready_to_plan
+stopped_at: Phase 04 complete (7/7) — ready to discuss Phase 5
+last_updated: 2026-06-08T18:18:35.860Z
 last_activity: 2026-06-08
 progress:
   total_phases: 6
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-01)
 
 **Core value:** Every morning the owner sees a trustworthy digest, deadline-safe tasks/calendar, and a day plan — automatically, with zero missed deadlines and zero 2FA codes/reset links ever surfaced.
-**Current focus:** Phase 04 — outward-gated
+**Current focus:** Phase 5 — meta / polish
 
 ## Current Position
 
-Phase: 04 (outward-gated) — EXECUTING
-Plan: 7 of 7 (completed 04-04)
-Status: Phase complete — ready for verification
+Phase: 5
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-08
 Next action: Execute 04-05 (Sundial gate retrofit) → 04-06 (Usher) → 04-07 (Envoy) with `/gsd-execute-phase 4`. Blocking owner checkpoint for 04-02: grant the GitHub App `pull_requests: write` permission (GitHub → Settings → Developer settings → GitHub Apps → Atlas) + re-accept on the scoped repos, so Envoy can fire a live PR. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; close the Phase-0 owner gates; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
 
@@ -37,7 +37,7 @@ Milestone progress: plans [█████████████████�
 
 **Velocity:**
 
-- Total plans completed: 31 (Phase 0: 8 · Phase 1: 8 · Phase 2: 7 · Phase 3: 6 · Phase 4: 2 of 7)
+- Total plans completed: 38 (Phase 0: 8 · Phase 1: 8 · Phase 2: 7 · Phase 3: 6 · Phase 4: 2 of 7)
 - Average duration: not instrumented
 - Total execution time: not instrumented
 
