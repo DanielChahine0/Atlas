@@ -37,6 +37,42 @@ interface ResponseLike {
 }
 declare function fetch(url: string, init?: RequestInit): Promise<ResponseLike>;
 
+// node:fs surface used by the daemon browser runner (stale-lock clear on startup).
+declare module "node:fs" {
+  export function unlinkSync(path: string): void;
+}
+
+// playwright — go-live dependency (installed at owner setup with `npx playwright install chromium`).
+// Declared ambient so tsc compiles during development before the binary is installed.
+// The production daemon uses `import("playwright")` dynamic import at runtime.
+declare module "playwright" {
+  export interface BrowserContext {
+    newPage(): Promise<Page>;
+    close(): Promise<void>;
+  }
+  export interface Page {
+    goto(url: string, opts?: { waitUntil?: string }): Promise<void>;
+    locator(selector: string): Locator;
+    getByLabel(text: string): Locator;
+    getByRole(role: string, opts?: { name?: string }): Locator;
+    waitForSelector(selector: string, opts?: { timeout?: number }): Promise<void>;
+    close(): Promise<void>;
+  }
+  export interface Locator {
+    fill(value: string): Promise<void>;
+    click(opts?: unknown): Promise<void>;
+    count(): Promise<number>;
+    first(): Locator;
+    textContent(): Promise<string | null>;
+  }
+  export const chromium: {
+    launchPersistentContext(
+      userDataDir: string,
+      opts?: { headless?: boolean; slowMo?: number },
+    ): Promise<BrowserContext>;
+  };
+}
+
 // The `node:https` module surface the daemon uses for the localhost (127.0.0.1:27124)
 // Obsidian write, where it must trust the plugin's self-signed cert. `rejectUnauthorized`
 // is scoped to THIS Agent (the localhost connection) ONLY — never the outbound cloud fetch.
