@@ -23,8 +23,8 @@ Every morning the owner sees a trustworthy digest, a deadline-safe task/calendar
 - [~] **SPINE** — Atlas orchestrator, the Wire, Steward + the Vault, the Codex, Cloudflare project, Google + GitHub OAuth (Phase 0) — *code-complete 2026-06-05; owner go-live gates pending (OAuth round-trips, Secrets Store seed, Obsidian bridge, R2)*
 - [~] **CORE** — strictly-sequential morning chain Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault (Phase 1, with the MVP) — *code-complete + review-remediated 2026-06-05; owner go-live gates pending (baseline, miss-review, AI-Gateway ceilings, live smoke)*
 - [x] **WEEKLY** — Scout, Headhunter (feeds Forge), Flagger (event-driven incidents + self-watchdog) (Phase 2) — *code-complete + review-remediated 2026-06-06; verified passed (9/9 must-haves, 477 tests). 28 adversarial-review findings (5 high) fixed in gap closure. Owner go-live gates shared with CORE.*
-- [ ] **CAPTURE** — Echo (audio, local daemon) → Archivist; Quill (screen autofill, local) (Phase 3)
-- [ ] **OUTWARD** — Usher (gated registration), Envoy (gated public posts), behind a mature confirmation-gate UX (Phase 4)
+- [x] **CAPTURE** — Echo (audio, local daemon) → Archivist; Quill (screen autofill, local) (Phase 3) — *code-complete + verified 2026-06-06; owner UAT/go-live pending*
+- [x] **OUTWARD** — Usher (gated registration), Envoy (gated public posts), behind a mature confirmation-gate UX (Phase 4) — *code-complete + verified 2026-06-08 (12/12 must-haves); code review found + fixed 2 blockers (gate→Envoy wiring, Sundial removal authorization) + 5 warnings; 5 live owner go-live round-trips pending (Secrets Store seed, Playwright install, Google OAuth, GitHub App grant)*
 - [ ] **META** — Switchboard (design-time capability router), Librarian (prompt library) (Phase 5)
 
 ### Out of Scope
@@ -73,4 +73,4 @@ Every morning the owner sees a trustworthy digest, a deadline-safe task/calendar
 | **D7 — Switchboard is a design-time habit, not a deployed Worker** (M7 is a doc/process milestone, consulted ad hoc; does not run in the loop) | The roster already marks it "design-time only"; building a Worker for a thing that never fires in production is pure overhead | — Decided |
 
 ---
-*Last updated: 2026-06-06 — WEEKLY (Phase 2) verified complete after adversarial review + gap closure; SPINE + CORE remain code-complete (owner go-live gates pending); scope/decisions unchanged. Original bootstrap: 2026-06-01 (new-project-from-ingest).*
+*Last updated: 2026-06-08 — OUTWARD (Phase 4) verified complete (12/12 must-haves); code review caught + fixed 2 blockers (gate→Envoy onApproved wiring, Sundial applyRemoval authorization) + 5 warnings before sign-off. CAPTURE (Phase 3) also marked complete. Only Phase 5 (META) remains. SPINE + CORE + CAPTURE + OUTWARD are code-complete with owner go-live gates pending; scope/decisions unchanged. Original bootstrap: 2026-06-01 (new-project-from-ingest).*
