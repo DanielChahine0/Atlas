@@ -170,12 +170,12 @@ describe("drainOnce (serial drain, ack-after-attempt)", () => {
       return successOutcome(item.id);
     });
 
-    const fetchCloud = vi.fn(async (url: string) => {
+    const fetchCloud = vi.fn(async (url: string, init?: unknown) => {
       if (url.endsWith("/browser/poll"))
         return fakeResponse(true, { items: [itemA, itemB] });
       if (url.endsWith("/browser/ack")) {
-        const body = JSON.parse((arguments[1] as { body: string }).body);
-        order.push(`ack:${(body as { id: string }).id}`);
+        const body = JSON.parse((init as { body: string }).body) as { id: string };
+        order.push(`ack:${body.id}`);
         return fakeResponse(true, { acked: true });
       }
       return fakeResponse(false, {}, 404);
