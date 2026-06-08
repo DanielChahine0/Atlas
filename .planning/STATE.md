@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 4 UI-SPEC approved
-last_updated: "2026-06-08T13:47:55.378Z"
+last_updated: "2026-06-08T13:55:11.660Z"
 last_activity: 2026-06-08
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 36
-  completed_plans: 30
+  completed_plans: 31
   percent: 67
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 ## Current Position
 
 Phase: 04 (outward-gated) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-06-08
 Next action: Plan Phase 4 (Outward/gated — Usher, Envoy) with `/gsd-plan-phase 4`. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; Phase-3 capture gates above; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
@@ -85,6 +85,7 @@ Milestone progress (phases): [███████░░░] 67% — 4 of 6 pha
 | Phase 03-capture-local P05 | 180 | 2 tasks | 11 files |
 | Phase 03-capture-local P06 | 45 | 2 tasks | 9 files |
 | Phase 04-outward-gated P01 | 45 | 3 tasks | 15 files |
+| Phase 04-outward-gated P02 | 20m | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,8 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase ?]: Herald.weekly() entrypoint + heartbeat on daily+weekly success + herald:weekly digest event for 16:30 Vault build
 - [Phase ?]: 02-07: triggers.crons lists only the active EDT form per ET slot; the scheduled() switch carries dual EDT/EST cases so the Nov DST hand-edit only touches wrangler crons (listing both forms would double-fire)
 - [Phase ?]: 02-07: Steward default export is now a WorkerEntrypoint hosting the queue() consumer (delegated verbatim) + weeklyReviewBuild() RPC — Steward remains the sole atlas-wire consumer (Pillar 1)
+- [Phase ?]: Added mintTokenForUse() to mcp-github for server-side GitHub REST calls while preserving T-00-32 token-containment invariant
+- [Phase ?]: Used Zod raw shapes for MCP SDK 1.29.0 registerTool() inputSchema — JSON Schema objects rejected
 
 ### Pending Todos
 
@@ -173,6 +176,6 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ## Session Continuity
 
-Last session: 2026-06-08T13:47:55.370Z
+Last session: 2026-06-08T13:55:04.052Z
 Stopped at: Phase 4 UI-SPEC approved
 Resume file: None
