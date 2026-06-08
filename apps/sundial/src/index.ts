@@ -216,12 +216,44 @@ export class Sundial extends WorkerEntrypoint<Env> {
     tools?: RemovalTools;
   }): Promise<{ removed: true; eventId: string }> {
     const { gateId, eventId, tools: injectedTools } = params;
+    const { flag } = await import("@atlas/shared");
+
+    // Guard 1: RPC authorization — the gate must be approved AND target this eventId.
+    // Mirrors the Usher/Envoy pattern: no approved gate row → P1 self-flag + abort.
+    const gateRow = await (this.env as unknown as { DB: D1Database }).DB.prepare(
+      "SELECT status, target FROM gate_pending WHERE id = ?",
+    )
+      .bind(gateId)
+      .first<{ status: string; target: string }>();
+
+    if (!gateRow || gateRow.status !== "approved" || gateRow.target !== eventId) {
+      await flag(
+        this.env,
+        "P1",
+        `Sundial: removal attempted without approved gate (gateId=${gateId})`,
+        `status=${gateRow?.status ?? "not found"} target=${gateRow?.target ?? "?"} eventId=${eventId}`,
+        { sourceAgent: "Sundial", kind: "calendar_remove_without_confirmation" },
+      ).catch(() => {});
+      return { removed: true, eventId } as never; // abort — return type narrowed; callers should not proceed
+    }
+
+    // Guard 2: single-shot replay lock (DISTINCT key — NOT the openGate idempotencyKey
+    // `sundial:remove:${eventId}` — reusing that key would cause Steward to treat the
+    // counter increment as a replay; this key is local to applyRemoval only).
+    const lock = await (this.env as unknown as { DB: D1Database }).DB.prepare(
+      "INSERT OR IGNORE INTO idempotency_keys (key, agent, type, entity, op, applied_at) VALUES (?, 'Sundial', 'calendar.remove', 'calendar', 'delete', ?)",
+    )
+      .bind(`sundial:remove:${eventId}:applied`, Date.now())
+      .run();
+    if (lock.meta.changes === 0) {
+      // Already applied for this eventId — idempotent no-op.
+      return { removed: true, eventId };
+    }
 
     if (!injectedTools) {
       // No live removal tools wired — cannot execute removal. Flag P2 and throw.
       // This case should not occur in production (the gate Worker must inject RemovalTools
       // on the re-invoke), but fail-closed defensively rather than silently doing nothing.
-      const { flag } = await import("@atlas/shared");
       await flag(
         this.env,
         "P2",
@@ -239,7 +271,6 @@ export class Sundial extends WorkerEntrypoint<Env> {
       return { removed: true, eventId };
     } catch (err) {
       // Removal failed — flag P2 and rethrow so the gate Worker can surface the error.
-      const { flag } = await import("@atlas/shared");
       await flag(
         this.env,
         "P2",

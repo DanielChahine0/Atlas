@@ -211,42 +211,78 @@ describe("gate-retrofit — openGate writes gate_pending row per propose-removal
   });
 });
 
+/** Seed an approved gate_pending row for Sundial (to satisfy the new RPC-authorization guard). */
+async function seedApprovedSundialGate(gateId: string, eventId: string): Promise<void> {
+  await db.prepare(
+    `INSERT OR IGNORE INTO gate_pending
+       (id, agent, action, target, artifact, edited_artifact, status, decision,
+        scope_used, idempotency_key, token_hash, expires_at, flag_id, created_at, updated_at)
+     VALUES (?, 'Sundial', 'calendar.remove', ?, '{}', NULL, 'approved', 'approved',
+             'calendar.events', ?, 'fakehash', ?, NULL, ?, ?)`,
+  )
+    .bind(gateId, eventId, `sundial:remove:${eventId}`, Date.now() + 86400000, Date.now(), Date.now())
+    .run();
+}
+
+/** Seed a pending (not approved) gate_pending row for Sundial. */
+async function seedPendingSundialGate(gateId: string, eventId: string): Promise<void> {
+  await db.prepare(
+    `INSERT OR IGNORE INTO gate_pending
+       (id, agent, action, target, artifact, edited_artifact, status, decision,
+        scope_used, idempotency_key, token_hash, expires_at, flag_id, created_at, updated_at)
+     VALUES (?, 'Sundial', 'calendar.remove', ?, '{}', NULL, 'pending', 'pending',
+             'calendar.events', ?, 'fakehash', ?, NULL, ?, ?)`,
+  )
+    .bind(gateId, eventId, `sundial:remove:${eventId}-pend`, Date.now() + 86400000, Date.now(), Date.now())
+    .run();
+}
+
 describe("gate-retrofit — applyRemoval() re-invoke entrypoint (gated delete only)", () => {
   it("applyRemoval calls removeEvent with the given eventId on gate re-invoke", async () => {
     const testEnv = makeSundialEnv();
     const sundial = new Sundial({} as ExecutionContext, testEnv);
+    // Seed the approved gate row so the new RPC-authorization guard passes.
+    const gateId = `gate-ok-${Date.now()}`;
+    const eventId = `ev-remove-me-${Date.now()}`;
+    await seedApprovedSundialGate(gateId, eventId);
 
     const removed: string[] = [];
     const removalTools = {
-      removeEvent: vi.fn(async (eventId: string) => {
-        removed.push(eventId);
+      removeEvent: vi.fn(async (id: string) => {
+        removed.push(id);
       }),
     };
 
     const result = await sundial.applyRemoval({
-      gateId: "gate-ok",
-      eventId: "ev-remove-me",
+      gateId,
+      eventId,
       tools: removalTools,
     });
 
-    expect(result).toEqual({ removed: true, eventId: "ev-remove-me" });
+    expect(result).toEqual({ removed: true, eventId });
     expect(removalTools.removeEvent).toHaveBeenCalledOnce();
-    expect(removalTools.removeEvent).toHaveBeenCalledWith("ev-remove-me");
-    expect(removed).toEqual(["ev-remove-me"]);
+    expect(removalTools.removeEvent).toHaveBeenCalledWith(eventId);
+    expect(removed).toEqual([eventId]);
   });
 
   it("applyRemoval throws and flags P2 when no tools injected (fail-closed — no silent no-op)", async () => {
     const testEnv = makeSundialEnv();
     const sundial = new Sundial({} as ExecutionContext, testEnv);
+    const gateId = `gate-no-tools-${Date.now()}`;
+    const eventId = `ev-orphan-${Date.now()}`;
+    await seedApprovedSundialGate(gateId, eventId);
 
     await expect(
-      sundial.applyRemoval({ gateId: "gate-no-tools", eventId: "ev-orphan" }),
+      sundial.applyRemoval({ gateId, eventId }),
     ).rejects.toThrow("no removal tools provided");
   });
 
   it("applyRemoval flags P2 and rethrows when removeEvent fails (fail-closed)", async () => {
     const testEnv = makeSundialEnv();
     const sundial = new Sundial({} as ExecutionContext, testEnv);
+    const gateId = `gate-fail-${Date.now()}`;
+    const eventId = `ev-fail-${Date.now()}`;
+    await seedApprovedSundialGate(gateId, eventId);
 
     const failingTools = {
       removeEvent: vi.fn(async (_eventId: string) => {
@@ -256,12 +292,102 @@ describe("gate-retrofit — applyRemoval() re-invoke entrypoint (gated delete on
 
     await expect(
       sundial.applyRemoval({
-        gateId: "gate-fail",
-        eventId: "ev-fail",
+        gateId,
+        eventId,
         tools: failingTools,
       }),
     ).rejects.toThrow("Google API 403 Forbidden");
 
     expect(failingTools.removeEvent).toHaveBeenCalledOnce();
+  });
+
+  // CR-02: failure-path — non-approved gate yields P1 flag and NO removeEvent call
+  it("CR-02: pending gate (not approved) → P1 flag emitted, removeEvent NOT called", async () => {
+    const testEnv = makeSundialEnv();
+    const sundial = new Sundial({} as ExecutionContext, testEnv);
+    const gateId = `gate-pending-${Date.now()}`;
+    const eventId = `ev-pending-${Date.now()}`;
+    await seedPendingSundialGate(gateId, eventId);
+
+    const removeSpy = vi.fn(async () => {});
+
+    // applyRemoval returns without calling removeEvent
+    await sundial.applyRemoval({ gateId, eventId, tools: { removeEvent: removeSpy } });
+
+    expect(removeSpy).not.toHaveBeenCalled();
+
+    const incidentsSend = (testEnv.INCIDENTS as unknown as { send: ReturnType<typeof vi.fn> }).send;
+    const p1Calls = (incidentsSend.mock.calls as unknown[][]).filter(
+      (c) => (c[0] as { severity_hint?: string }).severity_hint === "P1",
+    );
+    expect(p1Calls.length).toBeGreaterThan(0);
+  });
+
+  // CR-02: failure-path — no gate row at all → P1 flag, no removeEvent
+  it("CR-02: non-existent gate → P1 flag emitted, removeEvent NOT called", async () => {
+    const testEnv = makeSundialEnv();
+    const sundial = new Sundial({} as ExecutionContext, testEnv);
+
+    const removeSpy = vi.fn(async () => {});
+
+    await sundial.applyRemoval({
+      gateId: "nonexistent-gate-id",
+      eventId: "ev-nonexistent",
+      tools: { removeEvent: removeSpy },
+    });
+
+    expect(removeSpy).not.toHaveBeenCalled();
+
+    const incidentsSend = (testEnv.INCIDENTS as unknown as { send: ReturnType<typeof vi.fn> }).send;
+    const p1Calls = (incidentsSend.mock.calls as unknown[][]).filter(
+      (c) => (c[0] as { severity_hint?: string }).severity_hint === "P1",
+    );
+    expect(p1Calls.length).toBeGreaterThan(0);
+  });
+
+  // CR-02: failure-path — gate target mismatch → P1 flag, no removeEvent
+  it("CR-02: approved gate with mismatched target → P1 flag emitted, removeEvent NOT called", async () => {
+    const testEnv = makeSundialEnv();
+    const sundial = new Sundial({} as ExecutionContext, testEnv);
+    const gateId = `gate-mismatch-${Date.now()}`;
+    // The gate targets "correct-event", but we call applyRemoval with "wrong-event"
+    await seedApprovedSundialGate(gateId, "correct-event");
+
+    const removeSpy = vi.fn(async () => {});
+
+    await sundial.applyRemoval({ gateId, eventId: "wrong-event", tools: { removeEvent: removeSpy } });
+
+    expect(removeSpy).not.toHaveBeenCalled();
+
+    const incidentsSend = (testEnv.INCIDENTS as unknown as { send: ReturnType<typeof vi.fn> }).send;
+    const p1Calls = (incidentsSend.mock.calls as unknown[][]).filter(
+      (c) => (c[0] as { severity_hint?: string }).severity_hint === "P1",
+    );
+    expect(p1Calls.length).toBeGreaterThan(0);
+  });
+
+  // CR-02: replay — second applyRemoval with same gate does NOT call removeEvent twice
+  it("CR-02: replay — second applyRemoval with same approved gate is a no-op (removeEvent called once)", async () => {
+    const testEnv = makeSundialEnv();
+    const sundial = new Sundial({} as ExecutionContext, testEnv);
+    const gateId = `gate-replay-${Date.now()}`;
+    const eventId = `ev-replay-${Date.now()}`;
+    await seedApprovedSundialGate(gateId, eventId);
+
+    let removeCallCount = 0;
+    const removalTools = {
+      removeEvent: vi.fn(async () => {
+        removeCallCount += 1;
+      }),
+    };
+
+    // First call — should succeed
+    const first = await sundial.applyRemoval({ gateId, eventId, tools: removalTools });
+    // Second call — replay lock should prevent a second removeEvent
+    const second = await sundial.applyRemoval({ gateId, eventId, tools: removalTools });
+
+    expect(first).toEqual({ removed: true, eventId });
+    expect(second).toEqual({ removed: true, eventId });
+    expect(removeCallCount).toBe(1); // only ONE actual remove
   });
 });
