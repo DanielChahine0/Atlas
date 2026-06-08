@@ -1,0 +1,81 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "gate",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // QUEUES — Pillar 1 critical section (read carefully):
+  //   * PRODUCERS only — gate Worker is a Wire PRODUCER and INCIDENTS PRODUCER.
+  //   * gate does NOT consume atlas-wire (Pillar 1; Steward is the sole consumer).
+  //   * gate does NOT consume atlas-incidents (Flagger is the sole consumer).
+  //
+  // The guard-wire-consumer.js hook will hard-fail if atlas-wire appears in consumers.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 system-of-record — gate reads gate_pending / browser_action_outbox tables
+  // (migration 0007). Positional ? binds only (no named params).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // KV: config/flags (e.g. gate.confirm_base_url, gates.timeout_usher_ms, etc.).
+  // NEVER secrets, NEVER counters.
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }
+  ],
+
+  // Secrets Store — GATE_CONFIRM_TOKEN read via async get().
+  // NEVER in [vars], KV, Vault, Codex, audit_log, or any tracked file.
+  // store_id placeholder: replace <atlas-store-id> with the real Cloudflare Secrets
+  // Store ID after provisioning (same store as mcp-google/atlas/flagger).
+  // NOTE: NTFY_TOPIC/NTFY_TOKEN are intentionally OMITTED here — the confirm-push
+  // SEND lives in openGate() (04-01), called by the AGENTS (Usher/Envoy/Sundial).
+  // apps/gate is the RECIPIENT side; it never sends the push.
+  "secrets_store_secrets": [
+    { "binding": "GATE_CONFIRM_TOKEN", "store_id": "<atlas-store-id>", "secret_name": "gate-confirm-token" }
+  ],
+
+  // [vars] — plaintext non-secrets only.
+  // GATE_BASE_URL: stable confirm-page base URL (e.g. https://gate.atlas.workers.dev).
+  // Used by service-binding callers that open gates to build the confirm link.
+  "vars": {
+    "GATE_BASE_URL": "https://gate.atlas.workers.dev"
+  },
+
+  // Service bindings — gate re-invokes the owning agent on approval via these bindings.
+  // The methods are defined in 04-05 (Sundial), 04-06 (Usher), 04-07 (Envoy).
+  // Wave-ordering note: these methods are stubbed-callable now; absent binding at runtime
+  // flags P2 and records outcome='error' (no silent success).
+  "services": [
+    { "binding": "USHER", "service": "usher" },
+    { "binding": "ENVOY", "service": "envoy" },
+    { "binding": "SUNDIAL", "service": "sundial" }
+  ],
+
+  "observability": { "enabled": true },
+
+  // Expiry-sweep cron — hourly so a 24h Usher gate or 7d Envoy gate expires within
+  // an hour of its deadline. This cron is NOT owner-local-time-sensitive (it runs UTC
+  // comparison against epoch ms stored in gate_pending.expires_at), so no DST forms needed.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+
+  "env": {
+    // Staging fires NO crons (CLAUDE.md constraint).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}
