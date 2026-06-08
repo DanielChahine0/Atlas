@@ -495,6 +495,72 @@ describe("browser", () => {
     expect(resp.status).toBe(404);
   });
 
+  // WR-05: outcome.id mismatch → 400, row unchanged
+  it("WR-05: POST /browser/ack with outcome.id != id returns 400 and leaves row unchanged", async () => {
+    const db = dbEnv().DB;
+    const { row } = await seedGate({ agent: "Usher" });
+    const outboxId = await seedBrowserAction(row.id, "claimed");
+
+    // Build a fake bearer env
+    const fakeToken = "wr05-test-token";
+    const testEnvAck = {
+      ...(dbEnv() as unknown as Record<string, unknown>),
+      GATE_CONFIRM_TOKEN: { get: async () => fakeToken },
+    } as unknown as Parameters<typeof gateWorker.fetch>[1];
+
+    const ackRequest = new Request("https://gate.example.com/browser/ack", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${fakeToken}`,
+      },
+      // outcome.id is a DIFFERENT id — must be rejected
+      body: JSON.stringify({ id: outboxId, outcome: { id: "DIFFERENT-ID", status: "success" } }),
+    });
+
+    const resp = await gateWorker.fetch(ackRequest, testEnvAck);
+    expect(resp.status).toBe(400);
+
+    // Row must remain 'claimed' (unchanged)
+    const rowAfter = await db
+      .prepare("SELECT status FROM browser_action_outbox WHERE id = ?")
+      .bind(outboxId)
+      .first<{ status: string }>();
+    expect(rowAfter?.status).toBe("claimed");
+  });
+
+  // WR-05: null outcome → 400
+  it("WR-05: POST /browser/ack with null outcome returns 400", async () => {
+    const db = dbEnv().DB;
+    const { row } = await seedGate({ agent: "Usher" });
+    const outboxId = await seedBrowserAction(row.id, "claimed");
+
+    const fakeToken = "wr05-null-test-token";
+    const testEnvAck = {
+      ...(dbEnv() as unknown as Record<string, unknown>),
+      GATE_CONFIRM_TOKEN: { get: async () => fakeToken },
+    } as unknown as Parameters<typeof gateWorker.fetch>[1];
+
+    const ackRequest = new Request("https://gate.example.com/browser/ack", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${fakeToken}`,
+      },
+      body: JSON.stringify({ id: outboxId, outcome: null }),
+    });
+
+    const resp = await gateWorker.fetch(ackRequest, testEnvAck);
+    expect(resp.status).toBe(400);
+
+    // Row must remain 'claimed' (unchanged)
+    const rowAfter = await db
+      .prepare("SELECT status FROM browser_action_outbox WHERE id = ?")
+      .bind(outboxId)
+      .first<{ status: string }>();
+    expect(rowAfter?.status).toBe("claimed");
+  });
+
   // WR-02: ack of a Usher event_fill_submit 'done' row → USHER.onOutcome called
   it("WR-02: ack of Usher event_fill_submit claimed row calls USHER.onOutcome with correct eventId/eventUrl/outcome", async () => {
     const db = dbEnv().DB;

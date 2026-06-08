@@ -357,7 +357,23 @@ export default {
           return new Response("Bad Request: `id` must be a string", { status: 400 });
         }
         id = (body as Record<string, unknown>).id as string;
-        outcome = (body as Record<string, unknown>).outcome as BrowserActionOutcome;
+        const rawOutcome = (body as Record<string, unknown>).outcome;
+        // WR-05: validate outcome is a non-null object
+        if (typeof rawOutcome !== "object" || rawOutcome === null) {
+          return new Response(
+            "Bad Request: `outcome` must be a non-null object",
+            { status: 400 },
+          );
+        }
+        // WR-05: validate outcome.id matches the row id to prevent mismatched payloads
+        const outcomeId = (rawOutcome as Record<string, unknown>).id;
+        if (outcomeId !== id) {
+          return new Response(
+            "Bad Request: `outcome.id` must match `id`",
+            { status: 400 },
+          );
+        }
+        outcome = rawOutcome as BrowserActionOutcome;
       } catch {
         return new Response("Bad Request: malformed JSON", { status: 400 });
       }
