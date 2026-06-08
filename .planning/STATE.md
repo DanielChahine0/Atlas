@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: "Phase 4 plan 04-02 (mcp-github PR tools) — Task 1 shipped (commit c6be210); Task 2 = owner checkpoint (grant GitHub App pull_requests:write)"
-last_updated: "2026-06-08T17:18:39.355Z"
+status: verifying
+stopped_at: "Phase 4 plan 04-07 (Envoy) complete — all 7 plans done; phase ready for verification"
+last_updated: "2026-06-08T17:38:31.346Z"
 last_activity: 2026-06-08
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 36
-  completed_plans: 35
-  percent: 67
+  completed_plans: 36
+  percent: 83
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 
 Phase: 04 (outward-gated) — EXECUTING
 Plan: 7 of 7 (completed 04-04)
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-08
 Next action: Execute 04-05 (Sundial gate retrofit) → 04-06 (Usher) → 04-07 (Envoy) with `/gsd-execute-phase 4`. Blocking owner checkpoint for 04-02: grant the GitHub App `pull_requests: write` permission (GitHub → Settings → Developer settings → GitHub Apps → Atlas) + re-accept on the scoped repos, so Envoy can fire a live PR. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; close the Phase-0 owner gates; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
 
@@ -91,6 +91,7 @@ Milestone progress: plans [█████████████████�
 | Phase 04-outward-gated P03 | 30m | 2 tasks | 8 files |
 | Phase 04-outward-gated P04 | 7m | 2 tasks | 8 files |
 | Phase 04-outward-gated P06 | 45m | 2 tasks | 10 files |
+| Phase 04-outward-gated P07 | 10m | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -143,6 +144,7 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase 4]: 04-03: apps/gate Worker is the single stable-hostname confirm surface — fail-closed POST /confirm (decideGate commits BEFORE reinvokeAgent; re-invoke failure → P2 flag, never silent success); Bearer-gated /browser/poll+/ack with constant-time GATE_CONFIRM_TOKEN; hourly sweep cron; NTFY bindings intentionally absent (push send lives in openGate on the AGENTS). SELF.scheduled() in vitest-pool-workers requires direct handler import + fake ScheduledController, not ExecutionContext (matched flagger self-tick pattern).
 - [Phase 4]: 04-02: mcp-github gains github_create_branch + github_open_pr (registerTool with Zod raw shapes — MCP SDK 1.29.0 rejects JSON-Schema inputSchema; added zod@^4.4.3 to the mcp-github package), both gated by github.write and minting {contents:write, metadata:read, pull_requests:write}; mintTokenForUse() returns the opaque ghs_ token for server-side REST calls but NEVER returns it to the MCP client (extends T-00-32 containment). Task 2 (owner grants the App pull_requests:write permission + re-accepts on scoped repos) is a blocking human checkpoint before Envoy fires a live PR. 10 mcp-github tests green.
 - [Phase 4]: 04-04: daemon browser-action runner — browser-drain.ts mirrors drain.ts exactly (serial for...of, ack-after-attempt, per-item try/catch→error-outcome→ack→continue, loadBrowserConfig fail-loud on ATLAS_BROWSER_PROFILE missing — never defaults the path). browser-runner.ts: Usher event_fill_submit enforces captcha-BEFORE-fill, payment/sold_out/login_wall-BEFORE-submit, requires non-empty scraped confirmation # (hard_stop 'no_confirmation' if empty — D4-09). Envoy linkedin_prefill/x_prefill fills and returns WITHOUT submitting (NO Post/Save click — D4-08); fill timeout → error (keep draft — D4-13). MockPage injectable dep: no real Chromium in unit tests. Types imported from packages/gate/src/schema.ts via relative path (daemon outside pnpm workspace). playwright ambient declaration in node-ambient.d.ts allows tsc to compile before go-live Chromium install. 38/38 daemon tests green.
+- [Phase 4]: 04-07: apps/envoy WorkerEntrypoint (OUTWARD-02) — fans ONE intent into 4 Codex-sourced literal drafts (claudeFor(env,"Envoy") Sonnet tier through AI Gateway), opens ONE ~7d gate keyed 'envoy:<slug>' (slug-only, D4-15 no-op replay), NTFY_TOPIC/NTFY_TOKEN passed through so openGate dispatches the confirm push. onApproved(): three security guards (RPC authorization: gate_pending.status='approved' before any publish → P1 flag on failure; gate-replay single-shot: per-target INSERT OR IGNORE lock 'envoy:<slug>:<target>:published'; distinct idempotency keys: Wire key 'envoy:<slug>' is the Steward ledger key, separate from per-target locks). GitHub targets (github_readme/portfolio): agent-completes via McpGitHubBinding (token server-side, T-04-40). LinkedIn/X: enqueuePrefill() → *_prefill browser_action_outbox rows, NEVER auto-post (D4-08, Pillar 2). Partial fan-out → P2 with exact succeeded/failed sets. Wire event idempotencyKey='envoy:<slug>' (Steward dedup). Portfolio repo/path read from CONFIG at runtime (D4-14, never hard-coded). 18/18 workerd tests green.
 
 ### Pending Todos
 
@@ -190,6 +192,6 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ## Session Continuity
 
-Last session: 2026-06-08T17:18:39.348Z
-Stopped at: Phase 4 plan 04-02 (mcp-github PR tools) — Task 1 shipped (commit c6be210); Task 2 = owner checkpoint (grant GitHub App pull_requests:write)
+Last session: 2026-06-08T17:26:30Z
+Stopped at: Phase 4 plan 04-07 (Envoy) complete — all 7 plans done; phase ready for verification
 Resume file: None

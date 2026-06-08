@@ -17,7 +17,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] **Phase 1: Core Loop / Morning Pipeline** - Strictly-sequential Filer → Herald → Forge → Sundial → Compass on one 07:45 cron via a Workflow, all feeding Steward → the Vault. _[MVP — the flagship]_ (code-complete + review-remediated 2026-06-05; owner go-live gates pending)
 - [x] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog). (completed 2026-06-05)
 - [x] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first. (completed 2026-06-06)
-- [ ] **Phase 4: Outward (Gated)** - Usher (gated registration), Envoy (gated public posts); confirmation-gate UX is the real work, gate hardest.
+- [x] **Phase 4: Outward (Gated)** - Usher (gated registration), Envoy (gated public posts); confirmation-gate UX is the real work, gate hardest. (completed 2026-06-08)
 - [ ] **Phase 5: Meta / Polish** - Switchboard (design-time capability router), Librarian (prompt library).
 
 ## Phase Details
@@ -163,7 +163,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 
 **Wave 3** *(the outward agents — parallel, each owns its own dir; blocked on the gate Worker + daemon + mcp-github)*
 - [x] 04-06-PLAN.md — `apps/usher` (OUTWARD-01): on-demand gated registration, price disclosed, ~24h gate, auto-submit free path, captcha/payment hard stops, Calendar add + events-registered++ only on a scraped confirmation #
-- [ ] 04-07-PLAN.md — `apps/envoy` (OUTWARD-02): fan one intent into 4 Codex-sourced drafts, ~7d gate per-target approve/edit/skip, GitHub README+PR (agent), LinkedIn/X prefill (owner clicks Post), Brand counters once per slug
+- [x] 04-07-PLAN.md — `apps/envoy` (OUTWARD-02): fan one intent into 4 Codex-sourced drafts, ~7d gate per-target approve/edit/skip, GitHub README+PR (agent), LinkedIn/X prefill (owner clicks Post), Brand counters once per slug
 
 **Cross-cutting constraints** (truths appearing in 2+ plans):
 - Steward stays the SOLE `atlas-wire` consumer (Pillar 1); the gate Worker, Usher, and Envoy are Wire PRODUCERS only and write Calendar/GitHub DIRECTLY — no new `atlas-wire` consumer (a second is a hard CI failure).
@@ -198,5 +198,5 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 1. Core Loop / Morning Pipeline | 8/8 | Complete   | 2026-06-05 |
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
-| 4. Outward (Gated) | 6/7 | In Progress|  |
+| 4. Outward (Gated) | 7/7 | Complete   | 2026-06-08 |
 | 5. Meta / Polish | 0/TBD | Not started | - |
