@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Phase 4 plan 04-04 (daemon browser-action runner) — complete (38 tests green, tsc clean)"
-last_updated: "2026-06-08T16:54:13.237Z"
+stopped_at: "Phase 4 plan 04-02 (mcp-github PR tools) — Task 1 shipped (commit c6be210); Task 2 = owner checkpoint (grant GitHub App pull_requests:write)"
+last_updated: "2026-06-08T17:05:01.723Z"
 last_activity: 2026-06-08
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 36
-  completed_plans: 33
+  completed_plans: 34
   percent: 67
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 ## Current Position
 
 Phase: 04 (outward-gated) — EXECUTING
-Plan: 5 of 7 (completed 04-04)
+Plan: 6 of 7 (completed 04-04)
 Status: Ready to execute
 Last activity: 2026-06-08
 Next action: Execute 04-05 (Sundial gate retrofit) → 04-06 (Usher) → 04-07 (Envoy) with `/gsd-execute-phase 4`. Blocking owner checkpoint for 04-02: grant the GitHub App `pull_requests: write` permission (GitHub → Settings → Developer settings → GitHub Apps → Atlas) + re-accept on the scoped repos, so Envoy can fire a live PR. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; close the Phase-0 owner gates; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
@@ -189,6 +189,6 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ## Session Continuity
 
-Last session: 2026-06-08T16:54:13.230Z
+Last session: 2026-06-08T17:05:01.715Z
 Stopped at: Phase 4 plan 04-02 (mcp-github PR tools) — Task 1 shipped (commit c6be210); Task 2 = owner checkpoint (grant GitHub App pull_requests:write)
 Resume file: None
