@@ -388,6 +388,63 @@ describe("fail-closed", () => {
   });
 });
 
+// ─── reinvoke-envoy: CR-01 — gate approval calls onApproved (not publish) ──────
+
+describe("reinvoke-envoy", () => {
+  it("approve Envoy gate calls onApproved (not publish) with the correct params", async () => {
+    const { token, row } = await seedGate({
+      agent: "Envoy",
+      action: "brand.publish",
+      target: "my-project",
+      artifact: JSON.stringify({ projectSlug: "my-project", approvedTargets: ["linkedin"] }),
+      idempotencyKey: `envoy:reinvoke-test-${Date.now()}-${Math.random()}`,
+    });
+
+    // Direct invocation of the worker with an injected ENVOY test-double.
+    const onApprovedCalls: Array<Record<string, unknown>> = [];
+    const publishCalls: Array<Record<string, unknown>> = [];
+    const testEnvoy = {
+      onApproved: async (params: Record<string, unknown>) => {
+        onApprovedCalls.push(params);
+        return {};
+      },
+      publish: async (params: Record<string, unknown>) => {
+        publishCalls.push(params);
+        return {};
+      },
+    };
+
+    const testEnvFull = {
+      ...(dbEnv() as unknown as Record<string, unknown>),
+      ENVOY: testEnvoy,
+      GATE_CONFIRM_TOKEN: undefined, // not needed for /confirm (uses sha256 path)
+    };
+
+    // Manufacture the POST /confirm request with same-origin headers
+    const request = new Request(`https://gate.example.com/confirm?t=${token}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "https://gate.example.com",
+        "sec-fetch-site": "same-origin",
+      },
+      body: "decision=approve",
+    });
+
+    await gateWorker.fetch(request, testEnvFull as Parameters<typeof gateWorker.fetch>[1]);
+
+    // The gate should have called onApproved, NOT publish
+    expect(onApprovedCalls).toHaveLength(1);
+    expect(publishCalls).toHaveLength(0);
+
+    // Check that onApproved received the correct params
+    const call = onApprovedCalls[0]!;
+    expect(call.gateId).toBe(row.id);
+    expect(call.projectSlug).toBe("my-project");
+    expect(call.approvedTargets).toEqual(["linkedin"]);
+  });
+});
+
 // ─── browser: /browser/poll and /browser/ack ─────────────────────────────────
 
 describe("browser", () => {

@@ -66,7 +66,7 @@ export interface Env {
   };
   /** Service binding to apps/envoy — re-invoked on gate approval for Envoy actions. */
   ENVOY?: {
-    publish(params: {
+    onApproved(params: {
       gateId: string;
       projectSlug: string;
       approvedTargets: string[];
@@ -161,11 +161,11 @@ async function reinvokeAgent(
         } catch {
           // fallback
         }
-        await env.ENVOY.publish({
+        await env.ENVOY.onApproved({
           gateId: row.id,
           projectSlug: artifact.projectSlug ?? row.target,
           approvedTargets: artifact.approvedTargets ?? [],
-          editedArtifact: editedArtifact ?? row.edited_artifact,
+          editedArtifact: editedArtifact ?? row.edited_artifact ?? null,
         });
         return true;
       }
