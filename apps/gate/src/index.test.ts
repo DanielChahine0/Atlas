@@ -13,10 +13,11 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { env, createExecutionContext, waitOnExecutionContext, SELF } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { openGate, decideGate } from "@atlas/gate";
 import { sha256 } from "@atlas/gate/auth";
 import type { GateOptions, GatePendingRow } from "@atlas/gate/schema";
+import gateWorker from "./index.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -152,10 +153,10 @@ describe("expire", () => {
     // Status is 'pending' initially (sweep hasn't run yet)
     expect(before?.status).toBe("pending");
 
-    // Fire the scheduled cron — the Worker's scheduled() handler runs sweepExpired
-    const ctx = createExecutionContext();
-    await SELF.scheduled({ cron: "0 * * * *", scheduledTime: Date.now() }, ctx);
-    await waitOnExecutionContext(ctx);
+    // Fire the scheduled cron — call the handler directly (same pattern as flagger self-tick tests)
+    const fakeController = { scheduledTime: Date.now(), cron: "0 * * * *", noRetry: () => {} } as ScheduledController;
+    const testEnv = dbEnv() as unknown as Parameters<typeof gateWorker.scheduled>[1];
+    await gateWorker.scheduled(fakeController, testEnv);
 
     // After sweep, the gate should be 'expired'
     const after = await dbEnv().DB.prepare(
