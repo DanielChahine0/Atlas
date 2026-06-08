@@ -1,0 +1,71 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "envoy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Pillar 1: Envoy is a Wire PRODUCER only — NO consumers block on atlas-wire.
+  // Envoy is on-demand (invoked by Atlas via service binding) — NO top-level cron.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE", "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+
+  // D1 system-of-record — Envoy reads idempotency_keys, gate_pending,
+  // and writes browser_action_outbox (linkedin_prefill/x_prefill) + idempotency_keys.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "e7fee76c-2e3d-486e-8a8a-fd1aec6a5af3",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // KV — CONFIG holds Envoy knobs:
+  //   gates.timeout_envoy_ms  — gate TTL (default 604800000 = 7d)
+  //   envoy.portfolio_repo    — portfolio GitHub repo (owner/repo) — D4-14
+  //   envoy.portfolio_path    — portfolio file path in the repo — D4-14
+  //   envoy.profile_repo      — GitHub profile README repo (owner/repo) — D4-14
+  //   envoy.portfolio_base_branch — base branch for portfolio PRs (default: "main")
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "296ee0ec788542c68bb01a90e46c6cf2" }],
+
+  // Workers AI gateway routing — Envoy uses Claude (Sonnet tier per CLAUDE.md) for
+  // drafting literal artifacts from the Codex.
+  "ai": { "binding": "AI" },
+
+  // Service bindings:
+  //   GATE      — apps/gate (confirm page + browser_action_outbox transport)
+  //   MCP_GITHUB — mcp-github (github_put_file, github_create_branch, github_open_pr)
+  "services": [
+    { "binding": "GATE", "service": "gate" },
+    { "binding": "MCP_GITHUB", "service": "mcp-github" }
+  ],
+
+  // Secrets Store — NTFY_TOPIC/NTFY_TOKEN passed through to openGate so the confirm
+  // push can be dispatched (openGate 04-01 owns the send). Never read directly in Envoy.
+  // Replace <atlas-store-id> with the real Cloudflare Secrets Store ID at go-live.
+  "secrets_store_secrets": [
+    { "binding": "NTFY_TOPIC", "store_id": "<atlas-store-id>", "secret_name": "ntfy-topic" },
+    { "binding": "NTFY_TOKEN", "store_id": "<atlas-store-id>", "secret_name": "ntfy-token" }
+  ],
+
+  // [vars] — plaintext non-secrets only.
+  // GATE_BASE_URL: confirm page base URL, passed to openGate as confirmBaseUrl.
+  "vars": {
+    "GATE_BASE_URL": "https://gate.atlas.workers.dev"
+  },
+
+  "observability": { "enabled": true },
+
+  // NO top-level triggers.crons — Envoy is on-demand only (no own production cron).
+  "env": {
+    "staging": {
+      // Staging fires NO crons (CLAUDE.md constraint).
+      "triggers": { "crons": [] }
+    }
+  }
+}

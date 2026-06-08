@@ -1,0 +1,27 @@
+{
+  "name": "@atlas/envoy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@atlas/codex": "workspace:*",
+    "@atlas/gate": "workspace:*",
+    "@atlas/model": "workspace:*",
+    "@atlas/shared": "workspace:*",
+    "@atlas/wire": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.13",
+    "@cloudflare/workers-types": "^4.20260425.0",
+    "vitest": "^4.1.8"
+  }
+}
