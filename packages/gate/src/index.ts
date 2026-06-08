@@ -320,7 +320,7 @@ export async function decideGate(
   row: GatePendingRow,
   decision: "approve" | "reject",
   editedArtifact: string | null,
-): Promise<void> {
+): Promise<boolean> {
   const now = Date.now();
   const terminalDecision = decision === "approve" ? "approved" : "rejected";
 
@@ -335,7 +335,7 @@ export async function decideGate(
 
   // meta.changes === 0 → the gate was already decided or expired → no-op (no second audit row)
   if (updateResult.meta.changes === 0) {
-    return;
+    return false;
   }
 
   // Step 2: UPDATE matched → insert the terminal audit_log row.
@@ -358,6 +358,10 @@ export async function decideGate(
       "ok",
     )
     .run();
+
+  // Return true: the status actually transitioned (UPDATE matched 1 row).
+  // Callers can use this to determine whether to proceed with agent re-invoke.
+  return true;
 }
 
 // ─── sweepExpired ─────────────────────────────────────────────────────────────

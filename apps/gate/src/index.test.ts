@@ -418,7 +418,7 @@ describe("reinvoke-envoy", () => {
       ...(dbEnv() as unknown as Record<string, unknown>),
       ENVOY: testEnvoy,
       GATE_CONFIRM_TOKEN: undefined, // not needed for /confirm (uses sha256 path)
-    };
+    } as unknown as Parameters<typeof gateWorker.fetch>[1];
 
     // Manufacture the POST /confirm request with same-origin headers
     const request = new Request(`https://gate.example.com/confirm?t=${token}`, {
@@ -431,7 +431,7 @@ describe("reinvoke-envoy", () => {
       body: "decision=approve",
     });
 
-    await gateWorker.fetch(request, testEnvFull as Parameters<typeof gateWorker.fetch>[1]);
+    await gateWorker.fetch(request, testEnvFull);
 
     // The gate should have called onApproved, NOT publish
     expect(onApprovedCalls).toHaveLength(1);

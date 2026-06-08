@@ -268,6 +268,27 @@ describe("fail-closed — decideGate rethrows on error; double-decide is no-op",
     expect(gateRow?.decision).toBe("approved");
   });
 
+  it("WR-03: decideGate returns true on a real transition, false on already-decided (no-op)", async () => {
+    const db = (env as unknown as { DB: D1Database }).DB;
+    const target = `wr03-bool-${Date.now()}`;
+    const record = await openGate(makeOpenEnv(), makeOpts({ target }));
+    const tokenHash = await sha256(record.plaintextToken);
+    const row = await getGate({ DB: db }, tokenHash);
+    expect(row).not.toBeNull();
+
+    // First decide: should return true (status transitioned pending → approved)
+    const firstResult = await decideGate(makeDecideEnv(), row!, "approve", null);
+    expect(firstResult).toBe(true);
+
+    // Second decide on the same row (now status='approved'): should return false (no-op)
+    const secondResult = await decideGate(makeDecideEnv(), row!, "reject", null);
+    expect(secondResult).toBe(false);
+
+    // Gate remains 'approved' (second decide was a no-op)
+    const gateRow = await getGateByIdRow(db, record.id);
+    expect(gateRow?.status).toBe("approved");
+  });
+
   it("decideGate rethrows when the D1 statement throws (fail-closed)", async () => {
     const badEnv = {
       DB: {

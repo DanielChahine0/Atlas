@@ -267,8 +267,10 @@ export default {
 
         // T-04-11: Commit gate decision BEFORE any side effect.
         // decideGate rethrows on D1 error → caller returns 500 → fail-closed.
+        // Returns true when the status actually transitioned; false on no-op (already-decided).
+        let transitioned: boolean;
         try {
-          await decideGate(env, row, decision, editedArtifact);
+          transitioned = await decideGate(env, row, decision, editedArtifact);
         } catch (err) {
           console.error("gate: decideGate failed", row.id, err);
           return authHtmlResponse(
@@ -277,19 +279,15 @@ export default {
           );
         }
 
-        // On approve: re-invoke the owning agent via service binding.
+        // On approve: re-invoke the owning agent via service binding ONLY when the
+        // status actually transitioned (WR-03: concurrent double-POST → only one re-invoke).
         // The gate decision is already committed. A failed re-invoke is non-fatal
         // (recorded as P2 flag) — we do NOT roll back the gate decision.
         if (decision === "approve") {
-          const reinvoked = await reinvokeAgent(env, row, editedArtifact);
-          if (reinvoked) {
-            return authHtmlResponse(renderOutcomePage("approved"));
-          } else {
-            // Re-invoke failed — gate is committed (approved), but side effect didn't run.
-            // Return the outcome page with a note (not 500 — the gate decision was recorded).
-            // The P2 flag alerts the owner to manually complete the action.
-            return authHtmlResponse(renderOutcomePage("approved"));
+          if (transitioned) {
+            await reinvokeAgent(env, row, editedArtifact);
           }
+          return authHtmlResponse(renderOutcomePage("approved"));
         }
 
         // On reject: no re-invoke, return rejected outcome
