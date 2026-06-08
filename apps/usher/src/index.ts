@@ -86,7 +86,10 @@ export type UsherStatus =
   | "already_registered"
   | "gate_opened"
   | "browser_action_enqueued"
-  | "outcome_handled";
+  | "already_enqueued"
+  | "gate_not_approved"
+  | "outcome_handled"
+  | "already_handled";
 
 export interface UsherResult {
   status: UsherStatus;
@@ -277,7 +280,7 @@ async function runContinuation(
     .first<{ status: string }>();
 
   if (!gateRow || gateRow.status !== "approved") {
-    // P1 self-flag: submit attempted without an approved gate row
+    // P1 self-flag: submit attempted without an approved gate row (T-04-29)
     await flag(
       env,
       "P1",
@@ -289,8 +292,29 @@ async function runContinuation(
         runId: date,
       },
     );
-    // Abort — no browser action, no counter
-    return { status: "browser_action_enqueued" }; // status is best-effort here; the flag is the signal
+    // Abort — no browser action, no counter. Return a DISCRIMINATED failure status
+    // (never a success-shaped value) so the caller can branch; the flag is the signal.
+    return { status: "gate_not_approved" };
+  }
+
+  // ── Replay guard (gate-replay protection, T-04-29) ──────────────────────────
+  // Atomically claim a single-shot enqueue lock BEFORE inserting the outbox row.
+  // An approved gate stays 'approved' permanently, so a re-fired approval callback
+  // could otherwise enqueue a SECOND browser action → double registration. The
+  // INSERT OR IGNORE on a distinct, event-scoped key is the atomic single-shot:
+  // exactly one continuation per event wins (meta.changes===1); replays no-op.
+  // NOTE: this key is DISTINCT from `usher:<eventId>:registered` (Steward's counter
+  // ledger key) — reusing that here would make Steward treat the increment as a
+  // replay and skip the counter bump.
+  const enqueueKey = `usher:${eventId}:enqueued`;
+  const enqueueLock = await env.DB.prepare(
+    "INSERT OR IGNORE INTO idempotency_keys (key, agent, type, entity, op, applied_at) VALUES (?, 'Usher', 'event.register', 'browser_action_outbox', 'append', ?)",
+  )
+    .bind(enqueueKey, Date.now())
+    .run();
+  if (enqueueLock.meta.changes === 0) {
+    // Already enqueued for this event (approval replay) — do not enqueue again.
+    return { status: "already_enqueued" };
   }
 
   // Resolve Codex registration fields (injected in tests)
@@ -388,6 +412,59 @@ export async function runOutcome(
   // ── Success with non-empty confirmation number ─────────────────────────────
   const confirmationNumber = outcome.confirmation_number!;
 
+  // ── Authorization (T-04-30): a confirmation-bearing success must correspond to a
+  //    REAL, owner-approved, completed gated browser action for this event. onOutcome
+  //    is a side-effecting RPC; without this check a caller could fabricate a
+  //    confirmation_number and trigger a Calendar add + counter bump with no gate.
+  //    Evidence chain: a browser_action_outbox row (status='done') whose gate_id →
+  //    a gate_pending row with target=eventId AND status='approved'.
+  const authRow = await env.DB.prepare(
+    `SELECT bo.id AS outbox_id
+       FROM browser_action_outbox bo
+       JOIN gate_pending gp ON gp.id = bo.gate_id
+      WHERE bo.agent = 'Usher'
+        AND bo.action_type = 'event_fill_submit'
+        AND bo.status = 'done'
+        AND gp.target = ?
+        AND gp.status = 'approved'
+      ORDER BY bo.created_at DESC
+      LIMIT 1`,
+  )
+    .bind(eventId)
+    .first<{ outbox_id: string }>();
+
+  if (!authRow) {
+    // No approved gate + completed browser action for this event → unauthorized/fabricated.
+    await flag(
+      env,
+      "P1",
+      `Usher: onOutcome success without an approved+completed browser action (eventId=${eventId})`,
+      `confirmation=${confirmationNumber} — no gate_pending(approved)+browser_action_outbox(done) evidence`,
+      {
+        sourceAgent: "Usher",
+        kind: "usher:outcome_without_authorized_action",
+        runId: date,
+      },
+    );
+    // Abort — no Calendar add, no counter, events.status untouched.
+    return { status: "gate_not_approved" };
+  }
+
+  // ── Idempotency (T-04-31): single-shot the side effects so a duplicate outcome
+  //    delivery does not double-add the Calendar event (the Wire increment is already
+  //    deduped by Steward, but the Calendar add is NOT). Use a DISTINCT lock key —
+  //    NOT `usher:<eventId>:registered`, which Steward inserts for the counter ledger.
+  const outcomeLockKey = `usher:${eventId}:outcome`;
+  const outcomeLock = await env.DB.prepare(
+    "INSERT OR IGNORE INTO idempotency_keys (key, agent, type, entity, op, applied_at) VALUES (?, 'Usher', 'event.registered', 'browser_action_outbox', 'append', ?)",
+  )
+    .bind(outcomeLockKey, Date.now())
+    .run();
+  if (outcomeLock.meta.changes === 0) {
+    // This outcome was already processed (replay) — no second Calendar add / counter.
+    return { status: "already_handled" };
+  }
+
   // Resolve event row for Calendar event details
   const eventRow: EventRow | null = _eventRow ?? await env.DB.prepare(
     "SELECT id, title, start, end, location, url, status FROM events WHERE id = ?",
@@ -426,8 +503,10 @@ export async function runOutcome(
     }
   }
 
-  // Step 2: UPDATE events.status='registered' (positional ? params — D1 rule)
-  await env.DB.prepare("UPDATE events SET status = ? WHERE id = ?")
+  // Step 2: UPDATE events.status='registered' (positional ? params — D1 rule).
+  // Guard `AND status != 'registered'` so a replayed outcome cannot churn the row
+  // state (defense-in-depth alongside the outcomeLock single-shot above).
+  await env.DB.prepare("UPDATE events SET status = ? WHERE id = ? AND status != 'registered'")
     .bind("registered", eventId)
     .run();
 

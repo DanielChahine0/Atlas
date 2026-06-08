@@ -150,6 +150,21 @@ async function seedIdempotencyKey(db: D1Database, key: string) {
     .run();
 }
 
+/**
+ * Seed the authorization evidence onOutcome's success path requires (T-04-30):
+ * an APPROVED gate + a COMPLETED (status='done') browser_action_outbox row linked to it.
+ * Without this, a success outcome is treated as fabricated → P1 + zero side effects.
+ */
+async function seedAuthorizedCompletion(db: D1Database, gateId: string, eventId: string) {
+  await seedApprovedGate(db, gateId, eventId);
+  await db.prepare(
+    `INSERT INTO browser_action_outbox (id, agent, action_type, fields, gate_id, target_url, status, outcome, created_at)
+     VALUES (?, 'Usher', 'event_fill_submit', '{}', ?, ?, 'done', NULL, ?)`,
+  )
+    .bind(`outbox-${gateId}`, gateId, `https://event.example.com/${eventId}`, Date.now())
+    .run();
+}
+
 const TEST_CODEX_FIELDS = {
   full_name: "Daniel Chahine",
   email: "chahinedaniel0@gmail.com",
@@ -568,6 +583,7 @@ describe("Wire-contract", () => {
     const testEnv = makeEnv();
     const eventId = "wire-contract-evt-001";
     await seedEvent(testEnv.DB, eventId, { title: "AWS Summit Toronto 2026" });
+    await seedAuthorizedCompletion(testEnv.DB, "gate-wire-contract-001", eventId);
 
     const mockCalendar: CalendarTools = {
       createEvent: vi.fn(async () => ({ eventId: "cal-event-123" })),
@@ -621,6 +637,7 @@ describe("Wire-contract", () => {
     const testEnv = makeEnv();
     const eventId = "wire-order-evt-001";
     await seedEvent(testEnv.DB, eventId);
+    await seedAuthorizedCompletion(testEnv.DB, "gate-wire-order-001", eventId);
 
     // Track order of operations
     const ops: string[] = [];
@@ -670,6 +687,7 @@ describe("Wire-contract", () => {
     const testEnv = makeEnv();
     const eventId = "idem-key-evt-001";
     await seedEvent(testEnv.DB, eventId);
+    await seedAuthorizedCompletion(testEnv.DB, "gate-idem-key-001", eventId);
 
     const mockCalendar: CalendarTools = {
       createEvent: vi.fn(async () => ({ eventId: "cal-idem" })),
@@ -748,6 +766,112 @@ describe("replay", () => {
     // Wire events: 0 (no counter bump on replay)
     const wire = testEnv.WIRE as unknown as { wireEvents: unknown[] };
     expect(wire.wireEvents).toHaveLength(0);
+  });
+});
+
+// ─── security-hardening: gate-replay / RPC-authorization / outcome idempotency ──
+
+describe("security-hardening", () => {
+  it("onOutcome with a fabricated confirmation but NO approved+completed action → P1, zero side effects (T-04-30)", async () => {
+    const testEnv = makeEnv();
+    const eventId = "unauth-outcome-evt-001";
+    await seedEvent(testEnv.DB, eventId);
+    // Deliberately seed NO approved gate and NO done browser_action_outbox row.
+
+    const mockCalendar: CalendarTools = {
+      createEvent: vi.fn(async () => ({ eventId: "should-not-be-called" })),
+    };
+
+    const result = await runOutcome(
+      testEnv,
+      {
+        eventId,
+        eventUrl: "https://event.example.com/test",
+        outcome: { status: "success", confirmation_number: "FORGED-123" },
+        _calendarTools: mockCalendar,
+      },
+      "2026-06-08",
+    );
+
+    // Discriminated failure status — never a success-shaped value
+    expect(result.status).toBe("gate_not_approved");
+
+    // P1 self-flag for the unauthorized outcome
+    const incidents = testEnv.INCIDENTS as unknown as { flagCalls: Array<{ severity: string; kind: string }> };
+    const p1Flags = incidents.flagCalls.filter((c) => c.severity === "P1");
+    expect(p1Flags.length).toBeGreaterThan(0);
+    expect(p1Flags[0]!.kind).toContain("usher:outcome_without_authorized_action");
+
+    // ZERO side effects: no Calendar add, no Wire, status not registered
+    expect(mockCalendar.createEvent).not.toHaveBeenCalled();
+    const wire = testEnv.WIRE as unknown as { wireEvents: unknown[] };
+    expect(wire.wireEvents).toHaveLength(0);
+    const eventRow = await testEnv.DB.prepare("SELECT status FROM events WHERE id = ?")
+      .bind(eventId)
+      .first<{ status: string }>();
+    expect(eventRow?.status).not.toBe("registered");
+  });
+
+  it("replayed onOutcome for the same event is a no-op — no second Calendar add or counter (T-04-31)", async () => {
+    const testEnv = makeEnv();
+    const eventId = "replay-outcome-evt-100";
+    await seedEvent(testEnv.DB, eventId);
+    await seedAuthorizedCompletion(testEnv.DB, "gate-replay-outcome-100", eventId);
+
+    let calAdds = 0;
+    const mockCalendar: CalendarTools = {
+      createEvent: vi.fn(async () => {
+        calAdds += 1;
+        return { eventId: `cal-${calAdds}` };
+      }),
+    };
+
+    const params: OutcomeParams = {
+      eventId,
+      eventUrl: "https://event.example.com/test",
+      outcome: { status: "success", confirmation_number: "CONF-REPLAY-100" },
+      _calendarTools: mockCalendar,
+    };
+
+    const first = await runOutcome(testEnv, params, "2026-06-08");
+    const second = await runOutcome(testEnv, params, "2026-06-08");
+
+    expect(first.status).toBe("outcome_handled");
+    expect(second.status).toBe("already_handled");
+
+    // Exactly ONE Calendar add and ONE Wire event across both calls
+    expect(calAdds).toBe(1);
+    const wire = testEnv.WIRE as unknown as { wireEvents: unknown[] };
+    expect(wire.wireEvents).toHaveLength(1);
+  });
+
+  it("replayed approved continuation does NOT enqueue a second browser action (gate-replay, T-04-29)", async () => {
+    const testEnv = makeEnv();
+    const eventId = "replay-continuation-evt-100";
+    const gateId = "gate-replay-continuation-100";
+    await seedEvent(testEnv.DB, eventId);
+    await seedApprovedGate(testEnv.DB, gateId, eventId);
+
+    const params: RegisterParams = {
+      eventId,
+      eventUrl: "https://event.example.com/test",
+      gateId,
+      _codexFields: TEST_CODEX_FIELDS,
+    };
+
+    const first = await runRegister(testEnv, params, "2026-06-08");
+    const second = await runRegister(testEnv, params, "2026-06-08");
+
+    expect(first.status).toBe("browser_action_enqueued");
+    expect(second.status).toBe("already_enqueued");
+
+    // Exactly ONE browser_action_outbox row for this gate
+    const outboxCount = await testEnv.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM browser_action_outbox WHERE gate_id = ?",
+    )
+      .bind(gateId)
+      .first<{ cnt: number }>();
+    expect(outboxCount?.cnt).toBe(1);
   });
 });
 
