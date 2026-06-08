@@ -21,8 +21,23 @@ findings:
   warning: 7
   info: 4
   total: 13
-status: issues_found
+status: remediated
+remediation:
+  fixed: [CR-01, CR-02, WR-02, WR-03, WR-04, WR-05, WR-07]
+  deferred: [WR-01, WR-06, IN-01, IN-02, IN-03, IN-04]
+  fixed_commits: [5c1774b, eac1df3, 72c6307, af8cc14, b51c7bb, 40682df, 6225683]
 ---
+
+> **Remediation (2026-06-08):** Both BLOCKERs (CR-01 gate→Envoy.onApproved wiring,
+> CR-02 Sundial applyRemoval authorization + replay lock) and the integration-breaking /
+> correctness warnings (WR-02 ack→Usher.onOutcome re-invoke, WR-03 decideGate→boolean
+> single re-invoke, WR-04 daemon single Chromium context, WR-05 /browser/ack outcome.id
+> validation, WR-07 2FA tripwire) were fixed with regression tests — full workspace suite
+> + daemon green, tsc clean. **Deferred as tracked debt:** WR-01 (Sundial live
+> `calendar.events` delete tool resolution — coupled to the deferred Google OAuth go-live
+> gate; CR-02 already closes the security hole), WR-06 (Envoy partial-failure lock
+> rollback race — mitigated by WR-03's single re-invoke), and IN-01..04 (ULID dedup,
+> token-name doc, backoff-0 case, PII-fallback hard-fail flag).
 
 # Phase 4: Code Review Report
 
