@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Phase 4 plan 04-02 (mcp-github PR tools) — Task 1 shipped (commit c6be210); Task 2 = owner checkpoint (grant GitHub App pull_requests:write)"
-last_updated: "2026-06-08T16:29:13.904Z"
-last_activity: 2026-06-08 -- Phase 04 execution started
+stopped_at: "Phase 4 plan 04-03 (apps/gate Worker) — complete (22 tests green, tsc clean)"
+last_updated: "2026-06-08T17:00:00.000Z"
+last_activity: 2026-06-08
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 36
-  completed_plans: 31
+  completed_plans: 32
   percent: 67
 ---
 
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 ## Current Position
 
 Phase: 04 (outward-gated) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 04
-Last activity: 2026-06-08 -- Phase 04 execution started
-Next action: Execute the next Phase-4 plan with `/gsd-execute-phase 4` — runs 04-03 (apps/gate Worker) → 04-04 (daemon browser-action runner) → 04-05 (Sundial gate retrofit) → 04-06 (Usher) → 04-07 (Envoy). Blocking owner checkpoint for 04-02: grant the GitHub App `pull_requests: write` permission (GitHub → Settings → Developer settings → GitHub Apps → Atlas) + re-accept on the scoped repos, so Envoy can fire a live PR. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; close the Phase-0 owner gates; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
+Plan: 3 of 7 (completed 04-03)
+Status: Ready to execute next plan
+Last activity: 2026-06-08
+Next action: Execute 04-04 (daemon browser-action runner) → 04-05 (Sundial gate retrofit) → 04-06 (Usher) → 04-07 (Envoy) with `/gsd-execute-phase 4`. Blocking owner checkpoint for 04-02: grant the GitHub App `pull_requests: write` permission (GitHub → Settings → Developer settings → GitHub Apps → Atlas) + re-accept on the scoped repos, so Envoy can fire a live PR. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; close the Phase-0 owner gates; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
 
 Milestone progress: plans [█████████████████░░░] 86% (31/36) · phases [███████░░░] 67% (4 of 6 complete) — Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅ · Phase 3 Capture/Local ✅ (code-complete + verified) · Phase 4 Outward/Gated 🔄 2/7 · Phase 5 Meta/Polish ⬜ not started
 
@@ -88,6 +88,7 @@ Milestone progress: plans [█████████████████�
 | Phase 03-capture-local P06 | 45 | 2 tasks | 9 files |
 | Phase 04-outward-gated P01 | 45 | 3 tasks | 15 files |
 | Phase 04-outward-gated P02 | 20m | 1 tasks | 4 files |
+| Phase 04-outward-gated P03 | 30m | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,7 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - [Phase ?]: Added mintTokenForUse() to mcp-github for server-side GitHub REST calls while preserving T-00-32 token-containment invariant
 - [Phase ?]: Used Zod raw shapes for MCP SDK 1.29.0 registerTool() inputSchema — JSON Schema objects rejected
 - [Phase 4]: 04-01: packages/gate is the SINGLE enforcement point for Pillar 2 (suggest-don't-destroy) — openGate writes the gate_pending row + a 'pending' audit_log row in ONE atomic D1 batch, then best-effort dispatches the ntfy confirm push (try/catch → P2 gate_push_failed, gate never rolled back, unseeded NTFY_TOPIC → skip silently). decideGate runs a guarded UPDATE (WHERE id=? AND status='pending') and writes the terminal audit row ONLY when meta.changes===1 (double-decide → no second row); sweepExpired is per-row guarded so an approve-vs-expire race never double-terminals. Inline Crockford-Base32 ULID (no new dep, no crypto.randomUUID). 70 workerd tests green.
+- [Phase 4]: 04-03: apps/gate Worker is the single stable-hostname confirm surface — fail-closed POST /confirm (decideGate commits BEFORE reinvokeAgent; re-invoke failure → P2 flag, never silent success); Bearer-gated /browser/poll+/ack with constant-time GATE_CONFIRM_TOKEN; hourly sweep cron; NTFY bindings intentionally absent (push send lives in openGate on the AGENTS). SELF.scheduled() in vitest-pool-workers requires direct handler import + fake ScheduledController, not ExecutionContext (matched flagger self-tick pattern).
 - [Phase 4]: 04-02: mcp-github gains github_create_branch + github_open_pr (registerTool with Zod raw shapes — MCP SDK 1.29.0 rejects JSON-Schema inputSchema; added zod@^4.4.3 to the mcp-github package), both gated by github.write and minting {contents:write, metadata:read, pull_requests:write}; mintTokenForUse() returns the opaque ghs_ token for server-side REST calls but NEVER returns it to the MCP client (extends T-00-32 containment). Task 2 (owner grants the App pull_requests:write permission + re-accepts on scoped repos) is a blocking human checkpoint before Envoy fires a live PR. 10 mcp-github tests green.
 
 ### Pending Todos
@@ -185,6 +187,6 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ## Session Continuity
 
-Last session: 2026-06-08
+Last session: 2026-06-08T16:42:43.747Z
 Stopped at: Phase 4 plan 04-02 (mcp-github PR tools) — Task 1 shipped (commit c6be210); Task 2 = owner checkpoint (grant GitHub App pull_requests:write)
 Resume file: None
