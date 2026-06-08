@@ -494,4 +494,71 @@ describe("browser", () => {
     const resp = await SELF.fetch("https://gate.example.com/not-a-route");
     expect(resp.status).toBe(404);
   });
+
+  // WR-02: ack of a Usher event_fill_submit 'done' row → USHER.onOutcome called
+  it("WR-02: ack of Usher event_fill_submit claimed row calls USHER.onOutcome with correct eventId/eventUrl/outcome", async () => {
+    const db = dbEnv().DB;
+    const eventId = `wr02-evt-${Date.now()}`;
+    const targetUrl = `https://event.example.com/${eventId}`;
+
+    // Seed an approved gate_pending with target=eventId and agent=Usher
+    const gateId = `wr02-gate-${Date.now()}`;
+    await db.prepare(
+      `INSERT INTO gate_pending (id, agent, action, target, artifact, edited_artifact, status, decision,
+         scope_used, idempotency_key, token_hash, expires_at, flag_id, created_at, updated_at)
+       VALUES (?, 'Usher', 'event.register', ?, '{}', NULL, 'approved', 'approved',
+               'calendar.events', ?, 'fakehash', ?, NULL, ?, ?)`,
+    )
+      .bind(gateId, eventId, `usher:${eventId}:registered`, Date.now() + 86400000, Date.now(), Date.now())
+      .run();
+
+    // Seed a 'claimed' browser_action_outbox row linked to the gate
+    const outboxId = `wr02-outbox-${Date.now()}`;
+    await db.prepare(
+      `INSERT INTO browser_action_outbox
+         (id, agent, action_type, fields, gate_id, target_url, status, claimed_at, outcome, created_at)
+       VALUES (?, 'Usher', 'event_fill_submit', '{"name":"Daniel"}', ?, ?, 'claimed', ?, NULL, ?)`,
+    )
+      .bind(outboxId, gateId, targetUrl, Date.now(), Date.now())
+      .run();
+
+    // Track onOutcome calls
+    const onOutcomeCalls: Array<{ eventId: string; eventUrl: string; outcome: unknown }> = [];
+    const testUsher = {
+      register: async () => ({}),
+      onOutcome: async (params: { eventId: string; eventUrl: string; outcome: unknown }) => {
+        onOutcomeCalls.push(params);
+        return {};
+      },
+    };
+
+    const successOutcome = { id: outboxId, status: "success", confirmation_number: "CONF-WR02" };
+
+    // Build a fake bearer env so validateBearerToken passes
+    const fakeToken = "wr02-test-token";
+    const testEnvAck = {
+      ...(dbEnv() as unknown as Record<string, unknown>),
+      USHER: testUsher,
+      GATE_CONFIRM_TOKEN: { get: async () => fakeToken },
+    } as unknown as Parameters<typeof gateWorker.fetch>[1];
+
+    const ackRequest = new Request("https://gate.example.com/browser/ack", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${fakeToken}`,
+      },
+      body: JSON.stringify({ id: outboxId, outcome: successOutcome }),
+    });
+
+    const resp = await gateWorker.fetch(ackRequest, testEnvAck);
+    expect(resp.status).toBe(200);
+
+    // USHER.onOutcome should have been called once with the correct params
+    expect(onOutcomeCalls).toHaveLength(1);
+    const call = onOutcomeCalls[0]!;
+    expect(call.eventId).toBe(eventId);
+    expect(call.eventUrl).toBe(targetUrl);
+    expect(call.outcome).toMatchObject({ status: "success", confirmation_number: "CONF-WR02" });
+  });
 });

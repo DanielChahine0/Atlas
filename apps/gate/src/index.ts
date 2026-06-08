@@ -63,6 +63,7 @@ export interface Env {
   /** Service binding to apps/usher — re-invoked on gate approval for Usher actions. */
   USHER?: {
     register(params: { gateId: string; eventId: string; eventUrl: string }): Promise<unknown>;
+    onOutcome(params: { eventId: string; eventUrl: string; outcome: unknown }): Promise<unknown>;
   };
   /** Service binding to apps/envoy — re-invoked on gate approval for Envoy actions. */
   ENVOY?: {
@@ -373,13 +374,55 @@ export default {
             : "failed";
 
       // Idempotent ack: AND status='claimed' guard (lease check — prevents double-ack)
-      await env.DB.prepare(
+      const ackResult = await env.DB.prepare(
         `UPDATE browser_action_outbox
            SET status = ?, outcome = ?
          WHERE id = ? AND status = 'claimed'`,
       )
         .bind(terminalStatus, JSON.stringify(outcome), id)
         .run();
+
+      // WR-02: re-invoke the owning agent so the registration flow completes.
+      // For Usher event_fill_submit rows: call onOutcome so addEventToCalendar + Wire
+      // increment run. Only invoke if the UPDATE actually matched (ackResult.meta.changes===1)
+      // to avoid double-invoke on replayed acks.
+      if (ackResult.meta.changes === 1 && env.USHER) {
+        try {
+          // Look up the acked row's agent and gate_id to resolve eventId
+          const ackedRow = await env.DB.prepare(
+            "SELECT agent, action_type, gate_id, target_url FROM browser_action_outbox WHERE id = ?",
+          )
+            .bind(id)
+            .first<{ agent: string; action_type: string; gate_id: string; target_url: string }>();
+
+          if (ackedRow?.agent === "Usher" && ackedRow.action_type === "event_fill_submit") {
+            // Resolve eventId via gate_pending.target (the gate's target = eventId)
+            const gateRow = await env.DB.prepare(
+              "SELECT target FROM gate_pending WHERE id = ?",
+            )
+              .bind(ackedRow.gate_id)
+              .first<{ target: string }>();
+
+            if (gateRow) {
+              await env.USHER.onOutcome({
+                eventId: gateRow.target,
+                eventUrl: ackedRow.target_url,
+                outcome,
+              });
+            }
+          }
+        } catch (reinvokeErr) {
+          // Re-invoke failure is non-fatal — flag P2 but do NOT roll back the ack.
+          // The ack is durably committed; the onOutcome can be retried manually.
+          await flag(
+            env,
+            "P2",
+            `Gate ack: Usher.onOutcome re-invoke failed for outbox row ${id}`,
+            String(reinvokeErr),
+            { sourceAgent: "Gate", kind: "gate_reinvoke_failed" },
+          ).catch(() => {});
+        }
+      }
 
       return new Response("OK", { status: 200 });
     }
