@@ -122,13 +122,18 @@ async function handleSaveInner(request: Request, env: Env): Promise<Response> {
     });
   }
 
-  // (4) Reject oversized prompt (50KB soft limit — T-5-DoS, well under 128KB Queue cap)
-  if (fullPrompt.length > 50_000) {
+  // (4) Reject oversized prompt (50KB soft limit — T-5-DoS). Gate on the ENCODED size:
+  // send() enforces the 128KB Queue cap on the UTF-8 bytes of the JSON-encoded event, and
+  // JSON escaping (control chars ×6) + UTF-8 (non-ASCII ×3) can expand a raw char count
+  // well past it. 50KB of encoded prompt + the small frontmatter/envelope stays far under
+  // the 128KB cap; a char-count gate alone does not bound it.
+  const encodedPromptBytes = new TextEncoder().encode(JSON.stringify(fullPrompt)).byteLength;
+  if (encodedPromptBytes > 50_000) {
     await flag(
       env as { INCIDENTS: NonNullable<typeof env.INCIDENTS> },
       "P3",
       "Librarian: oversized prompt capture — nothing saved",
-      `length=${fullPrompt.length}`,
+      `encoded_bytes=${encodedPromptBytes}, length=${fullPrompt.length}`,
       { sourceAgent: "Librarian", kind: "oversized_capture" },
     );
     return new Response(JSON.stringify({ error: "Prompt too large (>50KB)" }), {
