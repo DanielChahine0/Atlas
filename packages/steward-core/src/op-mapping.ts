@@ -88,6 +88,14 @@ export function toOutboxIntent(e: WireEvent): OutboxIntent {
             `fullNote upsert requires a single-segment "Prompts/<slug>.md" notePath; got "${notePath}"`,
           );
         }
+        // A missing/empty noteBody would silently PUT an EMPTY file over an existing
+        // note, and a non-string body would write "[object Object]" — both silent and
+        // destructive ("suggest, don't destroy"). Fail loud like the bad-path guard.
+        if (typeof e.payload.noteBody !== "string" || e.payload.noteBody.length === 0) {
+          throw new NonRetryableError(
+            `fullNote upsert requires a non-empty string noteBody for "${notePath}"`,
+          );
+        }
         // Honest typing (no unchecked `as SafeMethod` cast — the annotation makes the
         // compiler verify "PUT" is genuinely in the SAFE_METHODS tuple) + the SAME
         // runtime Pillar-2 belt as the bottom guard: this early return must not be the
@@ -105,7 +113,7 @@ export function toOutboxIntent(e: WireEvent): OutboxIntent {
             "Content-Type": "text/markdown",
             "X-Atlas-Idem": e.idempotencyKey,
           }),
-          body: String(e.payload.noteBody ?? ""),
+          body: e.payload.noteBody, // guarded above: non-empty string
         };
       }
       // ── EXISTING: frontmatter-field upsert (unchanged) ────────────────────────

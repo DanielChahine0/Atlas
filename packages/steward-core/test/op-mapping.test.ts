@@ -116,6 +116,29 @@ describe("toOutboxIntent — fullNote PUT branch", () => {
     }
   });
 
+  // Test 4c: missing/empty/non-string noteBody throws NonRetryableError — a fullNote PUT
+  // must never silently blank an existing Prompts note ("suggest, don't destroy").
+  it("fullNote upsert with missing noteBody throws NonRetryableError", () => {
+    const evt = wireEvent({
+      payload: { fullNote: true, notePath: "Prompts/foo.md" }, // noteBody omitted
+    });
+    expect(() => toOutboxIntent(evt)).toThrow(NonRetryableError);
+  });
+
+  it("fullNote upsert with empty-string noteBody throws NonRetryableError", () => {
+    const evt = wireEvent({
+      payload: { fullNote: true, notePath: "Prompts/foo.md", noteBody: "" },
+    });
+    expect(() => toOutboxIntent(evt)).toThrow(NonRetryableError);
+  });
+
+  it("fullNote upsert with a non-string noteBody (object) throws NonRetryableError", () => {
+    const evt = wireEvent({
+      payload: { fullNote: true, notePath: "Prompts/foo.md", noteBody: { nested: "object" } },
+    });
+    expect(() => toOutboxIntent(evt)).toThrow(NonRetryableError);
+  });
+
   // Test 5: ordinary upsert WITHOUT fullNote still produces PATCH + Target-Type frontmatter
   it("ordinary upsert (no fullNote) still produces method:PATCH with Target-Type frontmatter", () => {
     const evt = wireEvent({
