@@ -1,0 +1,164 @@
+{
+  "version": "1",
+  "servers": [
+    {
+      "name": "Gmail",
+      "best_at": ["email-triage", "email-labeling", "email-drafting", "email-read"],
+      "tools": ["list_labels", "search_threads", "get_thread", "label_thread", "create_draft"],
+      "owning_agents": ["Filer", "Herald"],
+      "scopes": ["gmail.modify"],
+      "health": "connected",
+      "notes": "Filer = sole labeler (gmail.modify only, never delete). Herald = gmail.readonly + gmail.compose (draft only, no send). No delete/archive tool registered — unreachable by construction (Pillar 2)."
+    },
+    {
+      "name": "Google Calendar",
+      "best_at": ["calendar-read", "calendar-write", "event-scheduling", "free-time-search"],
+      "tools": ["list_events", "get_event", "create_event", "update_event", "suggest_time", "respond_to_event"],
+      "owning_agents": ["Sundial", "Usher", "Compass"],
+      "scopes": ["calendar.events", "calendar.readonly"],
+      "health": "connected",
+      "notes": "Sundial/Usher = calendar.events (write, no delete). Compass = calendar.readonly. No delete tool registered (Pillar 2)."
+    },
+    {
+      "name": "Google Drive",
+      "best_at": ["file-read", "file-search", "export-storage", "cloud-docs"],
+      "tools": ["search_files", "read_file_content", "get_file_metadata", "create_file", "copy_file"],
+      "owning_agents": ["Steward", "Archivist"],
+      "scopes": ["drive.file", "drive.readonly"],
+      "health": "connected",
+      "notes": "Steward exports use drive.file (app-scoped). Codex reads use drive.readonly. Quill, Envoy, Archivist = drive.readonly. Never whole-Drive scope."
+    },
+    {
+      "name": "Google Sheets",
+      "best_at": ["tabular-data", "tracker-read", "funnel-tracking", "structured-logs"],
+      "tools": ["sheets_read", "sheets_write"],
+      "owning_agents": ["Headhunter", "Steward"],
+      "scopes": ["spreadsheets"],
+      "health": "connected",
+      "notes": "Optional — only when a tracker lives in Sheets. Headhunter job funnel; Steward for counter projections."
+    },
+    {
+      "name": "GitHub",
+      "best_at": ["code-read", "pr-management", "repo-metadata", "issue-tracking", "portfolio-publish"],
+      "tools": ["get_file_contents", "search_code", "list_pull_requests", "pull_request_read", "issue_read", "create_pull_request", "github_create_branch", "github_open_pr"],
+      "owning_agents": ["Envoy"],
+      "scopes": ["github.app.contents:read", "github.app.metadata:read", "github.app.pull_requests:write"],
+      "health": "connected",
+      "notes": "GitHub App (not PAT). Write/PR-open gated behind Pillar 2 confirmation. Token minted server-side per run (mintTokenForUse) — never returned to MCP client. Envoy owns portfolio/project writes."
+    },
+    {
+      "name": "Obsidian",
+      "best_at": ["vault-read", "vault-write", "dashboard-update", "note-management", "tag-management"],
+      "tools": ["read-note", "search-vault", "create-note", "edit-note", "add-tags"],
+      "owning_agents": ["Steward"],
+      "scopes": ["local-bridge"],
+      "health": "connected",
+      "notes": "STEWARD ONLY (Pillar 1 — sole Vault writer). All Vault writes funnel via atlas-wire -> Steward -> local bridge. No other agent may call Obsidian write tools. Bridge authenticates outbound; no inbound port on laptop (ATLAS_BRIDGE_TOKEN gated)."
+    },
+    {
+      "name": "Playwright / browser",
+      "best_at": ["web-automation", "form-filling", "site-navigation", "screenshot", "captcha-adjacent"],
+      "tools": ["browser_navigate", "browser_snapshot", "browser_fill_form", "browser_click", "browser_type", "browser_take_screenshot"],
+      "owning_agents": ["Usher", "Envoy"],
+      "scopes": [],
+      "health": "connected",
+      "notes": "Use ONLY for sites with no first-party MCP. Outward actions (form submit, post) are ALWAYS gated by Pillar 2 confirmation gate before execution. Captcha and payment are hard stops. Usher=registrations; Envoy=prefill-only (no auto-post)."
+    },
+    {
+      "name": "Canva",
+      "best_at": ["design-generation", "brand-assets", "image-export", "template-creation"],
+      "tools": ["generate-design", "create-design-from-brand-template", "export-design", "get-design-thumbnail"],
+      "owning_agents": ["Envoy", "Librarian"],
+      "scopes": ["canva.oauth"],
+      "health": "absent",
+      "notes": "Optional. Not yet connected. Use for brand visuals and design generation when Envoy publishes."
+    },
+    {
+      "name": "Notion",
+      "best_at": ["external-docs", "structured-databases", "external-notes"],
+      "tools": ["notion-search", "notion-fetch", "notion-create-pages", "notion-update-page"],
+      "owning_agents": [],
+      "scopes": ["notion.oauth"],
+      "health": "absent",
+      "notes": "Optional — only if owner uses Notion for structured external docs. Not connected."
+    },
+    {
+      "name": "Slack",
+      "best_at": ["team-chat", "channel-messaging", "search-messages", "scheduled-sends"],
+      "tools": ["slack_search_public", "slack_read_channel", "slack_send_message", "slack_schedule_message"],
+      "owning_agents": [],
+      "scopes": ["slack.oauth"],
+      "health": "absent",
+      "notes": "Optional — only if owner uses Slack for team/channel communication. Not connected."
+    },
+    {
+      "name": "context7",
+      "best_at": ["library-docs", "sdk-docs", "api-reference", "version-specific-docs"],
+      "tools": ["resolve-library-id", "query-docs"],
+      "owning_agents": ["Switchboard"],
+      "scopes": [],
+      "health": "connected",
+      "notes": "Design-time only. Used by Switchboard itself and dev work to fetch current library/SDK/API docs. Not a domain MCP — no external writes, no OAuth."
+    },
+    {
+      "name": "cloudflare-docs",
+      "best_at": ["cloudflare-workers-docs", "wrangler-docs", "agents-sdk-docs", "d1-docs", "kv-docs"],
+      "tools": ["cloudflare_docs_search"],
+      "owning_agents": ["Switchboard"],
+      "scopes": [],
+      "health": "connected",
+      "notes": "Design-time only. Official Cloudflare docs (Workers, DOs, Queues, Workflows, D1/KV/R2, AI Gateway, Wrangler). No auth required."
+    }
+  ],
+  "side_effect_verbs": [
+    "post", "register", "pay", "delete", "submit", "send",
+    "publish", "create", "update", "write", "push", "deploy",
+    "book", "cancel", "archive", "remove", "merge"
+  ],
+  "ranking_weights": {
+    "specificity_over_generality": {
+      "description": "First-party MCP server (e.g. Google Calendar) beats driving the same site through a browser when both can do the job. Reserve Playwright for sites with no MCP.",
+      "weight": 1.0
+    },
+    "read_before_write": {
+      "description": "If the goal can be met read-only, never shortlist write tools. Only escalate to write tools when the intent explicitly requires mutation.",
+      "weight": 0.9
+    },
+    "health_penalty": {
+      "description": "A disconnected (health=absent) or degraded (health=degraded) server is penalized heavily. degraded: -0.4, absent: excluded entirely from shortlist.",
+      "weight": 0.8,
+      "absent_penalty": -1.0,
+      "degraded_penalty": -0.4
+    },
+    "pillar1_single_writer": {
+      "description": "HARD RULE (Pillar 1): Never recommend a second writer for a resource an existing agent owns. Route all Vault writes through Steward. Route all outward publishing through Envoy. Route all calendar writes through Sundial/Usher.",
+      "weight": "HARD_RULE"
+    },
+    "pillar2_gate_irreversible": {
+      "description": "HARD RULE (Pillar 2): Any intent whose verb is in side_effect_verbs MUST carry confirmation_gate=true and name the executing agent. An ungated outward toolset is a P1 gap, never a silent recommendation.",
+      "weight": "HARD_RULE"
+    }
+  },
+  "gap_severity_map": {
+    "no_mcp_for_capability": {
+      "severity": "P3",
+      "kind": "capability_gap",
+      "description": "No connected MCP server covers a required capability."
+    },
+    "mcp_disconnected_blocks_goal": {
+      "severity": "P2",
+      "kind": "unhealthy_mcp",
+      "description": "A required MCP is disconnected or unhealthy and the gap blocks the current in-flight goal."
+    },
+    "missing_oauth_scope": {
+      "severity": "P3",
+      "kind": "missing_scope",
+      "description": "A required OAuth scope is not yet granted to the executing agent. Requires owner consent — do not proceed."
+    },
+    "ungated_outward_toolset": {
+      "severity": "P1",
+      "kind": "ungated_outward",
+      "description": "A recommended toolset includes an outward/irreversible action (side_effect_verb) but the confirmation gate flag is absent. This is a critical defect — never emit an ungated outward recommendation."
+    }
+  }
+}
