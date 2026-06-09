@@ -139,6 +139,7 @@ export default {
 
         // Upsert flag (dedup by signature, recurrence bump).
         // Pass kind so the DO stores it for recurrence re-scoring (M6).
+        // suggested_action is passed through (WR-01): advisory only, never executed.
         const flag = await stateStub.upsertFlag(signature, {
           source_agent: incident.source_agent,
           kind: incident.kind,
@@ -147,6 +148,7 @@ export default {
           title: incident.title,
           detail: incident.detail,
           status: "open",
+          suggested_action: incident.suggested_action,
         });
 
         // Re-score with actual recurrence from the DO

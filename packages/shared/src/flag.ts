@@ -103,10 +103,12 @@ export async function flag(
     severity_hint: severity,
     title,
     detail,
+    suggested_action: options.suggestedAction,
     run_id: options.runId,
   };
   // Omit undefined fields for a cleaner queue payload
   if (incident.detail === undefined) delete incident.detail;
+  if (incident.suggested_action === undefined) delete incident.suggested_action;
   if (incident.run_id === undefined) delete incident.run_id;
   await env.INCIDENTS.send(incident);
 }
