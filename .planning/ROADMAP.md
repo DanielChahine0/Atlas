@@ -184,7 +184,25 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 **Success Criteria** (what must be TRUE):
   1. Librarian captures a prompt and surfaces it deduped in the Vault prompt-library table (Title link · Tags · Tool · Last used); the title deep-links to the full-prompt note and most-used surfaces at top.
   2. Switchboard exists as a documented design-time routing process (selects the minimal MCP server + tools + OAuth scopes for a goal, reports capability gaps to Flagger), NOT a deployed Worker.
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1** *(foundation — parallel, no file overlap)*
+- [ ] 05-01-PLAN.md — Steward op-mapping full-note `PUT /vault/Prompts/<slug>.md` extension (+ `Prompts/` path constraint via NonRetryableError) + `librarian→claude-haiku-4-5` TIER_MAP entry + `migrations/0008_prompts.sql` (dedupe table) + op-mapping unit test
+- [ ] 05-04-PLAN.md — Switchboard (META-02, NOT a Worker): `.claude/registry/mcp-registry.json` (machine-readable registry) + read-only `.claude/commands/switchboard.md` (6-step selection, Pillar-1/2 hard rules, D-07 gap severities) + `docs/10-switchboard.md` runbook formalization
+
+**Wave 2** *(Librarian Worker — blocked on 05-01)*
+- [ ] 05-02-PLAN.md — `apps/librarian` (META-01): Bearer-gated producer-only `POST /prompt/save` (timingSafeEqual, fail-closed) + deterministic tool-scoped Jaccard dedupe (KV threshold, borderline→keep-separate+Flagger) + Haiku title/tags + once-only stable slug + ONE `op:"upsert"` Wire event (structured idempotency keys) + D1 system-of-record write
+
+**Wave 3** *(Librarian Definition-of-Done tests — blocked on 05-02)*
+- [ ] 05-03-PLAN.md — The three mandatory Atlas tests for Librarian: Wire-contract (§6.4 + structured key) + replay-through-Steward (`meta.changes === 0`, bump-not-clone) + failure-path (Bearer 401 fail-closed, empty/oversized→Flagger, borderline→keep-separate) + Wave-0 test scaffolding
+
+**Cross-cutting constraints** (truths appearing in 2+ plans):
+- Steward stays the SOLE `atlas-wire` consumer (Pillar 1); Librarian + every Switchboard gap-emit path is a PRODUCER only — no new `atlas-wire`/`atlas-incidents` consumer (a second is a hard CI failure).
+- Structured stable idempotency keys (`librarian:<slug>:save` first / `librarian:<slug>:save:<date>` bump); replay through Steward leaves `uses` unchanged (`meta.changes === 0`); a dedupe bump is an upsert on the SAME slug (no clone); never `crypto.randomUUID()` on the keyed path.
+- Constant-time, fail-closed Bearer gate on the only inbound endpoint (`timingSafeEqual` from `@atlas/gate`); the token (`ATLAS_LIBRARIAN_TOKEN`) is a Secrets Store binding, never logged, `scope_used=''`.
+- The full-note PUT is path-constrained to `Prompts/` in the single canonical `toOutboxIntent` (defense-in-depth); a non-`Prompts/` path throws NonRetryableError.
+- Switchboard ships design-time only (D7): tracked JSON registry + read-only slash-command (never Write/Edit/Bash) + a runbook — no deployed Worker; the selection algorithm enforces Pillar-1 (no second writer) + Pillar-2 (confirmation-gate flag for outward intents) as hard rules.
+
 **UI hint**: yes
 
 ## Progress
@@ -199,4 +217,4 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
 | 4. Outward (Gated) | 7/7 | Complete   | 2026-06-08 |
-| 5. Meta / Polish | 0/TBD | Not started | - |
+| 5. Meta / Polish | 0/4 | Not started | - |
