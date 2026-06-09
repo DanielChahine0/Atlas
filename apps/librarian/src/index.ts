@@ -24,7 +24,11 @@ import { deriveRecord, deriveSlug, resolveSlug } from "./derive.js";
 
 const SaveBody = z.object({
   full_prompt: z.string(),
-  tool: z.string().optional(),
+  // tool flows verbatim into a YAML frontmatter line, the D1 dedupe bucket key, and the
+  // Wire payload (T-5-Tamper). Conservative fail-closed allowlist: 1-64 chars of
+  // [A-Za-z0-9 ._-] — no \r/\n (frontmatter-line forgery), no empty string (phantom
+  // dedupe bucket), no unbounded length (50KB-gate bypass). Reject, never sanitize.
+  tool: z.string().regex(/^[A-Za-z0-9 ._-]{1,64}$/).optional(),
 });
 
 // ── Note body builder ─────────────────────────────────────────────────────────
