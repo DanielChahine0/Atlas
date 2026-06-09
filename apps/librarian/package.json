@@ -17,6 +17,7 @@
     "@atlas/wire": "workspace:*"
   },
   "devDependencies": {
+    "@atlas/steward-core": "workspace:*",
     "@cloudflare/vitest-pool-workers": "^0.16.13",
     "@cloudflare/workers-types": "^4.20260425.0",
     "vitest": "^4.1.8"
