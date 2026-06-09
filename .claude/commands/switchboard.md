@@ -45,11 +45,11 @@ Translate the intent into abstract capabilities (NOT product names):
 
 For each capability, select the best server from the registry:
 
-**HARD RULE — PILLAR 1 (no second writer):** Check the `owning_agents` field for each server. If a resource already has a registered owning agent, you MUST route through that agent — NEVER recommend a different agent to write that resource. Examples:
+**HARD RULE — PILLAR 1 (no second writer):** Check the `owning_agents` field for each server — it lists **WRITERS only** (a separate `readers` array, where present, lists read-only users who must NEVER be routed a write). If a resource already has a registered owning agent, you MUST route through that agent — NEVER recommend a different agent to write that resource. Examples:
 - Vault writes → Steward only (Obsidian server, owning_agents: ["Steward"])
-- Calendar writes → Sundial or Usher (Google Calendar, owning_agents: ["Sundial","Usher","Compass"])
+- Calendar writes → Sundial or Usher (Google Calendar, owning_agents: ["Sundial","Usher"]; Compass is in `readers` — calendar.readonly, never a calendar write)
 - GitHub portfolio writes → Envoy (GitHub, owning_agents: ["Envoy"])
-- Email labeling → Filer only (Gmail, owning_agents: ["Filer","Herald"])
+- Email labeling → Filer; email drafting → Herald (Gmail, owning_agents: ["Filer","Herald"])
 
 **Ranking rules** (from `ranking_weights`):
 1. Specificity: first-party MCP (e.g. Google Calendar) beats Playwright for the same capability

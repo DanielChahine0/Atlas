@@ -6,27 +6,29 @@
       "best_at": ["email-triage", "email-labeling", "email-drafting", "email-read"],
       "tools": ["list_labels", "search_threads", "get_thread", "label_thread", "create_draft"],
       "owning_agents": ["Filer", "Herald"],
-      "scopes": ["gmail.modify"],
+      "scopes": ["gmail.modify", "gmail.readonly", "gmail.compose"],
       "health": "connected",
-      "notes": "Filer = sole labeler (gmail.modify only, never delete). Herald = gmail.readonly + gmail.compose (draft only, no send). No delete/archive tool registered — unreachable by construction (Pillar 2)."
+      "notes": "owning_agents = WRITERS (Pillar 1). Filer = sole labeler (gmail.modify only, never delete). Herald = drafts via gmail.readonly + gmail.compose (draft only, no send — drafting IS a write). No delete/archive tool registered — unreachable by construction (Pillar 2)."
     },
     {
       "name": "Google Calendar",
       "best_at": ["calendar-read", "calendar-write", "event-scheduling", "free-time-search"],
       "tools": ["list_events", "get_event", "create_event", "update_event", "suggest_time", "respond_to_event"],
-      "owning_agents": ["Sundial", "Usher", "Compass"],
+      "owning_agents": ["Sundial", "Usher"],
+      "readers": ["Compass"],
       "scopes": ["calendar.events", "calendar.readonly"],
       "health": "connected",
-      "notes": "Sundial/Usher = calendar.events (write, no delete). Compass = calendar.readonly. No delete tool registered (Pillar 2)."
+      "notes": "owning_agents = WRITERS (Pillar 1): Sundial/Usher = calendar.events (write, no delete). Compass = calendar.readonly — a READER, never route a calendar write to it. No delete tool registered (Pillar 2)."
     },
     {
       "name": "Google Drive",
       "best_at": ["file-read", "file-search", "export-storage", "cloud-docs"],
       "tools": ["search_files", "read_file_content", "get_file_metadata", "create_file", "copy_file"],
-      "owning_agents": ["Steward", "Archivist"],
+      "owning_agents": ["Steward"],
+      "readers": ["Archivist", "Quill", "Envoy"],
       "scopes": ["drive.file", "drive.readonly"],
       "health": "connected",
-      "notes": "Steward exports use drive.file (app-scoped). Codex reads use drive.readonly. Quill, Envoy, Archivist = drive.readonly. Never whole-Drive scope."
+      "notes": "owning_agents = WRITERS (Pillar 1): Steward exports use drive.file (app-scoped). Codex reads use drive.readonly. Archivist, Quill, Envoy = drive.readonly READERS — never route a Drive write to them. Never whole-Drive scope."
     },
     {
       "name": "Google Sheets",
@@ -68,10 +70,10 @@
       "name": "Canva",
       "best_at": ["design-generation", "brand-assets", "image-export", "template-creation"],
       "tools": ["generate-design", "create-design-from-brand-template", "export-design", "get-design-thumbnail"],
-      "owning_agents": ["Envoy", "Librarian"],
+      "owning_agents": ["Envoy"],
       "scopes": ["canva.oauth"],
       "health": "absent",
-      "notes": "Optional. Not yet connected. Use for brand visuals and design generation when Envoy publishes."
+      "notes": "Optional. Not yet connected. Envoy owns Canva publishing (Pillar-2 gated). Librarian only STORES prompts with tool:\"Canva\" — a metadata relationship, NOT ownership; never route a Canva design write to Librarian."
     },
     {
       "name": "Notion",

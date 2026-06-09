@@ -102,18 +102,18 @@ It is the difference between handing an agent "all of Gmail + all of Calendar + 
 
 > **Machine-readable source:** The registry table below is mirrored as a tracked JSON file at **`.claude/registry/mcp-registry.json`** — the editable knob the `/switchboard` slash-command reads at design time (no runtime KV required). Update both when adding a new MCP server.
 
-This is the lookup table behind step 3. "Best at" is what Switchboard optimizes for; "Owning agent(s)" is who normally executes against that server in Atlas.
+This is the lookup table behind step 3. "Best at" is what Switchboard optimizes for; "Owning agent(s)" lists the **writers** for that server (the Pillar-1 hard-rule input — never route a write to anyone else); read-only users are noted inline.
 
 | MCP server | Best at | Representative tools | Owning agent(s) | Typical scopes |
 |------------|---------|----------------------|-----------------|----------------|
-| **Gmail** | Email triage, labeling, drafting (never delete) | `list_labels`, `search_threads`, `get_thread`, `label_thread`, `create_draft` | [Filer](agents/filer.md), [Herald](agents/herald.md) | `gmail.modify` (labels), **not** delete (SPEC §12) |
-| **Google Calendar** | Reading & writing events, finding free time | `list_events`, `get_event`, `create_event`, `update_event`, `suggest_time`, `respond_to_event` | [Sundial](agents/sundial.md), [Usher](agents/usher.md), [Compass](agents/compass.md) | `calendar.events` (write) / `calendar.readonly` |
+| **Gmail** | Email triage, labeling, drafting (never delete) | `list_labels`, `search_threads`, `get_thread`, `label_thread`, `create_draft` | [Filer](agents/filer.md) (labels), [Herald](agents/herald.md) (drafts) | `gmail.modify` (Filer labels) / `gmail.readonly` + `gmail.compose` (Herald drafts), **not** delete (SPEC §12) |
+| **Google Calendar** | Reading & writing events, finding free time | `list_events`, `get_event`, `create_event`, `update_event`, `suggest_time`, `respond_to_event` | [Sundial](agents/sundial.md), [Usher](agents/usher.md) — [Compass](agents/compass.md) reads only | `calendar.events` (write) / `calendar.readonly` (Compass) |
 | **Google Drive** | Cloud docs/files: read content, search, store exports | `search_files`, `read_file_content`, `get_file_metadata`, `create_file`, `copy_file` | [Steward](agents/steward.md), Codex sync | `drive.file` / `drive.readonly` |
 | **Google Sheets** | Tabular/structured data: trackers, funnels, logs | (Sheets read/write) | Headhunter, Steward | `spreadsheets` |
 | **GitHub** | Code, PRs, issues, releases, repo metadata | `get_file_contents`, `search_code`, `list_pull_requests`, `pull_request_read`, `issue_read`, `create_pull_request` | [Envoy](agents/envoy.md) (portfolio/projects), Dev triage | GitHub App, least-privilege repo scopes |
 | **Obsidian** | The **Vault** — notes, dashboard, tags (local bridge) | `read-note`, `search-vault`, `create-note`, `edit-note`, `add-tags` | **[Steward](agents/steward.md) only** (sole Vault writer) | local MCP bridge (SPEC §7) |
 | **Playwright / browser** | Driving any site with no first-party MCP: forms, clicks, captcha-adjacent flows | `browser_navigate`, `browser_snapshot`, `browser_fill_form`, `browser_click`, `browser_type`, `browser_take_screenshot` | [Usher](agents/usher.md), [Envoy](agents/envoy.md) | none (browser session); gated by SPEC §12 |
-| **Canva** | Design generation/export for brand assets | `generate-design`, `create-design-from-brand-template`, `export-design`, `get-design-thumbnail` | [Envoy](agents/envoy.md), [Librarian](09-prompt-library.md) (tool field) | Canva OAuth |
+| **Canva** | Design generation/export for brand assets | `generate-design`, `create-design-from-brand-template`, `export-design`, `get-design-thumbnail` | [Envoy](agents/envoy.md) ([Librarian](09-prompt-library.md) only stores `tool:"Canva"` prompts — not an owner) | Canva OAuth |
 | **Notion** | External structured docs/databases (when used) | `notion-search`, `notion-fetch`, `notion-create-pages`, `notion-update-page` | (optional) | Notion OAuth |
 | **Slack** | Team/channel messaging, search, scheduled sends | `slack_search_public`, `slack_read_channel`, `slack_send_message`, `slack_schedule_message` | (optional) | Slack OAuth |
 | **Context7 docs** | Current library/framework/SDK/API documentation | `resolve-library-id`, `query-docs` | Switchboard itself, Dev work | none |
