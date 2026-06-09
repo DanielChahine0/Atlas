@@ -14,7 +14,7 @@
 
 import { z } from "zod";
 import { send } from "@atlas/wire";
-import { flag, localDate } from "@atlas/shared";
+import { contentHash, flag, localDate } from "@atlas/shared";
 import type { Env } from "./env.js";
 import { authorizeSave, unauthorized } from "./auth.js";
 import { dedupeLookup } from "./dedupe.js";
@@ -158,8 +158,11 @@ async function handleSave(request: Request, env: Env): Promise<Response> {
       full_prompt: fullPrompt,
     });
 
-    // Emit ONE upsert — bump idempotencyKey is date-suffixed so one bump per slug per day
-    // replay same day = no-op; a new day gets its own key (D-04 / T-5-Replay)
+    // Emit ONE upsert — bump idempotencyKey is date+content-hash-suffixed (repo convention:
+    // forge:task:<date>:<contentHash>). A true replay (identical noteBody → identical hash)
+    // dedupes to a ledger no-op; a same-day re-save with CHANGED content gets a DISTINCT key
+    // so the edited note still reaches the Vault (D-04 / T-5-Replay — D1 and the Vault
+    // projection must never silently diverge).
     await send(env, {
       agent: "librarian",
       type: "prompt.save",
@@ -170,7 +173,7 @@ async function handleSave(request: Request, env: Env): Promise<Response> {
         notePath: `Prompts/${existingSlug}.md`,
         noteBody,
       },
-      idempotencyKey: `librarian:${existingSlug}:save:${now}`,
+      idempotencyKey: `librarian:${existingSlug}:save:${now}:${contentHash(noteBody)}`,
     });
 
     return new Response(JSON.stringify({ slug: existingSlug, action: "bump" }), {

@@ -14,8 +14,8 @@
  *   integration signal that the whole META-01 path is broken (05-01 dependency check).
  * - The idempotency_keys ledger dedupes the replay (meta.changes===0 → applied:false).
  * - vault_outbox INSERT OR IGNORE on PK=idem: exactly ONE pending row, never two.
- * - A dedupe-bump key (date-suffixed) is a DISTINCT ledger entry — applies true once,
- *   writes to the SAME notePath (upsert on same slug, no clone).
+ * - A dedupe-bump key (date+content-hash-suffixed, CR-01) is a DISTINCT ledger entry —
+ *   applies true once, writes to the SAME notePath (upsert on same slug, no clone).
  *
  * Verifies:
  * - T-5-Replay: replayed upsert is { applied: false }, one vault_outbox row (no double-count).
@@ -26,6 +26,7 @@ import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { WireEvent } from "@atlas/wire";
 import { applyEvent } from "@atlas/steward-core";
+import { contentHash } from "@atlas/shared";
 import type { WireEvent as WireEventType } from "@atlas/wire";
 
 // The D1 database is seeded with migrations (0001..0008) by apply-migrations.ts beforeAll.
@@ -162,11 +163,15 @@ describe("Librarian replay-through-Steward (DoD Test 2)", () => {
     expect(ledger?.c).toBe(1);
   });
 
-  it("dedupe-bump event (date-suffixed key) is a DISTINCT ledger entry — applies once, upserts the SAME slug (no clone)", async () => {
+  it("dedupe-bump event (date+content-hash-suffixed key) is a DISTINCT ledger entry — applies once, upserts the SAME slug (no clone)", async () => {
     // First-save key (stable, no date): the canonical first-apply entry
     const firstSaveKey = "librarian:test-prompt-bump-test:save";
-    const bumpKey = "librarian:test-prompt-bump-test:save:2026-06-09";
     const notePath = "Prompts/test-prompt-bump-test.md";
+    // Bump key mirrors the production shape (CR-01): librarian:<slug>:save:<date>:<contentHash>
+    // — a replay of the SAME content dedupes; same-day CHANGED content gets a distinct key.
+    const bumpNoteBody =
+      "---\ntitle: T\ntool: Claude\ntags: []\ncreated: 2026-06-09\nlast_used: 2026-06-09\nuses: 2\n---\nUpdated body.";
+    const bumpKey = `librarian:test-prompt-bump-test:save:2026-06-09:${contentHash(bumpNoteBody)}`;
 
     const firstSave = makeLibrarianEvent({
       idempotencyKey: firstSaveKey,
@@ -182,7 +187,7 @@ describe("Librarian replay-through-Steward (DoD Test 2)", () => {
       payload: {
         fullNote: true,
         notePath, // SAME notePath — upsert on same slug, not a clone
-        noteBody: "---\ntitle: T\ntool: Claude\ntags: []\ncreated: 2026-06-09\nlast_used: 2026-06-09\nuses: 2\n---\nUpdated body.",
+        noteBody: bumpNoteBody,
       },
     });
 

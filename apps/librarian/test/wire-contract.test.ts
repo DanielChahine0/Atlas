@@ -100,8 +100,8 @@ function saveRequest(opts: {
 
 // Each test uses a unique prompt to avoid cross-test slug collisions in the shared
 // per-test D1 database (tests run sequentially in the same DB within a file).
-// A re-save of the same slug takes the bump path (date-suffixed key) — using unique
-// prompts ensures each test exercises the "new" path with the stable first-save key.
+// A re-save of the same slug takes the bump path (date+content-hash-suffixed key) — using
+// unique prompts ensures each test exercises the "new" path with the stable first-save key.
 
 describe("Librarian Wire-contract (DoD Test 1)", () => {
   it("emits exactly ONE §6.4-valid Wire event on a valid new-prompt save", async () => {
