@@ -187,7 +187,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 **Plans**: 4 plans
 
 **Wave 1** *(foundation — parallel, no file overlap)*
-- [ ] 05-01-PLAN.md — Steward op-mapping full-note `PUT /vault/Prompts/<slug>.md` extension (+ `Prompts/` path constraint via NonRetryableError) + `librarian→claude-haiku-4-5` TIER_MAP entry + `migrations/0008_prompts.sql` (dedupe table) + op-mapping unit test
+- [x] 05-01-PLAN.md — Steward op-mapping full-note `PUT /vault/Prompts/<slug>.md` extension (+ `Prompts/` path constraint via NonRetryableError) + `librarian→claude-haiku-4-5` TIER_MAP entry + `migrations/0008_prompts.sql` (dedupe table) + op-mapping unit test
 - [ ] 05-04-PLAN.md — Switchboard (META-02, NOT a Worker): `.claude/registry/mcp-registry.json` (machine-readable registry) + read-only `.claude/commands/switchboard.md` (6-step selection, Pillar-1/2 hard rules, D-07 gap severities) + `docs/10-switchboard.md` runbook formalization
 
 **Wave 2** *(Librarian Worker — blocked on 05-01)*
@@ -217,4 +217,4 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
 | 4. Outward (Gated) | 7/7 | Complete   | 2026-06-08 |
-| 5. Meta / Polish | 0/4 | Not started | - |
+| 5. Meta / Polish | 1/4 | In Progress|  |
