@@ -1,4 +1,5 @@
 import type { WireEvent } from "@atlas/wire";
+import { NonRetryableError } from "cloudflare:workflows";
 
 /**
  * The SINGLE op→Obsidian-Local-REST-v3 mapping source for the whole repo
@@ -36,7 +37,7 @@ export interface OutboxIntent {
  * canonical allow-list rather than redefining it (GLOBAL DECISION 5: the op→REST source
  * lives here, never duplicated downstream). There is no removal verb anywhere in this list.
  */
-export const SAFE_METHODS = ["PATCH", "POST"] as const;
+export const SAFE_METHODS = ["PATCH", "POST", "PUT"] as const;
 type SafeMethod = (typeof SAFE_METHODS)[number];
 
 /**
@@ -67,6 +68,32 @@ export function toOutboxIntent(e: WireEvent): OutboxIntent {
       break;
     }
     case "upsert": {
+      // ── NEW: full-note PUT (Librarian Prompts/<slug>.md) ──────────────────────
+      // When payload.fullNote===true the caller intends a whole-file overwrite (PUT),
+      // not a frontmatter-field patch. The only allowed destination is the Prompts/
+      // subtree — attempting to PUT to Dashboard/, Counters/, or any other path would
+      // silently corrupt a view. Fail loud (NonRetryableError → consumer acks + Flagger
+      // P3 downstream) instead of writing to a wrong path (Pitfall 1, T-5-Tamper).
+      if (e.payload.fullNote === true) {
+        const notePath = String(e.payload.notePath ?? "");
+        if (!notePath.startsWith("Prompts/")) {
+          throw new NonRetryableError(
+            `fullNote upsert requires notePath starting with "Prompts/"; got "${notePath}"`,
+          );
+        }
+        // Early return: body is the raw markdown (NOT the whole payload JSON).
+        return {
+          idem: e.idempotencyKey,
+          path: `/vault/${notePath}`,
+          method: "PUT" as SafeMethod,
+          headers: JSON.stringify({
+            "Content-Type": "text/markdown",
+            "X-Atlas-Idem": e.idempotencyKey,
+          }),
+          body: String(e.payload.noteBody ?? ""),
+        };
+      }
+      // ── EXISTING: frontmatter-field upsert (unchanged) ────────────────────────
       // Stable-row view note — last-writer-wins; create the note/field if missing.
       const note = String(e.payload.note ?? e.entity);
       const field = String(e.payload.field ?? e.entity);
