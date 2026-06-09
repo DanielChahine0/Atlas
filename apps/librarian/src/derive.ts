@@ -97,8 +97,10 @@ export async function deriveRecord(
     tags = [];
   }
 
-  // Derive slug once — kebab-case lowercase, only [a-z0-9-], satisfies Steward constraint
-  const slug = deriveSlug(title) || deriveSlug(promptText);
+  // Derive slug once — kebab-case lowercase, only [a-z0-9-], satisfies Steward constraint.
+  // Fallback chain (each step only fires when the previous normalizes to empty, e.g. an
+  // all-CJK/emoji title): title → prompt text → the literal "prompt" default.
+  const slug = deriveSlug(title) || deriveSlug(promptText) || "prompt";
 
   return { title, tags, slug };
 }
@@ -106,17 +108,17 @@ export async function deriveRecord(
 /**
  * Derive a slug from a title string.
  * Output: lowercase, spaces→hyphens, non-[a-z0-9-] stripped, leading/trailing hyphens stripped.
- * Always returns a non-empty string for non-empty input (falls back to "prompt" only if
- * the entire title normalizes to empty).
+ * Returns "" when the entire input normalizes to empty (no [a-z0-9] characters at all —
+ * e.g. all-CJK/Arabic/emoji titles) so callers can chain content-derived fallbacks; the
+ * "prompt" default is applied ONCE at the deriveRecord call site, never here.
  */
 export function deriveSlug(title: string): string {
-  const slug = title
+  return title
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "")
     .replace(/^-+|-+$/g, ""); // strip leading/trailing hyphens
-  return slug || "prompt";
 }
 
 /**
