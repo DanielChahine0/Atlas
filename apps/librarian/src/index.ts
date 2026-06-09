@@ -61,6 +61,24 @@ function buildNoteMarkdown(opts: {
   ].join("\n");
 }
 
+// ── KV dedupe-knob validation ─────────────────────────────────────────────────
+
+/**
+ * Parse a live-tunable KV dedupe knob. A mistyped value ("0,75", "abc") yields NaN and
+ * every `score >= NaN` comparison is false — silently disabling dedupe with no signal.
+ * Accept only a finite number in [0, 1]; anything else falls back to the built-in default
+ * and is reported as rejected so the caller can flag it (kind: "bad_config").
+ */
+function parseDedupeKnob(
+  raw: string | null,
+  fallback: number,
+): { value: number; rejected: boolean } {
+  if (raw === null || raw === "") return { value: fallback, rejected: false };
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 0 && n <= 1) return { value: n, rejected: false };
+  return { value: fallback, rejected: true };
+}
+
 // ── handleSave ────────────────────────────────────────────────────────────────
 
 async function handleSave(request: Request, env: Env): Promise<Response> {
@@ -146,11 +164,24 @@ async function handleSaveInner(request: Request, env: Env): Promise<Response> {
     });
   }
 
-  // Read KV dedupe thresholds (live-tunable, not [vars])
+  // Read KV dedupe thresholds (live-tunable, not [vars]) — validated, never raw Number():
+  // a KV typo must not silently disable dedupe (defaults 0.75 / 0.55 on rejection).
   const thresholdRaw = await env.CONFIG.get("librarian.dedupe_threshold");
   const borderRaw = await env.CONFIG.get("librarian.dedupe_border");
-  const threshold = thresholdRaw ? Number(thresholdRaw) : 0.75;
-  const border = borderRaw ? Number(borderRaw) : 0.55;
+  const thresholdKnob = parseDedupeKnob(thresholdRaw, 0.75);
+  const borderKnob = parseDedupeKnob(borderRaw, 0.55);
+  if (thresholdKnob.rejected || borderKnob.rejected) {
+    await flag(
+      env as { INCIDENTS: NonNullable<typeof env.INCIDENTS> },
+      "P4",
+      "Librarian: invalid KV dedupe threshold — using built-in defaults",
+      `librarian.dedupe_threshold=${JSON.stringify(thresholdRaw)}, ` +
+        `librarian.dedupe_border=${JSON.stringify(borderRaw)} (valid: finite number in [0,1])`,
+      { sourceAgent: "Librarian", kind: "bad_config" },
+    );
+  }
+  const threshold = thresholdKnob.value;
+  const border = borderKnob.value;
 
   // (5) Dedupe lookup — deterministic, no model (D-02)
   const dedupeResult = await dedupeLookup(env.DB, fullPrompt, tool, threshold, border);
