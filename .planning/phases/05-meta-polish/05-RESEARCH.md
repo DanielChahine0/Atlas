@@ -766,22 +766,27 @@ function buildNoteMarkdown(r: PromptRecord): string {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three resolved during planning (Phase 5 plans 05-01..05-04). Retained for the decision trail.
 
 1. **ATLAS_LIBRARIAN_TOKEN vs ATLAS_BRIDGE_TOKEN reuse**
    - What we know: D-01 says "reuse existing ATLAS_BRIDGE_TOKEN or a sibling secret."
    - What's unclear: The phrasing allows either. From a security/isolation standpoint, a sibling secret is better.
    - Recommendation: Use `ATLAS_LIBRARIAN_TOKEN` (a new sibling secret, same Secrets Store, same pattern as `ATLAS_BRIDGE_TOKEN`). Requires an owner go-live step to seed.
+   - **RESOLVED:** Use a new `ATLAS_LIBRARIAN_TOKEN` sibling secret (token-rotation isolation). Implemented in 05-02 (Bearer gate) + tracked as an owner go-live seed step.
 
 2. **`Dashboard/Prompt Library.md` initial seeding**
    - What we know: The Dataview query block needs to exist in the file before the table renders. Steward does not currently write this file.
    - What's unclear: Is this a manual one-time owner setup (consistent with how `Dashboard/Flagger.md` was set up), or should Librarian emit a Wire event to create it on first save?
    - Recommendation: Treat it as a one-time owner setup (add it to the go-live checklist alongside the menubar hotkey binding). Document the Dataview query in the process doc.
+   - **RESOLVED:** Manual one-time owner setup (consistent with other dashboard views); the Dataview query is documented in the 05-04 Switchboard/runbook deliverable and the go-live checklist. No runtime Steward write to seed it.
 
 3. **`payload.noteBody` size vs. 128 KB Wire cap**
    - What we know: Wire messages cap at 128 KB (enforced by `send()` in `packages/wire/src/send.ts`). A very long prompt + YAML front-matter could approach this.
    - What's unclear: Typical prompt lengths. Most prompts are 100–2000 words (400–8000 bytes). The 128 KB cap is generous.
    - Recommendation: Add a soft 50KB limit in Librarian's inbound validation (reject + P3 flag if `full_prompt.length > 50000`). Document in the Config table.
+   - **RESOLVED:** Soft 50KB limit on `full_prompt` in Librarian inbound validation (reject + P3 flag), implemented in 05-02. Keeps the emitted event well under the 128KB Queue cap.
 
 ---
 

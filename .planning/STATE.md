@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
+status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-06-09T16:13:28.525Z"
-last_activity: 2026-06-08
+last_updated: "2026-06-09T17:25:58.409Z"
+last_activity: 2026-06-09 -- Phase 05 planning complete
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 36
+  total_plans: 40
   completed_plans: 36
   percent: 83
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-01)
 
 Phase: 5
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-06-08
+Status: Ready to execute
+Last activity: 2026-06-09 -- Phase 05 planning complete
 Next action: Execute 04-05 (Sundial gate retrofit) → 04-06 (Usher) → 04-07 (Envoy) with `/gsd-execute-phase 4`. Blocking owner checkpoint for 04-02: grant the GitHub App `pull_requests: write` permission (GitHub → Settings → Developer settings → GitHub Apps → Atlas) + re-accept on the scoped repos, so Envoy can fire a live PR. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; close the Phase-0 owner gates; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
 
 Milestone progress: plans [█████████████████░░░] 89% (32/36) · phases [███████░░░] 67% (4 of 6 complete) — Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅ · Phase 3 Capture/Local ✅ (code-complete + verified) · Phase 4 Outward/Gated 🔄 4/7 · Phase 5 Meta/Polish ⬜ not started
