@@ -45,8 +45,8 @@ Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = S
 
 ### Meta / Polish (Phase 5)
 
-- [ ] **META-01**: Librarian captures a prompt and surfaces it deduped in the Vault prompt-library table (Title link · Tags · Tool · Last used), with the title deep-linking to the full-prompt note and most-used surfaced at top. _(09-prompt-library.md, docs/agents/librarian.md, SPEC-CANON §9)_
-- [ ] **META-02**: Switchboard exists as a documented design-time routing process (selects the minimal MCP server + tools + OAuth scopes for a goal, reports capability gaps to Flagger), NOT a deployed Worker (per D7). _(10-switchboard.md, docs/agents/switchboard.md)_
+- [x] **META-01**: Librarian captures a prompt and surfaces it deduped in the Vault prompt-library table (Title link · Tags · Tool · Last used), with the title deep-linking to the full-prompt note and most-used surfaced at top. _(09-prompt-library.md, docs/agents/librarian.md, SPEC-CANON §9)_
+- [x] **META-02**: Switchboard exists as a documented design-time routing process (selects the minimal MCP server + tools + OAuth scopes for a goal, reports capability gaps to Flagger), NOT a deployed Worker (per D7). _(10-switchboard.md, docs/agents/switchboard.md)_
 
 ## v2 Requirements
 
@@ -90,8 +90,8 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | CAPTURE-02 | Phase 3 | Complete |
 | OUTWARD-01 | Phase 4 | Complete |
 | OUTWARD-02 | Phase 4 | Complete |
-| META-01 | Phase 5 | Pending |
-| META-02 | Phase 5 | Pending |
+| META-01 | Phase 5 | Complete |
+| META-02 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 19 total
