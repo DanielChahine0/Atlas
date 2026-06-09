@@ -19,6 +19,8 @@
 
 > **Design-time, not run-time.** Per SPEC §4: *"Switchboard is consulted at design time when a new capability is needed; it doesn't run in the loop."* When you (or Atlas) hit a goal with no obvious agent, you ask Switchboard *"what do I need to do this?"* — it answers with a toolset; the chosen agent then executes behind the usual confirmation gates (SPEC §12).
 
+> **How to invoke:** Use the `/switchboard <goal>` Claude Code slash-command (`.claude/commands/switchboard.md`). It reads the machine-readable MCP registry at `.claude/registry/mcp-registry.json`, runs the 6-step algorithm below, and returns a ranked toolset recommendation JSON. The command is read-only (allowed-tools: Read, Glob, context7, WebSearch) — it never writes, edits, or runs shell commands. Switchboard is **NOT a deployed Worker** (D-07).
+
 ---
 
 ## What it does
@@ -90,13 +92,15 @@ It is the difference between handing an agent "all of Gmail + all of Calendar + 
 
 - **Specificity beats generality.** A first-party server (Google Calendar) beats driving the same site through a browser, when both can do the job. Reserve **Playwright** for sites with no MCP.
 - **Read before write.** If the goal can be met read-only, never shortlist write tools.
-- **One writer per resource (SPEC pillar 1).** Switchboard never recommends a second writer for something an existing agent owns — e.g. it routes any Vault write through [Steward](agents/steward.md), never a direct Obsidian write.
-- **Gate the irreversible (SPEC pillar 2 / §12).** If the intent is outward-facing (post, register, pay, delete), the recommendation **must** include the confirmation gate and the owning agent ([Usher](agents/usher.md)/[Envoy](agents/envoy.md)).
-- **Health-aware.** A disconnected/unhealthy MCP is dropped from the shortlist and Switchboard flags the gap to [Flagger](08-flagger.md).
+- **One writer per resource (SPEC pillar 1) — HARD RULE.** Switchboard NEVER recommends a second writer for a resource an existing agent owns. Check the `owning_agents` field in the registry for every server shortlisted. Route any Vault write through [Steward](agents/steward.md); any outward publishing through [Envoy](agents/envoy.md); any calendar write through [Sundial](agents/sundial.md)/[Usher](agents/usher.md). A writer collision is a blocker — re-route, never override.
+- **Gate the irreversible (SPEC pillar 2 / §12) — HARD RULE.** If the intent's verb appears in the registry `side_effect_verbs` list (post, register, pay, delete, submit, send, publish, …), the recommendation **MUST** include `confirmation_gate: true` and name the executing agent ([Usher](agents/usher.md)/[Envoy](agents/envoy.md)). An ungated outward toolset is a **P1 Critical** gap — emit a gap incident immediately; never silently deliver an ungated recommendation (SPEC §12, D-07).
+- **Health-aware.** A disconnected (`health: "absent"`) MCP is excluded from the shortlist entirely; a degraded MCP is penalized. A gap resulting from a disconnected MCP that blocks the in-flight goal is a P2 flag (see Failure modes below).
 
 ---
 
 ## REGISTRY — known MCP servers
+
+> **Machine-readable source:** The registry table below is mirrored as a tracked JSON file at **`.claude/registry/mcp-registry.json`** — the editable knob the `/switchboard` slash-command reads at design time (no runtime KV required). Update both when adding a new MCP server.
 
 This is the lookup table behind step 3. "Best at" is what Switchboard optimizes for; "Owning agent(s)" is who normally executes against that server in Atlas.
 
@@ -249,12 +253,78 @@ Flags carry a **trust/confidence score (0–100)** per SPEC §8 — high for a d
 
 ---
 
+## D-07 — Actionable gap→Flagger emit
+
+When Switchboard detects a gap, it does NOT just print a note. It outputs a **severity-annotated §6.4 RawIncident** plus a documented **one-command producer-only emit path** the operator can copy-paste to land the incident in the Flagger feed.
+
+### D-07 severity map
+
+| Gap type | `severity_hint` | `kind` | When |
+|----------|-----------------|--------|------|
+| No connected MCP for required capability | `P3` | `capability_gap` | Step 3 shortlist empty |
+| Required MCP disconnected/unhealthy, blocks in-flight goal | `P2` | `unhealthy_mcp` | Step 3 health check |
+| Missing or un-granted OAuth scope | `P3` | `missing_scope` | Step 5 scope check |
+| Outward toolset assembled WITHOUT confirmation gate | `P1` | `ungated_outward` | Step 6 self-audit |
+
+### §6.4 RawIncident shape (the exact payload `flag()` enqueues)
+
+```json
+{
+  "source_agent": "Switchboard",
+  "severity_hint": "P3",
+  "kind": "capability_gap",
+  "title": "No connected MCP for capability: <capability-name>",
+  "detail": "Goal: <goal>. Required capability: <capability>. No server with health=connected covers this.",
+  "suggested_action": "Connect the <server-name> MCP — see docs/06-hosting-cloudflare-mcp.md §11."
+}
+```
+
+### One-command producer-only emit path
+
+The incident above is the exact payload for `flag()` from `@atlas/shared`. To emit it into the Flagger feed from any Worker with the `INCIDENTS` binding:
+
+```typescript
+import { flag } from "@atlas/shared";
+
+await flag(
+  env,                          // env must have INCIDENTS: Queue<RawIncident>
+  "P3",                         // severity from D-07 map
+  "No connected MCP for capability: <capability>",
+  "Goal: <goal>. Required: <capability>. No connected server found.",
+  {
+    sourceAgent: "Switchboard",
+    kind: "capability_gap",
+    suggestedAction: "Connect the <server> MCP — see docs/06-hosting-cloudflare-mcp.md §11."
+  }
+);
+```
+
+**Important constraints (D-07, Pillar 1):**
+- This emit path is **producer-only**: it sends to `atlas-incidents`, which Flagger already consumes.
+- Switchboard adds **NO new `atlas-wire` or `atlas-incidents` consumer** — Switchboard is not a deployed Worker.
+- The operator copies this snippet into the relevant context (a build step, a manual run) to surface the gap.
+- Flagger scores, deduplicates, and routes the incident to the Vault via Steward (the sole Vault writer).
+
+---
+
 ## Config
 
-- **Registry config** — the list of MCP servers, their capability tags, owning agent, and required scopes. Lives in KV (per SPEC §7) and is the editable knob behind the REGISTRY table above.
-- **Side-effect policy** — which verbs are classed outward/irreversible (`post`, `register`, `pay`, `delete`) and therefore force a confirmation gate.
-- **Ranking weights** — specificity-over-generality, read-before-write, health penalty.
-- **Default model** — reasoning task; Opus per SPEC §7 (orchestration/reasoning tier).
+- **Registry config** — the machine-readable list of MCP servers, capability tags, owning agents, and required scopes. Lives at **`.claude/registry/mcp-registry.json`** (tracked JSON, version-controlled — chosen over CONFIG KV because the design-time `/switchboard` command reads it via the Read tool with zero runtime dependencies; KV is unreachable at design time). Update both the JSON and the REGISTRY table above when adding a new MCP server.
+- **Side-effect policy** — which verbs are classed outward/irreversible (`post`, `register`, `pay`, `delete`, `submit`, `send`, `publish`, …) and therefore force a confirmation gate. Defined in the registry `side_effect_verbs` array.
+- **Ranking weights** — specificity-over-generality, read-before-write, health penalty, Pillar-1/Pillar-2 hard rules. Defined in the registry `ranking_weights` object.
+- **Default model** — reasoning task; Opus per SPEC §7 (orchestration/reasoning tier), called via AI Gateway. (Applicable when Switchboard is run as an AI agent; the `/switchboard` slash-command inherits the model from the calling context.)
+
+---
+
+## Deferred items (out of Phase 5 scope)
+
+The following items are intentionally deferred and are NOT part of this phase:
+
+- **Registry freshness / health cadence** — no automated re-check of MCP health; health is updated manually in `.claude/registry/mcp-registry.json`.
+- **Auto-execute vs. always-handoff** — Switchboard only recommends; trivially safe read-only inline execution is deferred.
+- **Learning loop** — no recording of accepted/edited recommendations or weight tuning.
+- **New-server onboarding flow** — when a new MCP is added, manually update both `.claude/registry/mcp-registry.json` and the REGISTRY table in this doc.
+- **Menubar hotkey** — no OS-level hotkey binding for invoking `/switchboard`.
 
 ---
 
