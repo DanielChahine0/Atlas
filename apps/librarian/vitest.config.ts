@@ -6,6 +6,8 @@ const migrations = await readD1Migrations("../../migrations");
 
 export default defineConfig({
   test: {
+    // passWithNoTests: tests land in 05-03; this keeps pnpm test green until then.
+    passWithNoTests: true,
     setupFiles: ["./test/apply-migrations.ts"],
     provide: { migrations },
   },
