@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Test-only wrangler config for @cloudflare/vitest-pool-workers. Mirrors the
+  // production apps/librarian/wrangler.jsonc but uses local-only D1/KV (no remote IDs)
+  // so the pool stays fully local. The CI one-writer gate scans apps/*/wrangler.jsonc
+  // only (NOT wrangler.test.jsonc), so this mirror does not affect the consumer count.
+  "name": "librarian-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "queues": {
+    "producers": [
+      { "binding": "WIRE",      "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "CONFIG", "id": "test-config" }],
+  "vars": {
+    "AIG_ACCOUNT_ID": "test-account",
+    "AIG_GATEWAY_ID": "atlas-highvolume"
+  }
+}

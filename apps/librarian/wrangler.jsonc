@@ -1,0 +1,77 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "librarian",
+  "main": "src/index.ts",
+  // D-09: match Atlas/Steward — >= 2026-04-07 floor; pair with nodejs_compat.
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The Librarian Worker: a stateless, producer-only Cloudflare Worker exposing a
+  // Bearer-gated POST /prompt/save that captures a prompt, dedupes it within its tool
+  // bucket, derives title/tags via Haiku, writes D1, and emits ONE op:"upsert" Wire event.
+  //
+  // Pillar 1 — PRODUCER ONLY: queues has a producers array ONLY (WIRE + INCIDENTS).
+  // There is NO consumers block. guard-wire-consumer.js will hard-fail if atlas-wire
+  // appears in consumers. Steward remains the SOLE atlas-wire consumer.
+  "queues": {
+    "producers": [
+      { "binding": "WIRE",      "queue": "atlas-wire" },
+      { "binding": "INCIDENTS", "queue": "atlas-incidents" }
+    ]
+    // NO "consumers" block — Pillar 1 hard gate
+  },
+
+  // D1 system-of-record — prompts table (0008 migration) for dedupe lookup.
+  // Positional ? binds only (no named params).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atlas-db",
+      "database_id": "<atlas-db-id>",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // KV: config/flags. NEVER secrets, NEVER counters.
+  // Holds: librarian.dedupe_threshold, librarian.dedupe_border, librarian.default_tool
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "<config-kv-id>" }
+  ],
+
+  // Secrets Store — read via async get(). NEVER in [vars], KV, Vault, Codex, audit_log,
+  // or any tracked file. store_id placeholder: replace <atlas-store-id> after provisioning.
+  // ATLAS_LIBRARIAN_TOKEN is a NEW sibling secret (NOT ATLAS_BRIDGE_TOKEN — Pitfall 4).
+  "secrets_store_secrets": [
+    {
+      "binding": "ATLAS_LIBRARIAN_TOKEN",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "atlas-librarian-token"
+    },
+    {
+      "binding": "ANTHROPIC_API_KEY",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "anthropic-api-key"
+    },
+    {
+      "binding": "CF_AIG_TOKEN",
+      "store_id": "<atlas-store-id>",
+      "secret_name": "cf-aig-token"
+    }
+  ],
+
+  // AIG_ACCOUNT_ID/AIG_GATEWAY_ID are plaintext non-secrets ([vars], not Secrets Store).
+  // Librarian uses Haiku → atlas-highvolume gateway (cost domain: high-volume).
+  "vars": {
+    "AIG_ACCOUNT_ID": "<account-id>",
+    "AIG_GATEWAY_ID": "atlas-highvolume"
+  },
+
+  "observability": { "enabled": true },
+
+  "env": {
+    // Staging fires NO crons (convention; this Worker has no crons of its own).
+    "staging": {
+      "triggers": { "crons": [] }
+    }
+  }
+}
