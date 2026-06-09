@@ -191,7 +191,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 05-04-PLAN.md — Switchboard (META-02, NOT a Worker): `.claude/registry/mcp-registry.json` (machine-readable registry) + read-only `.claude/commands/switchboard.md` (6-step selection, Pillar-1/2 hard rules, D-07 gap severities) + `docs/10-switchboard.md` runbook formalization
 
 **Wave 2** *(Librarian Worker — blocked on 05-01)*
-- [ ] 05-02-PLAN.md — `apps/librarian` (META-01): Bearer-gated producer-only `POST /prompt/save` (timingSafeEqual, fail-closed) + deterministic tool-scoped Jaccard dedupe (KV threshold, borderline→keep-separate+Flagger) + Haiku title/tags + once-only stable slug + ONE `op:"upsert"` Wire event (structured idempotency keys) + D1 system-of-record write
+- [x] 05-02-PLAN.md — `apps/librarian` (META-01): Bearer-gated producer-only `POST /prompt/save` (timingSafeEqual, fail-closed) + deterministic tool-scoped Jaccard dedupe (KV threshold, borderline→keep-separate+Flagger) + Haiku title/tags + once-only stable slug + ONE `op:"upsert"` Wire event (structured idempotency keys) + D1 system-of-record write
 
 **Wave 3** *(Librarian Definition-of-Done tests — blocked on 05-02)*
 - [ ] 05-03-PLAN.md — The three mandatory Atlas tests for Librarian: Wire-contract (§6.4 + structured key) + replay-through-Steward (`meta.changes === 0`, bump-not-clone) + failure-path (Bearer 401 fail-closed, empty/oversized→Flagger, borderline→keep-separate) + Wave-0 test scaffolding
@@ -217,4 +217,4 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
 | 4. Outward (Gated) | 7/7 | Complete   | 2026-06-08 |
-| 5. Meta / Polish | 2/4 | In Progress|  |
+| 5. Meta / Polish | 3/4 | In Progress|  |
