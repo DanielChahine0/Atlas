@@ -4,7 +4,8 @@
  * Verifies (per 05-VALIDATION Dimension 8, META-01):
  * - A valid POST /prompt/save emits exactly ONE §6.4 WireEvent to env.WIRE.send.
  * - WireEvent.parse(emitted) does not throw (the single canonical schema in packages/wire).
- * - Literal field values: agent==="librarian", type==="prompt.save", entity==="prompt", op==="upsert".
+ * - Literal field values: agent==="Librarian" (capitalized codename), type==="prompt.save",
+ *   entity==="prompt", op==="upsert".
  * - idempotencyKey matches /^librarian:[a-z0-9-]+:save$/ (first-save stable key).
  * - payload.fullNote===true and String(payload.notePath) matches /^Prompts\//.
  *
@@ -156,7 +157,8 @@ describe("Librarian Wire-contract (DoD Test 1)", () => {
     );
 
     const emitted = wireEvents[0]!;
-    expect(emitted.agent).toBe("librarian");
+    // Capitalized codename (CLAUDE.md: Wire agent field = the codename, e.g. "Forge")
+    expect(emitted.agent).toBe("Librarian");
     expect(emitted.type).toBe("prompt.save");
     expect(emitted.entity).toBe("prompt");
     expect(emitted.op).toBe("upsert");

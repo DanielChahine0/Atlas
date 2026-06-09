@@ -37,7 +37,7 @@ const db = (env as unknown as { DB: D1Database }).DB;
 /** A §6.4-valid Librarian upsert event for a new prompt. */
 function makeLibrarianEvent(overrides: Partial<WireEventType> = {}): WireEventType {
   return {
-    agent: "librarian",
+    agent: "Librarian", // capitalized codename (CLAUDE.md: Wire agent field = the codename)
     type: "prompt.save",
     entity: "prompt",
     op: "upsert",

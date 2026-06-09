@@ -164,7 +164,7 @@ async function handleSave(request: Request, env: Env): Promise<Response> {
     // so the edited note still reaches the Vault (D-04 / T-5-Replay — D1 and the Vault
     // projection must never silently diverge).
     await send(env, {
-      agent: "librarian",
+      agent: "Librarian", // capitalized codename (CLAUDE.md: Wire agent field = the codename)
       type: "prompt.save",
       entity: "prompt",
       op: "upsert",
@@ -262,7 +262,7 @@ async function handleNewPromptWithDerived(
 
   // Emit ONE upsert — first-save key is stable (no date) so replay at any age = ledger no-op
   await send(env, {
-    agent: "librarian",
+    agent: "Librarian", // capitalized codename (CLAUDE.md: Wire agent field = the codename)
     type: "prompt.save",
     entity: "prompt",
     op: "upsert",
