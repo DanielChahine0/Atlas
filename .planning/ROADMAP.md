@@ -18,7 +18,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] **Phase 2: Weekly Value** - Scout (events), Headhunter (jobs, feeds Forge), Flagger (incident pipeline + self-watchdog). (completed 2026-06-05)
 - [x] **Phase 3: Capture (Local)** - Echo (audio, local daemon) → Archivist; Quill (screen autofill). First non-cloud runtime; privacy boundary first. (completed 2026-06-06)
 - [x] **Phase 4: Outward (Gated)** - Usher (gated registration), Envoy (gated public posts); confirmation-gate UX is the real work, gate hardest. (completed 2026-06-08)
-- [ ] **Phase 5: Meta / Polish** - Switchboard (design-time capability router), Librarian (prompt library).
+- [x] **Phase 5: Meta / Polish** - Switchboard (design-time capability router), Librarian (prompt library). (completed 2026-06-09)
 
 ## Phase Details
 
@@ -194,7 +194,7 @@ Atlas is built in the canonical 6-phase order from `docs/12-roadmap.md` (milesto
 - [x] 05-02-PLAN.md — `apps/librarian` (META-01): Bearer-gated producer-only `POST /prompt/save` (timingSafeEqual, fail-closed) + deterministic tool-scoped Jaccard dedupe (KV threshold, borderline→keep-separate+Flagger) + Haiku title/tags + once-only stable slug + ONE `op:"upsert"` Wire event (structured idempotency keys) + D1 system-of-record write
 
 **Wave 3** *(Librarian Definition-of-Done tests — blocked on 05-02)*
-- [ ] 05-03-PLAN.md — The three mandatory Atlas tests for Librarian: Wire-contract (§6.4 + structured key) + replay-through-Steward (`meta.changes === 0`, bump-not-clone) + failure-path (Bearer 401 fail-closed, empty/oversized→Flagger, borderline→keep-separate) + Wave-0 test scaffolding
+- [x] 05-03-PLAN.md — The three mandatory Atlas tests for Librarian: Wire-contract (§6.4 + structured key) + replay-through-Steward (`meta.changes === 0`, bump-not-clone) + failure-path (Bearer 401 fail-closed, empty/oversized→Flagger, borderline→keep-separate) + Wave-0 test scaffolding
 
 **Cross-cutting constraints** (truths appearing in 2+ plans):
 - Steward stays the SOLE `atlas-wire` consumer (Pillar 1); Librarian + every Switchboard gap-emit path is a PRODUCER only — no new `atlas-wire`/`atlas-incidents` consumer (a second is a hard CI failure).
@@ -217,4 +217,4 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5. MVP = Phase 0 
 | 2. Weekly Value | 7/7 | Complete   | 2026-06-05 |
 | 3. Capture (Local) | 6/6 | Complete   | 2026-06-06 |
 | 4. Outward (Gated) | 7/7 | Complete   | 2026-06-08 |
-| 5. Meta / Polish | 3/4 | In Progress|  |
+| 5. Meta / Polish | 4/4 | Complete   | 2026-06-09 |
