@@ -46,14 +46,17 @@ export async function deriveRecord(
   promptText: string,
   env: Env,
 ): Promise<DerivedRecord> {
-  // Cast: ModelEnv requires `Record<string,unknown>` (index sig) but Env is a named interface.
-  // archivist/envoy use the same `as unknown as Parameters<typeof claudeFor>[1]` pattern.
-  const claude = await claudeFor("librarian", env as unknown as Parameters<typeof claudeFor>[1]);
-
   let title: string;
   let tags: string[];
 
   try {
+    // claudeFor is INSIDE the try block (WR-05): it throws at construction time on an
+    // unprovisioned gateway (missing/blank AIG_* vars). A construction failure must take
+    // the same non-model fallback as a call failure — never turn every save into a 500.
+    // Cast: ModelEnv requires `Record<string,unknown>` (index sig) but Env is a named
+    // interface. archivist/envoy use the same `as unknown as Parameters<...>` pattern.
+    const claude = await claudeFor("librarian", env as unknown as Parameters<typeof claudeFor>[1]);
+
     const resp = (await claude.messages.create({
       max_tokens: 128,
       messages: [
@@ -87,8 +90,9 @@ export async function deriveRecord(
       tags = [];
     }
   } catch {
-    // On JSON parse error or model call failure: fall back to prompt-derived title
-    // (claudeFor's flagGatewayError already filed the P3 flag — no double-flag)
+    // On claudeFor construction failure, JSON parse error, or model call failure:
+    // fall back to prompt-derived title (gateway call failures are already P3-flagged
+    // inside @atlas/model via flagGatewayError — no double-flag)
     title = promptText.trim().split(/\s+/).slice(0, 6).join(" ");
     tags = [];
   }

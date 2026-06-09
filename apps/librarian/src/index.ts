@@ -60,6 +60,32 @@ function buildNoteMarkdown(opts: {
 // ── handleSave ────────────────────────────────────────────────────────────────
 
 async function handleSave(request: Request, env: Env): Promise<Response> {
+  // Top-level catch (Pillar 5: every notable failure → Flagger): any unexpected throw
+  // — a D1 INSERT/UPDATE failure, a Wire send failure (incl. WireEventTooLargeError),
+  // a derive bug — must surface as a FLAGGED P3 + structured 500, never a silent 500.
+  try {
+    return await handleSaveInner(request, env);
+  } catch (err) {
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    try {
+      await flag(
+        env as { INCIDENTS: NonNullable<typeof env.INCIDENTS> },
+        "P3",
+        "Librarian: save failed",
+        detail,
+        { sourceAgent: "Librarian", kind: "save_failed" },
+      );
+    } catch {
+      // Telemetry is best-effort — a flag failure must not mask the 500 response.
+    }
+    return new Response(JSON.stringify({ error: "Save failed" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+async function handleSaveInner(request: Request, env: Env): Promise<Response> {
   // (1) Auth before body parse — T-5-Auth fail-closed gate
   if (!(await authorizeSave(request, env))) {
     return unauthorized();
@@ -147,7 +173,14 @@ async function handleSave(request: Request, env: Env): Promise<Response> {
       .bind(fullPrompt, now, newUses, existingSlug)
       .run();
 
-    const tags = JSON.parse(existing.tags) as string[];
+    // Guarded parse: one malformed tags row must not brick every bump of this slug
+    let tags: string[];
+    try {
+      const parsed = JSON.parse(existing.tags) as unknown;
+      tags = Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === "string") : [];
+    } catch {
+      tags = [];
+    }
     const noteBody = buildNoteMarkdown({
       title: existing.title,
       tool,
