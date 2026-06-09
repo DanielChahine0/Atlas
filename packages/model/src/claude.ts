@@ -32,6 +32,7 @@ const TIER_MAP: Record<string, string> = {
   scout: "claude-sonnet-4-6",
   headhunter: "claude-sonnet-4-6",
   filer: "claude-haiku-4-5",
+  librarian: "claude-haiku-4-5",  // title/tags derivation: Haiku, high-volume gateway (D-05)
 };
 
 /** The Sonnet default for any agent not explicitly tiered (mid-cost, safe middle ground). */
