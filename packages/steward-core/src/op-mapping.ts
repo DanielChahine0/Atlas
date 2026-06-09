@@ -88,11 +88,19 @@ export function toOutboxIntent(e: WireEvent): OutboxIntent {
             `fullNote upsert requires a single-segment "Prompts/<slug>.md" notePath; got "${notePath}"`,
           );
         }
+        // Honest typing (no unchecked `as SafeMethod` cast — the annotation makes the
+        // compiler verify "PUT" is genuinely in the SAFE_METHODS tuple) + the SAME
+        // runtime Pillar-2 belt as the bottom guard: this early return must not be the
+        // one branch that can skip the safe-verb assertion.
+        const fullNoteMethod: SafeMethod = "PUT";
+        if (!SAFE_METHODS.includes(fullNoteMethod)) {
+          throw new Error(`refusing non-safe outbound method: ${fullNoteMethod}`);
+        }
         // Early return: body is the raw markdown (NOT the whole payload JSON).
         return {
           idem: e.idempotencyKey,
           path: `/vault/${notePath}`,
-          method: "PUT" as SafeMethod,
+          method: fullNoteMethod,
           headers: JSON.stringify({
             "Content-Type": "text/markdown",
             "X-Atlas-Idem": e.idempotencyKey,
@@ -136,7 +144,8 @@ export function toOutboxIntent(e: WireEvent): OutboxIntent {
 
   // Pillar-2 belt: the produced verb MUST be in the safe allow-list. This makes a
   // destructive verb structurally unreachable — no op branch can yield one, and
-  // an accidental future edit that introduced one would throw here.
+  // an accidental future edit that introduced one would throw here. (The fullNote
+  // early return above carries its own identical belt — no branch bypasses it.)
   if (!SAFE_METHODS.includes(method)) {
     throw new Error(`refusing non-safe outbound method: ${method}`);
   }
