@@ -173,14 +173,15 @@ async function handleSaveInner(request: Request, env: Env): Promise<Response> {
       return handleNewPrompt(env, fullPrompt, tool, now);
     }
 
-    const newUses = existing.uses + 1;
-
-    // UPDATE same slug — positional ? only
-    await env.DB.prepare(
-      "UPDATE prompts SET full_prompt = ?, last_used = ?, uses = ? WHERE slug = ?",
+    // Atomic increment — uses = uses + 1 happens IN SQL, never read-modify-write in JS:
+    // concurrent saves cannot lose updates, and RETURNING gives the actual post-increment
+    // value for the noteBody so the Vault note agrees with D1. Positional ? only.
+    const updated = await env.DB.prepare(
+      "UPDATE prompts SET full_prompt = ?, last_used = ?, uses = uses + 1 WHERE slug = ? RETURNING uses",
     )
-      .bind(fullPrompt, now, newUses, existingSlug)
-      .run();
+      .bind(fullPrompt, now, existingSlug)
+      .first<{ uses: number }>();
+    const newUses = updated?.uses ?? existing.uses + 1;
 
     // Guarded parse: one malformed tags row must not brick every bump of this slug
     let tags: string[];
