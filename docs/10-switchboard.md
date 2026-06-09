@@ -9,7 +9,7 @@
 | **Codename** | **Switchboard** (capability router) |
 | **Roster #** | 14 (SPEC §2) |
 | **Importance** | Tier 4 — meta/force-multiplier, **not on the critical path** (SPEC §3 #16) |
-| **Runtime** | Cloud (Cloudflare Worker + Durable Object) |
+| **Runtime** | Design-time only — `/switchboard` Claude Code slash-command; **NOT a deployed Worker** (D-07) |
 | **Trigger** | **on-demand (design time)** — user-initiated (SPEC §10) |
 | **Inputs** | A natural-language prompt/goal; optional constraints (which accounts are connected, scope budget) |
 | **Outputs** | A ranked **toolset recommendation**: MCP server(s) + exact tool list + required resources + required OAuth scopes + executing agent |
