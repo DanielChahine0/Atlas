@@ -95,6 +95,27 @@ describe("toOutboxIntent — fullNote PUT branch", () => {
     expect(() => toOutboxIntent(evt)).toThrow(NonRetryableError);
   });
 
+  // Test 4b: traversal segments must not bypass the Prompts/ constraint — the
+  // prefix alone is satisfiable by "Prompts/../<elsewhere>", so the validator
+  // enforces a single-segment Prompts/<slug>.md shape.
+  it("fullNote upsert rejects traversal and multi-segment paths under the Prompts/ prefix", () => {
+    const badPaths = [
+      "Prompts/../Dashboard/Today.md", // classic traversal — escapes the subtree
+      "Prompts/sub/dir.md",            // multi-segment — only direct children allowed
+      "Prompts//evil.md",              // empty segment
+      "Prompts/evil%2e%2e.md",         // percent-encoded — "%" not in allowlist
+      "Prompts/evil\\x.md",            // backslash — not in allowlist
+      "Prompts/.md",                   // no filename stem before the extension
+      "Prompts/evil.txt",              // wrong extension
+    ];
+    for (const notePath of badPaths) {
+      const evt = wireEvent({
+        payload: { fullNote: true, notePath, noteBody: "# nope" },
+      });
+      expect(() => toOutboxIntent(evt), notePath).toThrow(NonRetryableError);
+    }
+  });
+
   // Test 5: ordinary upsert WITHOUT fullNote still produces PATCH + Target-Type frontmatter
   it("ordinary upsert (no fullNote) still produces method:PATCH with Target-Type frontmatter", () => {
     const evt = wireEvent({

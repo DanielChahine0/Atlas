@@ -76,9 +76,16 @@ export function toOutboxIntent(e: WireEvent): OutboxIntent {
       // P3 downstream) instead of writing to a wrong path (Pitfall 1, T-5-Tamper).
       if (e.payload.fullNote === true) {
         const notePath = String(e.payload.notePath ?? "");
-        if (!notePath.startsWith("Prompts/")) {
+        // A bare startsWith("Prompts/") prefix check is bypassable via a traversal
+        // segment ("Prompts/../Dashboard/x.md" passes the prefix but escapes the
+        // subtree when the URL resolves). Enforce the whole shape instead: exactly
+        // ONE filename segment under Prompts/, .md extension, conservative character
+        // allowlist (no "/", "\", "%", whitespace, or control chars — kills
+        // traversal, encoded traversal, and URL/header injection in one move). The
+        // explicit ".." rejection is defense-in-depth on top of the allowlist.
+        if (!/^Prompts\/[A-Za-z0-9][A-Za-z0-9._-]*\.md$/.test(notePath) || notePath.includes("..")) {
           throw new NonRetryableError(
-            `fullNote upsert requires notePath starting with "Prompts/"; got "${notePath}"`,
+            `fullNote upsert requires a single-segment "Prompts/<slug>.md" notePath; got "${notePath}"`,
           );
         }
         // Early return: body is the raw markdown (NOT the whole payload JSON).
