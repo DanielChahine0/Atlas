@@ -6,13 +6,18 @@
 > and personal-brand publishing. Atlas itself does **no domain work** — it schedules, routes,
 > sequences, supervises, and owns the shared event bus (the Wire) + state.
 >
-> **Status: MVP code-complete.** Phase 0 (Spine) + Phase 1 (Core Loop / Morning Pipeline) are built,
-> reviewed, and on `main` (HEAD `09518da`, 315 tests green) — **awaiting owner go-live gates** (live
-> OAuth round-trips, Secrets Store seed, Obsidian bridge, AI-Gateway ceilings; see `.planning/STATE.md`
-> → Blockers). **Current focus: Phase 2 (Weekly Value).**
-> **Built (`apps/`):** atlas · steward · filer · herald · forge · sundial · compass · dlq-sink ·
-> mcp-google · mcp-github · mcp-obsidian-bridge (+ the local `daemon/`). **Not yet built (Phases 2–5):**
-> scout · headhunter · flagger · echo · archivist · usher · envoy · switchboard · librarian.
+> **Status: milestone v1.0 code-complete (2026-06-09).** All 6 phases (Spine · Core Loop · Weekly
+> Value · Capture/Local · Outward/Gated · Meta/Polish) are built, reviewed, and on `main` — 40/40
+> plans, 716 workspace + 39 daemon tests green (+106 Swift capture tests; 2 live-OAuth tests
+> intentionally skipped) — **awaiting owner go-live gates** (live OAuth round-trips, Secrets Store
+> seed, Obsidian bridge, AI-Gateway ceilings, GitHub App `pull_requests:write` grant, Playwright
+> browser profile; see `.planning/STATE.md` → Blockers). **Nothing is live in production yet.
+> Current focus: owner go-live gates → next milestone.**
+> **Built (`apps/` — the FULL fleet):** atlas · steward · filer · herald · forge · sundial · compass ·
+> scout · headhunter · flagger · flagger-watchdog · echo · archivist · usher · envoy · librarian ·
+> gate · dlq-sink · mcp-google · mcp-github · mcp-obsidian-bridge, plus the local `daemon/` and the
+> Swift `capture/` app. Switchboard is **design-time only** per D7 (`.claude/registry/mcp-registry.json`
+> + `/switchboard` + `docs/10-switchboard.md`) — intentionally NOT a Worker.
 > *Do NOT re-scaffold an agent that already exists under `apps/`.*
 > **Authoritative design:** `docs/SPEC-CANON.md` (if two docs disagree, it wins).
 > **How to build it:** `docs/13-build-plan.md` (task-level Phase 0 & 1, with pins & acceptance).
@@ -111,21 +116,25 @@ atlas/
 │  ├─ model/                      # claudeFor(agent,env) + modelFor(agent,env) factory
 │  ├─ steward-core/               # op→D1 + op→Local-REST mapping, idempotency ledger
 │  ├─ codex/                      # Codex reader (read-only; drive.readonly)
-│  └─ shared/                     # Env types, Flagger emit, run-log helpers, zod schemas
-├─ apps/                          # one Worker per agent (codename = lowercase dir)
-│  ├─ atlas/  steward/  filer/    # spine + Filer
-│  ├─ herald/ forge/ sundial/ compass/   # Phase 1 (morning chain)
-│  ├─ scout/ headhunter/ flagger/         # Phase 2
-│  ├─ echo/ archivist/                    # Phase 3 (Echo = EchoSession DO half)
-│  ├─ usher/ envoy/                       # Phase 4 (gated)
-│  ├─ switchboard/ librarian/             # Phase 5
+│  ├─ shared/                     # Env types, Flagger emit, run-log helpers, zod schemas
+│  ├─ security/                   # redact() — 2FA-code / reset-link / login-URL stripping
+│  ├─ tasks/                      # D1 tasks/subtasks data access (dedupe/merge)
+│  └─ gate/                       # confirmation-gate primitive (openGate/decideGate/sweepExpired)
+├─ apps/                          # one Worker per agent (codename = lowercase dir) — ALL BUILT
+│  ├─ atlas/  steward/  filer/  dlq-sink/        # spine + Filer
+│  ├─ herald/ forge/ sundial/ compass/           # Phase 1 (morning chain)
+│  ├─ scout/ headhunter/ flagger/ flagger-watchdog/   # Phase 2
+│  ├─ echo/ archivist/                           # Phase 3 (Echo = EchoSession DO half)
+│  ├─ gate/ usher/ envoy/                        # Phase 4 (confirm surface + gated agents)
+│  ├─ librarian/                                 # Phase 5 (Switchboard = design-time, NOT an app)
 │  ├─ mcp-google/                 # remote MCP (stateless, createMcpHandler)
 │  ├─ mcp-github/                 # remote MCP (stateful McpAgent + OAuthProvider)
 │  └─ mcp-obsidian-bridge/        # cloud side of the local Vault bridge
-└─ daemon/                        # LOCAL macOS launchd daemon (Echo + Quill + Obsidian bridge drainer)
+├─ capture/                       # LOCAL Swift menubar app (Echo native capture pipeline + Quill; SwiftPM)
+└─ daemon/                        # LOCAL macOS launchd daemon (vault/gate outbox drainers + browser-action runner)
 ```
-> `daemon/` is intentionally **outside** `apps/` — it is **not** a Worker. It authenticates outbound
-> and pulls work; the laptop has **no inbound port**.
+> `daemon/` and `capture/` are intentionally **outside** `apps/` — they are **not** Workers. They
+> authenticate outbound and pull work; the laptop has **no inbound port**.
 
 ---
 
@@ -167,7 +176,7 @@ common; `STEWARD_LOCK` is Steward-only; `OAUTH_KV`/`ATLAS`/`MORNING_CHAIN` are A
 
 ---
 
-## Build phases — MVP = Phase 0 + Phase 1. **Current focus: Phase 0 (Spine).**
+## Build phases — **ALL 6 COMPLETE** (milestone v1.0, 2026-06-09). MVP = Phase 0 + Phase 1.
 
 | Phase | Name | Ships |
 |---|---|---|

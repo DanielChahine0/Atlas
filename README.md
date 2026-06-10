@@ -131,6 +131,13 @@ lives:
 ```
 Atlas/
 ├── README.md                          ← you are here
+├── CLAUDE.md                          ← working guide (pillars, pins, conventions)
+├── apps/                              ← 21 Workers — one per agent, + gate / dlq-sink / MCP servers
+├── packages/                          ← 8 shared libs (wire · model · steward-core · codex · shared · security · tasks · gate)
+├── migrations/                        ← D1 migrations (the shared atlas-db)
+├── daemon/                            ← local macOS launchd daemon (outbox drainers + browser-action runner)
+├── capture/                           ← local Swift menubar app (Echo capture pipeline + Quill)
+├── .planning/                         ← live project state (STATE.md · ROADMAP.md · PROJECT.md)
 └── docs/
     ├── SPEC-CANON.md                  ← canonical design spec (the source of truth for all docs)
     ├── 00-overview.md                 ← system philosophy & map
@@ -162,10 +169,13 @@ Cloudflare **Workers** + **Durable Objects** for the agents, **Cron Triggers** f
 
 ## Status
 
-✅ **MVP code-complete.** Phase 0 (Spine) + Phase 1 (the morning pipeline **Filer → Herald → Forge →
-Sundial → Compass**) are built, reviewed, and on `main` (2026-06-05) — 11 Workers, 7 packages, 315
-passing tests — **awaiting owner go-live activation gates** (live OAuth, Secrets Store seed, Obsidian
-bridge, AI-Gateway spend ceilings). Phases 2–5 (Weekly Value · Capture · Outward · Meta) are not yet
-started. Start at **[docs/00-overview.md](docs/00-overview.md)**, then
+✅ **Milestone v1.0 code-complete (2026-06-09).** All 6 phases — Spine, the morning pipeline
+**Filer → Herald → Forge → Sundial → Compass**, Weekly Value, Capture (local), Outward (gated), and
+Meta/Polish — are built, reviewed, and on `main`: the full 16-agent fleet across 21 Workers, 8 shared
+packages, the local daemon, and the Swift capture app, with 716 workspace + 39 daemon TypeScript
+tests and 106 Swift tests passing. (Switchboard ships design-time only, by design — a registry +
+runbook, not a Worker.) **Awaiting owner go-live activation gates** (live OAuth, Secrets Store seed,
+Obsidian bridge, AI-Gateway spend ceilings, GitHub App grant, Playwright browser profile) — nothing
+runs live in production yet. Start at **[docs/00-overview.md](docs/00-overview.md)**, then
 **[docs/12-roadmap.md](docs/12-roadmap.md)** for the build order, and **`.planning/STATE.md`** for
 live status.

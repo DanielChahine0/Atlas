@@ -11,7 +11,7 @@
 | **Codename** | **Switchboard** (capability router) |
 | **Roster #** | 14 (SPEC §2) |
 | **Importance** | Tier 4 — meta / force-multiplier, **not on the critical path** (SPEC §3 #16) |
-| **Runtime** | **Cloud** — Cloudflare Worker + Durable Object (per-agent state) |
+| **Runtime** | **Design-time only** — `/switchboard` Claude Code slash-command + `.claude/registry/mcp-registry.json`; **NOT a deployed Worker** (D-07) |
 | **Trigger** | **on-demand (design time)** — user-initiated (SPEC §10) |
 | **Inputs** | A natural-language prompt/goal; optional constraints (scope budget, connected accounts, deadline); the **registry** snapshot; **The Codex** (read-only) |
 | **Outputs** | A ranked **toolset recommendation**: MCP server(s) + exact tool list + bound resources + required OAuth scopes + executing agent + confirmation-gate flag; a **gap report** when no server covers a capability |

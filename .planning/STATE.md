@@ -29,15 +29,15 @@ Phase: 05
 Plan: Not started
 Status: Milestone complete
 Last activity: 2026-06-09
-Next action: Execute 04-05 (Sundial gate retrofit) → 04-06 (Usher) → 04-07 (Envoy) with `/gsd-execute-phase 4`. Blocking owner checkpoint for 04-02: grant the GitHub App `pull_requests: write` permission (GitHub → Settings → Developer settings → GitHub Apps → Atlas) + re-accept on the scoped repos, so Envoy can fire a live PR. Carry-forward go-live gates: clear the four Phase-1 gates before flipping the morning chain live + `filer.push_enabled=true`; close the Phase-0 owner gates; hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
+Next action: No build work remains — milestone v1.0 is code-complete (all 6 phases, 40/40 plans). Close the owner go-live gates (see Blockers), then re-run `/gsd-audit-milestone` (the existing v1.0 audit is a 2026-06-06 snapshot taken when only Phases 0–2 existed) and `/gsd-complete-milestone` to archive v1.0 / start the next milestone. Carry-forward operational note: hand-edit Atlas's wrangler crons to the EST forms at the Nov 2026 DST boundary (scheduled() switch already routes both forms).
 
-Milestone progress: plans [█████████████████░░░] 89% (32/36) · phases [███████░░░] 67% (4 of 6 complete) — Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅ · Phase 3 Capture/Local ✅ (code-complete + verified) · Phase 4 Outward/Gated 🔄 4/7 · Phase 5 Meta/Polish ⬜ not started
+Milestone progress: plans [████████████████████] 100% (40/40) · phases [██████████] 100% (6 of 6 complete) — Phase 0 Spine ✅ · Phase 1 Morning Pipeline ✅ · Phase 2 Weekly Value ✅ · Phase 3 Capture/Local ✅ · Phase 4 Outward/Gated ✅ · Phase 5 Meta/Polish ✅ — all code-complete + verified; owner go-live gates + human UAT outstanding
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 42 (Phase 0: 8 · Phase 1: 8 · Phase 2: 7 · Phase 3: 6 · Phase 4: 2 of 7)
+- Total plans completed: 40 (Phase 0: 8 · Phase 1: 8 · Phase 2: 7 · Phase 3: 6 · Phase 4: 7 · Phase 5: 4)
 - Average duration: not instrumented
 - Total execution time: not instrumented
 
@@ -49,13 +49,14 @@ Milestone progress: plans [█████████████████�
 | 01 — Core Loop / Morning Pipeline | 8/8 | Complete (2026-06-05) |
 | 02 — Weekly Value | 7/7 | Complete (2026-06-05) |
 | 03 — Capture / Local | 6/6 | Code-complete + verified (2026-06-06); owner UAT pending |
-| 04 — Outward / Gated | 2/7 | In progress (2026-06-08) — gate primitive (04-01) + mcp-github PR tools (04-02) shipped; 04-03→04-07 remain |
+| 04 — Outward / Gated | 7/7 | Complete (2026-06-08); owner go-live gates pending |
+| 05 — Meta / Polish | 4/4 | Complete (2026-06-09); 4 human-UAT items pending |
 
 **Recent Trend:**
 
-- Last 5 plans: 03-04 → 03-05 → 03-06 → 04-01 → 04-02 (Phase 3 closed, Phase 4 opened)
-- Trend: Phase 4 (Outward/Gated) underway — shipped `packages/gate`, the shared confirmation-gate library that is the single enforcement point for Pillar 2 (openGate/decideGate/sweepExpired, D1-backed, dual audit_log rows, best-effort ntfy push, 70 workerd tests), then the mcp-github PR tools (`github_create_branch` + `github_open_pr`, `github.write`-gated, token contained server-side via `mintTokenForUse()`). 04-02 Task 2 (grant the GitHub App `pull_requests:write` permission) is a blocking owner checkpoint before Envoy fires a live PR.
-- Prior: Phase 3 (Capture/Local) executed wave-by-wave — Echo cloud (EchoSession DO + presign + /echo/ws) + Archivist Workflow on Cloudflare; Swift capture app (shell/privacy-boundary → Echo native pipeline + Quill) all green (514 pnpm + 106 swift tests). A background security review caught a fail-open auth bypass in the presign endpoint mid-run; hardened to a constant-time capture-token gate before continuing.
+- Last 5 plans: 04-07 → 05-01 → 05-04 → 05-02 → 05-03 (Phase 4 closed 2026-06-08, Phase 5 closed 2026-06-09 — **milestone v1.0 complete**)
+- Trend: Phase 5 (Meta/Polish) closed the milestone — Librarian, the 16th and final fleet agent (Bearer-gated producer-only `POST /prompt/save`, deterministic tool-scoped Jaccard dedupe, Haiku title/tags, once-only stable slug, ONE `op:upsert` Wire event, D1 system-of-record) + Switchboard shipped design-time-only per D7 (`.claude/registry/mcp-registry.json` + `/switchboard` command + `docs/10-switchboard.md` runbook, NOT a Worker). Phase-5 code review found + fixed 1 critical (CR-01 date-granular bump key suppressing same-day Vault updates) + 12 warnings (WR-01..WR-12) before sign-off. Suite at milestone close: 716 workspace + 39 daemon TypeScript tests green (+106 Swift capture tests; 2 live-OAuth tests intentionally skipped).
+- Prior: Phase 4 (Outward/Gated) shipped `packages/gate` (the single Pillar-2 enforcement point), the `apps/gate` confirm Worker, the daemon browser-action runner (captcha/payment hard stops), the Sundial gate retrofit, Usher (gated registration), and Envoy (gated 4-target brand fan-out).
 
 *Per-plan detail — Tasks counted from each PLAN's `Task N` headings; Files = unique files touched across that plan's commits (git). The `Δ` column is the Phase-0 execution deviation log as originally recorded; Phase-1 plans were not separately deviation-instrumented (`-`).*
 
@@ -150,10 +151,16 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 
 ### Pending Todos
 
-- Execute the remaining Phase-4 plans (04-05 Sundial gate retrofit → 04-06 Usher → 04-07 Envoy) — `/gsd-execute-phase 4`.
-- 04-02 owner checkpoint: grant the GitHub App `pull_requests: write` permission + re-accept on the scoped repos (blocks Envoy's live PR path).
-- Clear the four Phase-1 go-live gates (Blockers) to flip the morning chain live + set `filer.push_enabled=true`.
+All build work is done (40/40 plans). Everything remaining is owner go-live activation + milestone close-out:
+
 - Close the Phase-0 owner gates (Google OAuth live round-trip, GitHub App install, seed 6 secrets into Secrets Store, Obsidian bridge end-to-end + no-inbound-port proof, R2 enablement) — these keep SPINE-04 Pending.
+- Clear the four Phase-1 go-live gates (Blockers) to flip the morning chain live + set `filer.push_enabled=true`.
+- Phase-2 config seeds: ntfy topic/token + `flagger.push_enabled` (D2-03), Headhunter watchlist/boards/cycle KV (D2-15), optional `scout/sources` + `scout/interests`.
+- Phase-3 owner gates: R2 enablement + `audio/raw/` 7-day lifecycle rule, Apple Developer signing + notarization, OS permission grants (Microphone/audio-capture/Accessibility/Screen Recording), Manual-Only UAT checklist sign-off.
+- Phase-4 owner gates: GitHub App `pull_requests:write` grant + re-accept (04-02 checkpoint, blocks Envoy's live PR), Playwright + Chromium install + one-time logged-in profile at `ATLAS_BROWSER_PROFILE`, seed CONFIG gate knobs (`gate.confirm_base_url`, `gates.timeout_usher_ms`, `gates.timeout_envoy_ms`, `envoy.portfolio_repo`/`portfolio_path`/`profile_repo`), seed `GATE_CONFIRM_TOKEN`.
+- Phase-5 human UAT (4 items): live save→Vault round-trip, bump-key end-to-end, `/switchboard` live invocation, prompt-library table rendering.
+- Re-run `/gsd-audit-milestone` (the existing audit is a 2026-06-06 mid-milestone snapshot), then `/gsd-complete-milestone` to archive v1.0.
+- Nov 2026 DST boundary: hand-edit Atlas's wrangler crons to the EST forms (scheduled() already routes both).
 
 ### Blockers/Concerns
 
@@ -172,9 +179,20 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 - **Gate 3 / D1-06 — AI-Gateway monthly spend ceilings:** set `atlas-reasoning` ≈ $20/mo and `atlas-highvolume` ≈ $10/mo in the Cloudflare dashboard (no API primitive). Required before Filer's push goes live.
 - **HV-01-01 — live end-to-end morning-chain smoke:** run the six Workers in dev + live Google OAuth + bridge creds, fire `__scheduled`, confirm `wrangler workflows instances describe atlas-morning-chain latest` shows five ordered steps terminating complete. Cannot run in CI. (0/4 UAT passed.)
 
-**Phase-4 owner checkpoint (blocks Envoy's live PR path; code-complete + mocked-contract proven):**
+**Phase-2/3 owner config gates (code-complete; mirror the Phase-1 gate discipline — see ROADMAP Phase 2/3 "Owner go-live gates"):**
+
+- **Phase 2:** seed the ntfy topic + token and flip `flagger.push_enabled` (D2-03); seed the Headhunter watchlist/boards/cycle KV (D2-15); optionally seed `scout/sources` + `scout/interests`.
+- **Phase 3:** enable R2 + the `audio/raw/` 7-day lifecycle rule; Apple Developer account for Developer-ID signing + notarization; OS permission grants (Microphone, audio-capture, Accessibility, Screen Recording); seed the capture app's OAuth client + token (Keychain + Secrets Store); sign off the Manual-Only UAT checklist.
+
+**Phase-4 owner gates (code-complete + verified 12/12 must-haves; mocked contracts proven):**
 
 - **04-02 GitHub App `pull_requests:write` grant:** owner sets "Pull requests" → "Read and write" on the Atlas GitHub App and re-accepts on the scoped repos (confirm the permission key is `pull_requests`). `github_create_branch`/`github_open_pr` are built + tested (10 mcp-github tests pass) with the token contained server-side; the live grant is required before Envoy (04-07) opens a real PR.
+- **Daemon browser runtime:** install Playwright + Chromium and log into LinkedIn/X/Meetup/Eventbrite once in the persistent profile at `ATLAS_BROWSER_PROFILE` (04-04).
+- **Gate config:** seed `GATE_CONFIRM_TOKEN` into Secrets Store + the CONFIG knobs (`gate.confirm_base_url`, `gates.timeout_usher_ms`=86400000, `gates.timeout_envoy_ms`=604800000, `envoy.portfolio_repo`/`portfolio_path`/`profile_repo`).
+
+**Phase-5 human UAT (code-complete + verified 13/13 must-haves; 4 items pending behind the shared owner gates):**
+
+- Live save→Vault round-trip (`POST /prompt/save` → Steward → `Prompts/<slug>.md`), bump-key end-to-end (same prompt re-saved → `uses` bump, no clone), `/switchboard` live invocation, prompt-library table rendering in the Vault.
 
 **Owner-judgment calls** deliberately left open (not conflicts) — surface at the relevant phase: heartbeat staleness threshold (5 min), DST operational burden, morning-chain success-rate window (D1-07: rolling 30 days), the two manual measurement commitments (pre-launch baseline + ~1-min daily review).
 
@@ -195,5 +213,5 @@ Full log in PROJECT.md Key Decisions table. Recorded D1–D7 (status: decided, n
 ## Session Continuity
 
 Last session: 2026-06-09T18:56:54.266Z
-Stopped at: Phase 5 context gathered
+Stopped at: Milestone v1.0 complete — Phase 5 verified + code-reviewed; state docs synced 2026-06-09
 Resume file: None

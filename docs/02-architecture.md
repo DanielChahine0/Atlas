@@ -183,10 +183,11 @@ Echo (local daemon, real-time) ─▶ transcript ─▶ Archivist (cloud, after 
 
 | Where | Agents | Why |
 |---|---|---|
-| **Cloud (Cloudflare)** | Atlas, Herald, Filer, Forge, Sundial, Compass, Scout, Usher*, Headhunter, Archivist, Steward, Envoy*, Switchboard, Flagger, Librarian | Stateless or coordinated work, scheduling, API/MCP calls, dashboard writes. |
+| **Cloud (Cloudflare)** | Atlas, Herald, Filer, Forge, Sundial, Compass, Scout, Usher*, Headhunter, Archivist, Steward, Envoy*, Flagger, Librarian | Stateless or coordinated work, scheduling, API/MCP calls, dashboard writes. |
 | **Local (macOS daemon)** | **Echo** (#9, audio capture — all I/O devices), **Quill** (#12, screen-aware form autofill) | Need direct OS access to audio devices / the screen. Cannot run on Cloudflare. |
 
 \* **Usher** and **Envoy** are Cloud **+ browser** (they need a headless/automation browser for registration and brand sync).
+**Switchboard** (#14) appears in neither row — it is **design-time only**: a `/switchboard` slash-command + MCP registry (`.claude/registry/mcp-registry.json`), **not a deployed Worker** (D-07; invariant 7 below).
 
 The local daemon (menubar app / launchd):
 

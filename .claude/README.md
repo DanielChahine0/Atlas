@@ -36,9 +36,9 @@ turn it on.
 | `/new-agent <codename> <phase>` | Scaffolds a roster agent with all conventions (bindings, Wire event, idempotency key, least-privilege scope, gates, 3-test DoD). |
 | `/pillar-check [path]` | Audits the diff (or a path) against the 7 invariants + security via the `pillar-auditor` subagent. Run before committing. |
 | `/wire-event <agent> <op> <entity>` | Generates/validates a canonical SPEC §6.4 Wire event with a correct structured `idempotencyKey`. |
-| `/migration <name>` | Scaffolds a numbered D1 migration against the canonical schema with the D1 rules baked in (positional `?`, absolute increment, `new_sqlite_classes`). Phase 0 is D1-centric. |
+| `/migration <name>` | Scaffolds a numbered D1 migration against the canonical schema with the D1 rules baked in (positional `?`, absolute increment, `new_sqlite_classes`). D1 is the system-of-record. |
 | `/spec <topic>` | Answers a design question from the canonical docs (SPEC-CANON wins), quoting `path#section`. |
-| `/prereqs` | Checks the Phase-0 prerequisites (Cloudflare account + wrangler login, Node LTS, pnpm, Queues reachable). Workers Free suffices; Paid is optional headroom. |
+| `/prereqs` | Checks the toolchain prerequisites (Cloudflare account + wrangler login, Node LTS, pnpm, Queues reachable) — run before deploys / go-live gate work. Workers Free suffices; Paid is optional headroom. |
 | `/cron-utc <time>` | Translates an owner-local time to a UTC cron (with the EST↔EDT/DST caveat). |
 
 ## Subagents (delegate proactively)

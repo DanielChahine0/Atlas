@@ -61,7 +61,7 @@ Design pillars:
 | 11 | **Steward** | Dashboard manager (Obsidian) — sole Vault writer | Cloud | called by other agents only | The Vault |
 | 12 | **Quill** | Screen-aware form autofill from the Codex | **Local** | hotkey / on-demand | active document (local) |
 | 13 | **Envoy** | Personal-brand sync (LinkedIn, X, GitHub, portfolio) | Cloud + browser | on-demand | external profiles, Steward |
-| 14 | **Switchboard** | Capability router — picks the right MCP/tools for a prompt | Cloud | on-demand (design time) | recommendations only |
+| 14 | **Switchboard** | Capability router — picks the right MCP/tools for a prompt | **Design-time only** — NOT a deployed Worker (D-07) | on-demand (design time) | recommendations only |
 | 15 | **Flagger** | Incident/issue flagging with severity + trust score | Cloud | event-driven (all agents) | Vault (via Steward) |
 | 16 | **Librarian** | Prompt library (save prompt → title + deep link) | Cloud | on-demand | Vault (via Steward) |
 

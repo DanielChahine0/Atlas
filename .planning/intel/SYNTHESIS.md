@@ -6,8 +6,8 @@
 
 > ⚠️ **Superseded snapshot (2026-06-01 doc-ingest bootstrap).** Pre-execution synthesis of the design
 > corpus — kept for provenance only. For CURRENT project state use `.planning/STATE.md`,
-> `.planning/ROADMAP.md`, and `.planning/REQUIREMENTS.md` (Phases 0 + 1 are now code-complete; the
-> finalized requirement set is the 19 IDs in REQUIREMENTS.md, not the count derived here).
+> `.planning/ROADMAP.md`, and `.planning/REQUIREMENTS.md` (milestone v1.0 — all 6 phases — completed
+> 2026-06-09; the finalized requirement set is the 19 IDs in REQUIREMENTS.md, not the count derived here).
 
 Mode: new (net-new bootstrap — no existing .planning/ context)
 Precedence: ADR > SPEC > PRD > DOC. Authoritative source: docs/SPEC-CANON.md.

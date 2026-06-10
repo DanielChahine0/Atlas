@@ -1,5 +1,5 @@
 ---
-description: Scaffold a numbered D1 migration against Atlas's canonical schema (idempotency ledger, counters, run_log, audit_log, vault_outbox) with the D1 rules baked in — positional ? params, absolute increment math, new_sqlite_classes for DOs. Use for any schema change; Phase 0 is D1-centric.
+description: Scaffold a numbered D1 migration against Atlas's canonical schema (idempotency ledger, counters, run_log, audit_log, vault_outbox) with the D1 rules baked in — positional ? params, absolute increment math, new_sqlite_classes for DOs. Use for any schema change; D1 is the system-of-record.
 argument-hint: [migration name — e.g. "add_jobs_table"]
 allowed-tools: Read, Grep, Glob, Write, Bash(npx wrangler d1:*)
 model: inherit
@@ -7,8 +7,8 @@ model: inherit
 
 Scaffold a D1 migration named **$ARGUMENTS** for `atlas-db`.
 
-First read the canonical schema (`docs/13-build-plan.md §2 T1`, and `migrations/0001_init_core.sql` if it
-exists): `idempotency_keys`, `counters`, `run_log`, `audit`, `vault_outbox`.
+First read the canonical schema (`docs/13-build-plan.md §2 T1`, plus the existing migrations under
+`migrations/` — `0001_init_core.sql` onward): `idempotency_keys`, `counters`, `run_log`, `audit`, `vault_outbox`.
 
 Rules (D1 + Atlas pillars — see @CLAUDE.md):
 - D1 supports **anonymous positional `?` params only** — no named params. Write SQL accordingly.

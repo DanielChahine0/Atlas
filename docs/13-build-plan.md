@@ -1545,18 +1545,20 @@ Resolves every open question in [docs/06 §12](06-hosting-cloudflare-mcp.md) and
 
 The decision log (§6.3) resolves every *architectural* open question (D1–D7) with a recommended answer. What remains are **human-judgment calls and commitments** only the owner can make. Grouped by when they block you — none block *reading* the plan, but each blocks the work it's filed under.
 
+> **Build status (2026-06-09, milestone v1.0 complete):** every build-time item below was resolved as drafted — pnpm; one Worker per agent; `compatibility_date: 2026-04-25`; 5-min heartbeat window; `invokeAgent` = service-binding RPC (D-11); Herald kept the Gmail draft; Compass `effort` is KV-overridable (default medium). Still genuinely open for the owner: the AI-Gateway ceilings, the DST chore acceptance, the morning-chain success-rate window, and the two manual measurement commitments — tracked live in `.planning/STATE.md` → Blockers.
+
 ### Decide before scaffolding (Phase 0 / §1)
 
 - **Package manager** — drafted as **pnpm** (workspace support is the only hard requirement). Swap to npm/bun if you standardize on one elsewhere. *Confirm before `npm create cloudflare`.*
 - **Worker granularity** — drafted as **one Worker per agent** (max least-privilege isolation). Grouping the low-risk Phase-1 agents is acceptable to cut deploy overhead **only if** Steward stays its own Worker (sole Wire consumer) and Filer stays its own (`gmail.modify`-only boundary).
 - **Per-Worker cron count cap** — verify the *current* limit before committing to a single Atlas dispatcher Worker (~10 schedule lines by Phase 2). The Free plan caps Cron Triggers lower than Paid, so the cron-heavy fleet (NOT Queues/Workflows, which run on Free) may be the real reason to upgrade by Phase 2; otherwise split crons across Workers.
 - **AI Gateway dollar/rate ceilings** — there is **no per-agent hard-budget primitive**, only per-gateway. The plan provisions two gateways (`atlas-reasoning`, `atlas-highvolume`); you must set the actual numbers in the dashboard before Filer's continuous push goes live.
-- **`compatibility_date` pin** (`2026-04-25` drafted) and the **heartbeat staleness threshold** (`5 min` drafted for the Atlas self-P1) — confirm or adjust.
+- **`compatibility_date` pin** and the **heartbeat staleness threshold** — ✅ both shipped at the drafted values: `compatibility_date: "2026-04-25"` across every Worker's `wrangler.jsonc`, and the 5-min Atlas self-P1 window (`STALENESS_WINDOW_MS` in `apps/atlas/src/coordinator.ts`). Adjusting either is now a code/config change, no longer a pre-scaffolding decision.
 - **DST operational burden** — D1 commits to UTC-cron + twice-yearly hand-edits at the EST/EDT boundary. Accept the chore, *or* pin a fixed offset (≤1h drift half the year), *or* build a tiny self-check that flags when the configured cron no longer maps to owner-local 07:45.
 
 ### Decide before MVP go-live (Phase 1 / §3)
 
-- **`invokeAgent` transport** — service-binding RPC (in-account, zero-HTTP — **recommended**) vs `fetch` to a Worker URL vs inlining each pass into the Workflow Worker. Pick one before building so step return shapes are fixed.
+- **`invokeAgent` transport** — ✅ resolved (Phase-0 decision D-11, shipped): service-binding RPC (in-account, zero-HTTP). `apps/atlas/wrangler.jsonc` declares the per-agent `services` bindings; `apps/atlas/src/invoke-agent.ts` is the transport the `MorningChain` steps call.
 - **Herald output surface** — keep the **Gmail draft digest** (v1 plan) or go Vault-morning-glance-only, since both surface the same Action-Required set. And on Fridays: suppress the 08:00 daily digest or keep both daily + the 16:00 weekly review.
 - **Compass Opus `effort`** — set an explicit level below the `high` default for the daily plan pass (cost), surfaced as a KV-overridable setting, not hardcoded.
 - **The two manual measurement commitments** — without them the headline metrics are unfalsifiable: (a) the **one-week pre-launch baseline** of inbox-triage + day-planning minutes, captured *before* M1 go-live; (b) a daily **~1-minute "did Atlas miss anything?" review** during the morning glance, which is the ground truth for the ≥95% action-required-caught metric.

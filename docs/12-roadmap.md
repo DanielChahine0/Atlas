@@ -262,5 +262,5 @@ Measured on the MVP first, then tracked as the fleet grows. These are the number
 
 - **Effort estimates are deliberately relative (High/Medium/Low), not calendar dates** — single-owner velocity is unknown until Phase 0 ships. Re-baseline after the spine.
 - **Where does the "minutes saved" baseline come from?** Needs a one-week manual measurement *before* launch, or the headline metric is unfalsifiable.
-- **Quill's phase placement** — it's grouped in Phase 3 with Echo as the local-runtime work, but it has no Echo dependency. It could slip earlier (right after the daemon exists) or later (it's convenience). Owner's call.
-- **Is Phase 5's Switchboard worth building at all**, or is it a design-time habit (consult ad hoc) rather than a coded agent? Revisit once the fleet is large enough to feel the routing pain.
+- **Quill's phase placement** — resolved by build-plan decision **D6**: kept in Phase 3 (M5) alongside Echo to amortize the shared local-daemon/outbound-auth runtime (no Echo data dependency). Shipped with Phase 3 (code-complete + verified 2026-06-06) as part of the `capture/` Swift app.
+- **Phase 5's Switchboard** — resolved by build-plan decision **D7**: design-time habit, **not** a coded agent. Shipped in Phase 5 as the `/switchboard` command + MCP registry (`.claude/registry/mcp-registry.json`); runbook in [docs/10 — Switchboard](10-switchboard.md). Revisit coding it only if the fleet grows enough to feel routing pain.

@@ -32,7 +32,7 @@ process.stdin.on("end", () => {
     if (next) bits.push("Next: " + next[1].trim());
     if (bits.length) {
       ctx =
-        "Atlas (GSD design phase) — " +
+        "Atlas (GSD) — " +
         bits.join(" · ") +
         ". Authoritative design: docs/SPEC-CANON.md; how-to-build: docs/13-build-plan.md. " +
         "Honor the 5 pillars + security in CLAUDE.md.";

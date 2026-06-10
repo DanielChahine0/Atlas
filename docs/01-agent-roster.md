@@ -45,7 +45,7 @@ the plain-English role is in parentheses.
 | 11 | [**Steward**](agents/steward.md) | Dashboard manager (Obsidian) — sole Vault writer | Cloud | called by other agents only | The Vault |
 | 12 | [**Quill**](agents/quill.md) | Screen-aware form autofill from the Codex | **Local** | hotkey / on-demand | active document (local) |
 | 13 | [**Envoy**](agents/envoy.md) | Personal-brand sync (LinkedIn, X, GitHub, portfolio) | Cloud + browser | on-demand | external profiles, Steward |
-| 14 | [**Switchboard**](agents/switchboard.md) | Capability router — picks the right MCP/tools for a prompt | Cloud | on-demand (design time) | recommendations only |
+| 14 | [**Switchboard**](agents/switchboard.md) | Capability router — picks the right MCP/tools for a prompt | **Design-time only** — NOT a deployed Worker (D-07) | on-demand (design time) | recommendations only |
 | 15 | [**Flagger**](agents/flagger.md) | Incident/issue flagging with severity + trust score | Cloud | event-driven (all agents) | Vault (via Steward) |
 | 16 | [**Librarian**](agents/librarian.md) | Prompt library (save prompt → title + deep link) | Cloud | on-demand | Vault (via Steward) |
 

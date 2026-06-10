@@ -9,7 +9,7 @@
 
 Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = SPINE + CORE (Phase 0 + Phase 1).**
 
-> **Status legend:** `[x]` done · `[~]` **code-complete, owner go-live gate pending** — the implementation + automated/mocked contracts are built and tested, but a live activation step only the owner can perform (OAuth consent, Secrets Store seed, AI-Gateway ceilings, live smoke) is outstanding · `[ ]` not started. As of 2026-06-05, Phases 0 + 1 are code-complete (HEAD `09518da`, 315 tests green); the remaining `[~]` items are gated on owner actions, not code.
+> **Status legend:** `[x]` done · `[~]` **code-complete, owner go-live gate pending** — the implementation + automated/mocked contracts are built and tested, but a live activation step only the owner can perform (OAuth consent, Secrets Store seed, AI-Gateway ceilings, live smoke) is outstanding · `[ ]` not started. As of 2026-06-09, all 6 phases are code-complete (milestone v1.0, 40/40 plans, 716 workspace + 39 daemon tests green); every remaining `[~]` item is gated on owner actions, not code.
 
 ### Spine (Phase 0 — Infrastructure)
 
@@ -30,22 +30,22 @@ Requirements for the v1 build. Each maps to exactly one roadmap phase. **MVP = S
 
 ### Weekly Value (Phase 2)
 
-- [x] **WEEKLY-01**: Scout produces a Friday 16:00 events digest and Headhunter (Mon 09:00 full + daily-light 09:00) creates "apply by X" tasks via Forge and updates the job-pipeline kanban counts (applied → OA → interview → offer/reject); low-confidence hiring-window finds route to a flag, not silently to a task. _(docs/agents/scout.md, docs/agents/headhunter.md, 13-build-plan §4)_
-- [x] **WEEKLY-02**: Flagger receives error/incident events from every agent, routes P1/P2 to push immediately and batches P3/P4 into the dashboard feed (Vault Flagger board sorted by severity then trust), and self-monitors its own heartbeat staleness. _(08-flagger.md, docs/agents/flagger.md, SPEC-CANON §8)_
+- [~] **WEEKLY-01**: Scout produces a Friday 16:00 events digest and Headhunter (Mon 09:00 full + daily-light 09:00) creates "apply by X" tasks via Forge and updates the job-pipeline kanban counts (applied → OA → interview → offer/reject); low-confidence hiring-window finds route to a flag, not silently to a task. _(docs/agents/scout.md, docs/agents/headhunter.md, 13-build-plan §4)_ — *code-complete + verified; owner gate = seed the Headhunter watchlist/boards/cycle KV (D2-15).*
+- [~] **WEEKLY-02**: Flagger receives error/incident events from every agent, routes P1/P2 to push immediately and batches P3/P4 into the dashboard feed (Vault Flagger board sorted by severity then trust), and self-monitors its own heartbeat staleness. _(08-flagger.md, docs/agents/flagger.md, SPEC-CANON §8)_ — *code-complete + verified; owner gate = seed the ntfy topic/token + flip `flagger.push_enabled` (D2-03).*
 
 ### Capture — Local (Phase 3)
 
-- [x] **CAPTURE-01**: Echo captures audio in a local macOS daemon (DO + WebSocket live stream) → diarized transcript → Archivist structures context-aware meeting notes (action items, cross-meeting threading) → Steward → Vault; per-session consent is captured before Echo records, two-party-consent jurisdictions are honored, and raw audio uploads via presigned URL direct from the daemon (expires at 7 days, `audio/raw/` only). _(docs/agents/echo.md, docs/agents/archivist.md, SPEC-CANON §4/§12)_
-- [x] **CAPTURE-02**: Quill autofills on-screen forms from the Codex (Accessibility API + OCR fallback), hotkey-triggered and never autonomous, confirming before submit and never writing the Codex back; outputs never leave the device except as owner-approved derived artifacts. _(docs/agents/quill.md, SPEC-CANON §12)_
+- [~] **CAPTURE-01**: Echo captures audio in a local macOS daemon (DO + WebSocket live stream) → diarized transcript → Archivist structures context-aware meeting notes (action items, cross-meeting threading) → Steward → Vault; per-session consent is captured before Echo records, two-party-consent jurisdictions are honored, and raw audio uploads via presigned URL direct from the daemon (expires at 7 days, `audio/raw/` only). _(docs/agents/echo.md, docs/agents/archivist.md, SPEC-CANON §4/§12)_ — *code-complete + verified; owner gates = R2 enablement + `audio/raw/` 7-day lifecycle, Developer-ID signing/notarization, OS permission grants, Manual-Only UAT sign-off.*
+- [~] **CAPTURE-02**: Quill autofills on-screen forms from the Codex (Accessibility API + OCR fallback), hotkey-triggered and never autonomous, confirming before submit and never writing the Codex back; outputs never leave the device except as owner-approved derived artifacts. _(docs/agents/quill.md, SPEC-CANON §12)_ — *code-complete + verified; owner gates = Accessibility/Screen Recording grants + Manual-Only UAT.*
 
 ### Outward — Gated (Phase 4)
 
-- [x] **OUTWARD-01**: Usher does on-demand event search + gated registration (browser automation) + Google Calendar add and bumps the Steward `events-registered` counter; no outward action fires without explicit owner confirm (gate adherence = 100%); captcha/payment are hard stops handed back to the human. _(docs/agents/usher.md, SPEC-CANON §12, 11-security-privacy.md)_
-- [x] **OUTWARD-02**: Envoy fans one owner intent out to LinkedIn / GitHub README / X / portfolio, drafts each (reading the Codex, GitHub via GitHub MCP), and ships only on confirmation; a public post / payment is never silent and a post can't be un-posted. _(docs/agents/envoy.md, SPEC-CANON §4/§12)_
+- [~] **OUTWARD-01**: Usher does on-demand event search + gated registration (browser automation) + Google Calendar add and bumps the Steward `events-registered` counter; no outward action fires without explicit owner confirm (gate adherence = 100%); captcha/payment are hard stops handed back to the human. _(docs/agents/usher.md, SPEC-CANON §12, 11-security-privacy.md)_ — *code-complete + verified; owner gates = Playwright/Chromium + logged-in `ATLAS_BROWSER_PROFILE`, CONFIG gate knobs, `GATE_CONFIRM_TOKEN` seed.*
+- [~] **OUTWARD-02**: Envoy fans one owner intent out to LinkedIn / GitHub README / X / portfolio, drafts each (reading the Codex, GitHub via GitHub MCP), and ships only on confirmation; a public post / payment is never silent and a post can't be un-posted. _(docs/agents/envoy.md, SPEC-CANON §4/§12)_ — *code-complete + verified; owner gates = OUTWARD-01's plus the GitHub App `pull_requests:write` grant (04-02 checkpoint).*
 
 ### Meta / Polish (Phase 5)
 
-- [x] **META-01**: Librarian captures a prompt and surfaces it deduped in the Vault prompt-library table (Title link · Tags · Tool · Last used), with the title deep-linking to the full-prompt note and most-used surfaced at top. _(09-prompt-library.md, docs/agents/librarian.md, SPEC-CANON §9)_
+- [~] **META-01**: Librarian captures a prompt and surfaces it deduped in the Vault prompt-library table (Title link · Tags · Tool · Last used), with the title deep-linking to the full-prompt note and most-used surfaced at top. _(09-prompt-library.md, docs/agents/librarian.md, SPEC-CANON §9)_ — *code-complete + verified; owner gate = 4 human-UAT items (live save→Vault round-trip, bump-key e2e, `/switchboard` live, table rendering).*
 - [x] **META-02**: Switchboard exists as a documented design-time routing process (selects the minimal MCP server + tools + OAuth scopes for a goal, reports capability gaps to Flagger), NOT a deployed Worker (per D7). _(10-switchboard.md, docs/agents/switchboard.md)_
 
 ## v2 Requirements
@@ -84,13 +84,13 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | FORGE-01 | Phase 1 | Code-complete (owner-gated) |
 | SUNDIAL-01 | Phase 1 | Code-complete (owner-gated) |
 | COMPASS-01 | Phase 1 | Code-complete (owner-gated) |
-| WEEKLY-01 | Phase 2 | Complete |
-| WEEKLY-02 | Phase 2 | Complete |
-| CAPTURE-01 | Phase 3 | Complete |
-| CAPTURE-02 | Phase 3 | Complete |
-| OUTWARD-01 | Phase 4 | Complete |
-| OUTWARD-02 | Phase 4 | Complete |
-| META-01 | Phase 5 | Complete |
+| WEEKLY-01 | Phase 2 | Code-complete (owner-gated) |
+| WEEKLY-02 | Phase 2 | Code-complete (owner-gated) |
+| CAPTURE-01 | Phase 3 | Code-complete (owner-gated) |
+| CAPTURE-02 | Phase 3 | Code-complete (owner-gated) |
+| OUTWARD-01 | Phase 4 | Code-complete (owner-gated) |
+| OUTWARD-02 | Phase 4 | Code-complete (owner-gated) |
+| META-01 | Phase 5 | Code-complete (owner-gated) |
 | META-02 | Phase 5 | Complete |
 
 **Coverage:**
@@ -100,4 +100,4 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 
 ---
 *Requirements defined: 2026-06-01*
-*Last updated: 2026-06-05 — reconciled to reality: Phases 0 + 1 code-complete (HEAD 09518da, 315 tests); SPINE-04 + the six Phase-1 requirements marked `[~]` code-complete (owner-gated). Scope unchanged.*
+*Last updated: 2026-06-09 — milestone v1.0 code-complete: all 19 v1 requirements built across all 6 phases. SPINE-01/02/03/05 + META-02 are `[x]` done; the other 14 are `[~]` code-complete pending owner go-live gates (live OAuth, Secrets Store seed, AI-Gateway ceilings, live smoke, config seeds, UAT — tracked in `.planning/STATE.md` → Blockers). Scope unchanged. (Prior reconciliation: 2026-06-05.)*

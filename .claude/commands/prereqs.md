@@ -1,5 +1,5 @@
 ---
-description: Verify the Atlas Phase-0 prerequisites (Cloudflare account + wrangler login, Node LTS, pnpm, Queues reachable). Workers Free is sufficient — Paid is optional headroom. Run once before starting Phase 0.
+description: Verify the Atlas toolchain prerequisites (Cloudflare account + wrangler login, Node LTS, pnpm, Queues reachable). Workers Free is sufficient — Paid is optional headroom. Run before any deploy or owner go-live gate work, or whenever the toolchain changes.
 allowed-tools: Bash(node:*), Bash(pnpm:*), Bash(corepack:*), Bash(npx wrangler whoami), Bash(npx wrangler queues list)
 model: inherit
 ---

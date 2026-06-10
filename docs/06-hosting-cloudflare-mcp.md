@@ -130,7 +130,7 @@ Every line of SPEC §7, made concrete. This is the canonical lookup table — st
 | **Steward** | **DO** (queue consumer) | Sole Vault writer, serialized |
 | **Quill** | **Local daemon** | Screen autofill; writes the active local document |
 | **Envoy** | Worker + browser | On-demand; gated (public posts irreversible) |
-| **Switchboard** | Worker | Design-time only; recommendations |
+| **Switchboard** | **None — design-time only (D-07)** | No deployed Worker; ships as the `/switchboard` command + `.claude/registry/mcp-registry.json` (see [docs/10-switchboard.md](10-switchboard.md)) |
 | **Flagger** | Worker | Event-driven from all agents |
 | **Librarian** | Worker | On-demand prompt capture |
 
@@ -294,10 +294,10 @@ Use this when adding any new external capability. Consult **Switchboard** first 
 
 ---
 
-## 12. Open questions
+## 12. Open questions — all resolved (decision log: [docs/13 §6.3](13-build-plan.md))
 
-- **Cron timezone vs DST:** owner-local §10 times need a DST-aware translation to UTC cron, or a pinned account TZ — pick one and document it.
-- **D1 ↔ Vault reconciliation:** if the Vault is edited by hand, do counters re-derive from D1 on the next weekly-review build, or is the Vault authoritative for manual edits?
-- **R2 audio retention:** exact lifecycle / expiry window for raw Echo blobs before only the transcript remains.
-- **Local daemon transport:** mTLS vs OAuth-bearer for the daemon's outbound channel, and how the heartbeat staleness threshold maps to a Flagger severity.
-- **Workers AI vs Anthropic direct:** which agents (if any) use on-platform Workers AI models vs Claude-via-Gateway, and the per-agent cost ceiling enforced at the Gateway.
+- **Cron timezone vs DST:** resolved by **D1** — UTC crons + a documented EST/EDT translation table, hand-edited at the two DST boundaries; in-Workflow waits use `step.sleepUntil` (DST-safe).
+- **D1 ↔ Vault reconciliation:** resolved by **D2** — D1 is authoritative; the Fri 16:30 weekly build re-derives counters from D1 and overwrites drift (P3 `counter_drift` flag). Owner-edited content notes are left alone.
+- **R2 audio retention:** resolved by **D3** — raw Echo audio under `audio/raw/` expires at 7 days via an R2 lifecycle rule; `transcripts/` and `exports/` persist with no expiry.
+- **Local daemon transport:** resolved by **D4** — OAuth-bearer over an outbound-only channel (no inbound port, no tunnel); heartbeat stale > grace → P1.
+- **Workers AI vs Anthropic direct:** resolved by **D5** — all reasoning agents call Claude via AI Gateway (two gateways: `atlas-reasoning` for Opus, `atlas-highvolume` for Haiku) with per-gateway budgets as the cost ceiling; Workers AI is only Filer's outage fallback.
